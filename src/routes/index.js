@@ -13,5 +13,7 @@ router.use('/stories-reading', auth, require('./storiesReading'));
 router.use('/transactions', auth, require('./transactions'));
 router.use('/bookmarks', auth, require('./bookmarks'));
 router.use('/stars', auth, require('./stars'));
+// Route attendance không cần middleware auth ở đây vì đã có authenticateToken trong route
+router.use('/attendance', require('./attendance'));
 
 module.exports = router;
