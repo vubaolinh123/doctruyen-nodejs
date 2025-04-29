@@ -6,7 +6,7 @@ const { RefreshToken } = require('../models/RefreshToken');
 const crypto = require('crypto');
 
 // Thời gian hết hạn của access token (15 phút)
-const ACCESS_TOKEN_EXPIRY = '15m';
+const ACCESS_TOKEN_EXPIRY = '15d';
 // Thời gian hết hạn của refresh token (30 ngày)
 const REFRESH_TOKEN_EXPIRY = 30 * 24 * 60 * 60; // 30 days in seconds
 
