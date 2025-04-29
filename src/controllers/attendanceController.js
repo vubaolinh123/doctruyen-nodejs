@@ -212,9 +212,36 @@ exports.checkIn = async (req, res) => {
       bonusReward = 1000;
     }
 
+    // Tổng số xu thưởng
+    const totalCoins = reward + bonusReward;
+
     // Cập nhật số xu
-    customer.coin = (customer.coin || 0) + (reward + bonusReward);
-    customer.coin_total = (customer.coin_total || 0) + (reward + bonusReward);
+    customer.coin = (customer.coin || 0) + totalCoins;
+    customer.coin_total = (customer.coin_total || 0) + totalCoins;
+
+    // Tạo bản ghi giao dịch (transaction) cho việc điểm danh
+    const transactionData = {
+      customer_id: customerId,
+      transaction_id: `ATTENDANCE_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      amount: 0, // Giao dịch điểm danh không liên quan đến tiền
+      description: bonusReward > 0 
+        ? `Điểm danh ngày thứ ${consecutiveDays} (+${reward} xu cơ bản, +${bonusReward} xu thưởng)` 
+        : `Điểm danh ngày thứ ${consecutiveDays} (+${reward} xu)`,
+      transaction_date: new Date(),
+      coin_change: totalCoins, // Số xu thay đổi
+      type: 'attendance', // Loại giao dịch là điểm danh
+      status: 'completed', // Trạng thái hoàn thành
+      reference_type: 'attendance',
+      reference_id: null, // Sẽ cập nhật sau khi lưu bản ghi attendance
+      metadata: {
+        day: day,
+        month: month,
+        year: year,
+        streak_count: consecutiveDays,
+        reward: reward,
+        bonus_reward: bonusReward
+      }
+    };
 
     // Lưu thông tin người dùng
     await customer.save();
@@ -234,6 +261,10 @@ exports.checkIn = async (req, res) => {
 
     await attendance.save();
 
+    // Cập nhật reference_id của transaction và lưu transaction
+    transactionData.reference_id = attendance._id.toString();
+    const transaction = await Transaction.createTransaction(transactionData);
+
     // Trả về thông tin điểm danh
     return res.json({
       success: true,
@@ -245,6 +276,11 @@ exports.checkIn = async (req, res) => {
           reward,
           streak_count: consecutiveDays,
           bonus_reward: bonusReward
+        },
+        transaction: {
+          id: transaction._id,
+          coin_change: totalCoins,
+          type: 'attendance'
         },
         stats: {
           totalDaysAttended: customer.attendance_summary.total_days,
