@@ -51,10 +51,13 @@ exports.getAttendanceHistory = async (req, res) => {
     // Tạo dữ liệu điểm danh cho tháng
     const daysInMonth = new Date(yearNum, monthNum + 1, 0).getDate();
     const attendanceData = {};
+    
+    // Sử dụng múi giờ Việt Nam (GMT+7)
     const today = new Date();
-    const currentDate = today.getDate();
-    const currentMonth = today.getMonth();
-    const currentYear = today.getFullYear();
+    const vietnamTime = new Date(today.getTime() + (7 * 60 * 60 * 1000));
+    const currentDate = vietnamTime.getDate();
+    const currentMonth = vietnamTime.getMonth();
+    const currentYear = vietnamTime.getFullYear();
 
     // Khởi tạo dữ liệu mặc định
     for (let i = 1; i <= daysInMonth; i++) {
@@ -73,7 +76,9 @@ exports.getAttendanceHistory = async (req, res) => {
 
     // Cập nhật dữ liệu từ records
     attendanceRecords.forEach(record => {
-      attendanceData[record.day] = record.status;
+      if (record.status === 'attended') {
+        attendanceData[record.day] = 'attended';
+      }
     });
 
     // Nếu là ngày hiện tại và chưa điểm danh
@@ -86,14 +91,27 @@ exports.getAttendanceHistory = async (req, res) => {
       attendanceData[currentDate] = 'pending';
     }
 
+    // Kiểm tra xem ngày hôm qua có điểm danh không để xác định số ngày liên tiếp
+    let consecutiveDays = customer.attendance_summary.current_streak || 0;
+    if (customer.attendance_summary.last_attendance) {
+      const lastDate = new Date(customer.attendance_summary.last_attendance);
+      const yesterday = new Date(vietnamTime);
+      yesterday.setDate(yesterday.getDate() - 1);
+      yesterday.setHours(0, 0, 0, 0);
+
+      if (lastDate.getTime() !== yesterday.getTime()) {
+        consecutiveDays = 0;
+      }
+    }
+
     return res.json({
       success: true,
       data: {
         attendanceData,
         stats: {
           totalDaysAttended: customer.attendance_summary.total_days || 0,
-          consecutiveDays: customer.attendance_summary.consecutive_days || 0,
-          maxConsecutiveDays: customer.attendance_summary.max_consecutive_days || 0
+          consecutiveDays: consecutiveDays,
+          maxConsecutiveDays: customer.attendance_summary.longest_streak || 0
         }
       }
     });
@@ -113,12 +131,14 @@ exports.getAttendanceHistory = async (req, res) => {
 exports.checkIn = async (req, res) => {
   try {
     const customerId = req.user.id;
+    // Sử dụng múi giờ Việt Nam (GMT+7)
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const vietnamTime = new Date(today.getTime() + (7 * 60 * 60 * 1000));
+    vietnamTime.setHours(0, 0, 0, 0);
 
-    const day = today.getDate();
-    const month = today.getMonth();
-    const year = today.getFullYear();
+    const day = vietnamTime.getDate();
+    const month = vietnamTime.getMonth();
+    const year = vietnamTime.getFullYear();
 
     // Lấy thông tin người dùng
     const customer = await Customer.findById(customerId);
@@ -130,27 +150,27 @@ exports.checkIn = async (req, res) => {
     }
 
     // Kiểm tra xem đã điểm danh hôm nay chưa
-    if (customer.attendance_summary.last_attendance_date) {
-      const lastDate = new Date(customer.attendance_summary.last_attendance_date);
+    if (customer.attendance_summary.last_attendance) {
+      const lastDate = new Date(customer.attendance_summary.last_attendance);
       lastDate.setHours(0, 0, 0, 0);
 
-      if (lastDate.getTime() === today.getTime()) {
+      if (lastDate.getTime() === vietnamTime.getTime()) {
         return res.status(400).json({
           success: false,
-          message: 'You have already checked in today'
+          message: 'Bạn đã điểm danh hôm nay rồi'
         });
       }
     }
 
     // Tính toán số ngày liên tiếp
-    let consecutiveDays = customer.attendance_summary.consecutive_days || 0;
-    const lastDate = customer.attendance_summary.last_attendance_date
-      ? new Date(customer.attendance_summary.last_attendance_date)
+    let consecutiveDays = customer.attendance_summary.current_streak || 0;
+    const lastDate = customer.attendance_summary.last_attendance
+      ? new Date(customer.attendance_summary.last_attendance)
       : null;
 
     // Nếu ngày cuối cùng điểm danh là ngày hôm qua, tăng số ngày liên tiếp
     if (lastDate) {
-      const yesterday = new Date(today);
+      const yesterday = new Date(vietnamTime);
       yesterday.setDate(yesterday.getDate() - 1);
       yesterday.setHours(0, 0, 0, 0);
 
@@ -167,15 +187,21 @@ exports.checkIn = async (req, res) => {
 
     // Cập nhật số ngày liên tiếp cao nhất
     const maxConsecutiveDays = Math.max(
-      customer.attendance_summary.max_consecutive_days || 0,
+      customer.attendance_summary.longest_streak || 0,
       consecutiveDays
     );
 
-    // Tính toán phần thưởng cơ bản và phần thưởng bổ sung
-    const baseReward = 10;
+    // Cập nhật thông tin điểm danh của người dùng
+    customer.attendance_summary.total_days = (customer.attendance_summary.total_days || 0) + 1;
+    customer.attendance_summary.current_streak = consecutiveDays;
+    customer.attendance_summary.longest_streak = maxConsecutiveDays;
+    customer.attendance_summary.last_attendance = vietnamTime;
+    customer.attendance_summary.today_attended = true;
+
+    // Tính toán phần thưởng
+    let reward = 10;
     let bonusReward = 0;
 
-    // Thưởng thêm nếu đạt mốc
     if (consecutiveDays === 7) {
       bonusReward = 100;
     } else if (consecutiveDays === 15) {
@@ -186,74 +212,45 @@ exports.checkIn = async (req, res) => {
       bonusReward = 1000;
     }
 
-    const totalReward = baseReward + bonusReward;
+    // Cập nhật số xu
+    customer.coin = (customer.coin || 0) + (reward + bonusReward);
+    customer.coin_total = (customer.coin_total || 0) + (reward + bonusReward);
 
-    // Tạo ghi chú cho bản ghi điểm danh
-    let notes = '';
-    if (bonusReward > 0) {
-      notes = `Điểm danh ${consecutiveDays} ngày liên tiếp! Thưởng thêm ${bonusReward} xu.`;
-    }
+    // Lưu thông tin người dùng
+    await customer.save();
 
     // Tạo bản ghi điểm danh mới
     const attendance = new Attendance({
       customer_id: customerId,
-      date: today,
-      status: 'attended',
-      reward: totalReward,
+      date: vietnamTime,
       day,
       month,
       year,
+      status: 'attended',
       streak_count: consecutiveDays,
-      bonus_reward: bonusReward,
-      notes
+      reward,
+      bonus_reward: bonusReward
     });
 
     await attendance.save();
 
-    // Cập nhật thông tin người dùng
-    customer.attendance_summary.total_days = (customer.attendance_summary.total_days || 0) + 1;
-    customer.attendance_summary.consecutive_days = consecutiveDays;
-    customer.attendance_summary.max_consecutive_days = maxConsecutiveDays;
-    customer.attendance_summary.last_attendance_date = today;
-    customer.attendance_summary.today_attended = true;
-
-    // Cập nhật trường cũ để tương thích ngược
-    customer.diem_danh = customer.attendance_summary.total_days;
-    customer.check_in_date = today;
-
-    // Cộng xu
-    customer.coin += totalReward;
-    customer.coin_total += totalReward;
-
-    await customer.save();
-
-    // Tạo giao dịch
-    const transactionData = {
-      customer_id: customerId,
-      amount: totalReward,
-      description: `Điểm danh ngày ${day}/${month + 1}/${year}${bonusReward > 0 ? ` (Chuỗi ${consecutiveDays} ngày)` : ''}`,
-      coin_change: totalReward,
-      type: 'attendance',
-      reference_type: 'attendance',
-      reference_id: attendance._id,
-      metadata: {
-        streak_count: consecutiveDays,
-        base_reward: baseReward,
-        bonus_reward: bonusReward
-      }
-    };
-
-    await Transaction.createTransaction(transactionData);
-
+    // Trả về thông tin điểm danh
     return res.json({
       success: true,
-      message: 'Attendance recorded successfully',
-      reward: totalReward,
-      bonus_reward: bonusReward,
-      stats: {
-        totalDaysAttended: customer.attendance_summary.total_days,
-        consecutiveDays: customer.attendance_summary.consecutive_days,
-        maxConsecutiveDays: customer.attendance_summary.max_consecutive_days
+      message: 'Điểm danh thành công',
+      data: {
+        attendance: {
+          id: attendance._id,
+          date: vietnamTime,
+          reward,
+          streak_count: consecutiveDays,
+          bonus_reward: bonusReward
+        },
+        stats: {
+          totalDaysAttended: customer.attendance_summary.total_days,
+          consecutiveDays: customer.attendance_summary.current_streak,
+          maxConsecutiveDays: customer.attendance_summary.longest_streak
+        }
       }
     });
   } catch (error) {

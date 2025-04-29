@@ -39,7 +39,7 @@ const getUserResponse = (customer) => {
     id: customer._id.toString(),
     name: customer.name || "",
     email: customer.email || "",
-    role: Number(customer.role) || 0,
+    role: customer.role || 'user',
     avatar: customer.avatar || "https://scontent.fhan14-1.fna.fbcdn.net/v/t1.30497-1/453178253_471506465671661_2781666950760530985_n.png?stp=dst-png_s200x200&_nc_cat=1&ccb=1-7&_nc_sid=136b72&_nc_eui2=AeEVh0QX00TsNbI_haYB6RkWWt9TLzuBU1Ba31MvO4FTUF6Wlqf82r4BlCRAvh76aT3XsemaZbZv1fSB6o0CuFyz&_nc_ohc=Py8_nbWK5EEQ7kNvwGsqdUg&_nc_oc=AdnI1l-iLBtmCS_HEGsSqRjBSwsEa7c2UqgE5xPauCK2NBbd3kafOH_SABtbbISIdl6NeB79axebfe0e8MZgqmPe&_nc_zt=24&_nc_ht=scontent.fhan14-1.fna&oh=00_AfEDQng6NcDapZJFJ_Rjx-l97NT-NKumwkUgVLnP-cH5Fg&oe=683150FA",
     accountType: customer.accountType || 'email',
     gender: customer.gender || '',
@@ -111,33 +111,17 @@ exports.register = async (req, res) => {
       email,
       password: hashed,
       name: name || email.split('@')[0], // Nếu không có tên, lấy phần trước @ của email
-      role: 0, // User thường
+      role: 'user', // User thường
       accountType: 'email',
       isActive: true
     });
 
     await customer.save();
 
-    // Tạo access token
-    const accessToken = generateAccessToken(customer);
-
-    // Tạo refresh token
-    const userAgent = req.headers['user-agent'] || '';
-    const ipAddress = req.ip || req.connection.remoteAddress;
-    const refreshToken = await RefreshToken.generateToken(
-      customer._id,
-      userAgent,
-      ipAddress,
-      REFRESH_TOKEN_EXPIRY
-    );
-
-    // Trả về thông tin
+    // Trả về thông báo thành công
     res.status(201).json({
       code: 'REGISTER_SUCCESS',
-      message: 'Đăng ký thành công',
-      accessToken,
-      refreshToken: refreshToken.token,
-      user: getUserResponse(customer)
+      message: 'Đăng ký thành công. Vui lòng đăng nhập để tiếp tục.'
     });
   } catch (err) {
     console.error('Register error:', err);
