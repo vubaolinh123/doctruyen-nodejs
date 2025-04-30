@@ -9,7 +9,7 @@ const mongoose = require('mongoose');
  */
 exports.getAttendanceHistory = async (req, res) => {
   try {
-    const { month, year } = req.query;
+    const { month, year, timezone, timezoneOffset } = req.query;
     const customerId = req.user.id;
 
     // Validate input
@@ -51,13 +51,40 @@ exports.getAttendanceHistory = async (req, res) => {
     // Tạo dữ liệu điểm danh cho tháng
     const daysInMonth = new Date(yearNum, monthNum + 1, 0).getDate();
     const attendanceData = {};
-    
-    // Sử dụng múi giờ Việt Nam (GMT+7)
-    const today = new Date();
-    const vietnamTime = new Date(today.getTime() + (7 * 60 * 60 * 1000));
-    const currentDate = vietnamTime.getDate();
-    const currentMonth = vietnamTime.getMonth();
-    const currentYear = vietnamTime.getFullYear();
+
+    // Lấy ngày hiện tại theo múi giờ của người dùng
+    let currentDate, currentMonth, currentYear;
+
+    // Ghi log tóm tắt về thông tin múi giờ
+    console.log(`Using timezone: ${timezone || 'Not provided'}, offset: ${timezoneOffset || 'Not provided'}`);
+
+    if (timezone && timezoneOffset !== undefined) {
+      // Sử dụng múi giờ của người dùng
+      // Đảm bảo timezoneOffset là số
+      const offsetValue = typeof timezoneOffset === 'string' ? parseInt(timezoneOffset) : timezoneOffset;
+      const offsetInMs = offsetValue * 60 * 1000;
+      const today = new Date();
+
+      // Tính toán thời gian theo múi giờ của người dùng
+      // Lưu ý: getTimezoneOffset() trả về số phút lệch so với UTC, và giá trị là âm cho múi giờ phía đông UTC
+      // Vì vậy, chúng ta cần đảo ngược dấu của offsetInMs
+      const userLocalTime = new Date(today.getTime() - offsetInMs);
+
+      currentDate = userLocalTime.getDate();
+      currentMonth = userLocalTime.getMonth();
+      currentYear = userLocalTime.getFullYear();
+
+      // Đã tính toán thời gian theo múi giờ người dùng
+    } else {
+      // Fallback: Sử dụng múi giờ Việt Nam (GMT+7) nếu không có thông tin múi giờ
+      const today = new Date();
+      const vietnamTime = new Date(today.getTime() + (7 * 60 * 60 * 1000));
+      currentDate = vietnamTime.getDate();
+      currentMonth = vietnamTime.getMonth();
+      currentYear = vietnamTime.getFullYear();
+
+      // Fallback đến múi giờ Việt Nam
+    }
 
     // Khởi tạo dữ liệu mặc định
     for (let i = 1; i <= daysInMonth; i++) {
@@ -73,6 +100,11 @@ exports.getAttendanceHistory = async (req, res) => {
         attendanceData[i] = 'missed';
       }
     }
+
+    // Log tổng quan về dữ liệu ngày thay vì log từng ngày
+    console.log(`Initialized ${daysInMonth} days for month ${monthNum + 1}/${yearNum}`);
+    console.log(`Current date: ${currentDate}/${currentMonth + 1}/${currentYear}`);
+
 
     // Cập nhật dữ liệu từ records
     attendanceRecords.forEach(record => {
@@ -95,9 +127,30 @@ exports.getAttendanceHistory = async (req, res) => {
     let consecutiveDays = customer.attendance_summary.current_streak || 0;
     if (customer.attendance_summary.last_attendance) {
       const lastDate = new Date(customer.attendance_summary.last_attendance);
-      const yesterday = new Date(vietnamTime);
+
+      // Sử dụng biến userLocalTime thay vì vietnamTime
+      const yesterday = new Date();
+      if (timezone && timezoneOffset !== undefined) {
+        // Nếu có thông tin múi giờ, sử dụng múi giờ của người dùng
+        // Đảm bảo timezoneOffset là số
+        const offsetValue = typeof timezoneOffset === 'string' ? parseInt(timezoneOffset) : timezoneOffset;
+        const offsetInMs = offsetValue * 60 * 1000;
+        const today = new Date();
+        const userTime = new Date(today.getTime() - offsetInMs);
+        yesterday.setTime(userTime.getTime());
+
+        // Đã tính toán ngày hôm qua theo múi giờ người dùng
+      } else {
+        // Fallback: Sử dụng múi giờ Việt Nam (GMT+7)
+        const today = new Date();
+        yesterday.setTime(today.getTime() + (7 * 60 * 60 * 1000));
+        // Fallback đến múi giờ Việt Nam
+      }
+
       yesterday.setDate(yesterday.getDate() - 1);
       yesterday.setHours(0, 0, 0, 0);
+
+      // Kiểm tra xem lần điểm danh cuối cùng có phải là ngày hôm qua không
 
       if (lastDate.getTime() !== yesterday.getTime()) {
         consecutiveDays = 0;
@@ -131,14 +184,37 @@ exports.getAttendanceHistory = async (req, res) => {
 exports.checkIn = async (req, res) => {
   try {
     const customerId = req.user.id;
-    // Sử dụng múi giờ Việt Nam (GMT+7)
-    const today = new Date();
-    const vietnamTime = new Date(today.getTime() + (7 * 60 * 60 * 1000));
-    vietnamTime.setHours(0, 0, 0, 0);
+    const { date, timezone, timezoneOffset } = req.body;
 
-    const day = vietnamTime.getDate();
-    const month = vietnamTime.getMonth();
-    const year = vietnamTime.getFullYear();
+    // Ghi log tóm tắt về thông tin múi giờ
+    console.log(`Check-in request from user ${customerId} with timezone: ${timezone || 'Not provided'}, offset: ${timezoneOffset || 'Not provided'}`);
+
+    let userLocalTime;
+
+    if (date && timezone && timezoneOffset !== undefined) {
+      // Sử dụng múi giờ của người dùng
+      // Đảm bảo timezoneOffset là số
+      const offsetValue = typeof timezoneOffset === 'string' ? parseInt(timezoneOffset) : timezoneOffset;
+      const offsetInMs = offsetValue * 60 * 1000;
+      const clientDate = new Date(date);
+
+      // Tính toán thời gian theo múi giờ của người dùng
+      userLocalTime = new Date(clientDate);
+      userLocalTime.setHours(0, 0, 0, 0);
+
+      // Đã tính toán thời gian theo múi giờ người dùng
+    } else {
+      // Fallback: Sử dụng múi giờ Việt Nam (GMT+7)
+      const today = new Date();
+      userLocalTime = new Date(today.getTime() + (7 * 60 * 60 * 1000));
+      userLocalTime.setHours(0, 0, 0, 0);
+
+      // Fallback đến múi giờ Việt Nam
+    }
+
+    const day = userLocalTime.getDate();
+    const month = userLocalTime.getMonth();
+    const year = userLocalTime.getFullYear();
 
     // Lấy thông tin người dùng
     const customer = await Customer.findById(customerId);
@@ -154,7 +230,14 @@ exports.checkIn = async (req, res) => {
       const lastDate = new Date(customer.attendance_summary.last_attendance);
       lastDate.setHours(0, 0, 0, 0);
 
-      if (lastDate.getTime() === vietnamTime.getTime()) {
+      // So sánh ngày, tháng, năm thay vì so sánh timestamp
+      const lastDay = lastDate.getDate();
+      const lastMonth = lastDate.getMonth();
+      const lastYear = lastDate.getFullYear();
+
+      // Kiểm tra xem đã điểm danh hôm nay chưa
+
+      if (lastDay === day && lastMonth === month && lastYear === year) {
         return res.status(400).json({
           success: false,
           message: 'Bạn đã điểm danh hôm nay rồi'
@@ -170,12 +253,27 @@ exports.checkIn = async (req, res) => {
 
     // Nếu ngày cuối cùng điểm danh là ngày hôm qua, tăng số ngày liên tiếp
     if (lastDate) {
-      const yesterday = new Date(vietnamTime);
+      // Tính toán ngày hôm qua dựa trên ngày hiện tại của người dùng
+      const yesterday = new Date(userLocalTime);
       yesterday.setDate(yesterday.getDate() - 1);
       yesterday.setHours(0, 0, 0, 0);
 
-      if (lastDate.getTime() === yesterday.getTime()) {
+      // Lấy ngày, tháng, năm của ngày hôm qua
+      const yesterdayDay = yesterday.getDate();
+      const yesterdayMonth = yesterday.getMonth();
+      const yesterdayYear = yesterday.getFullYear();
+
+      // Lấy ngày, tháng, năm của lần điểm danh cuối cùng
+      const lastDay = lastDate.getDate();
+      const lastMonth = lastDate.getMonth();
+      const lastYear = lastDate.getFullYear();
+
+      // Kiểm tra xem lần điểm danh cuối cùng có phải là ngày hôm qua không
+
+      // So sánh ngày, tháng, năm thay vì so sánh timestamp
+      if (lastDay === yesterdayDay && lastMonth === yesterdayMonth && lastYear === yesterdayYear) {
         consecutiveDays++;
+        // Tăng số ngày liên tiếp
       } else {
         // Nếu không phải ngày hôm qua, reset về 1
         consecutiveDays = 1;
@@ -195,8 +293,19 @@ exports.checkIn = async (req, res) => {
     customer.attendance_summary.total_days = (customer.attendance_summary.total_days || 0) + 1;
     customer.attendance_summary.current_streak = consecutiveDays;
     customer.attendance_summary.longest_streak = maxConsecutiveDays;
-    customer.attendance_summary.last_attendance = vietnamTime;
+    customer.attendance_summary.last_attendance = userLocalTime;
     customer.attendance_summary.today_attended = true;
+
+    // Lưu thông tin múi giờ của người dùng nếu có
+    if (timezone) {
+      customer.timezone = timezone;
+    }
+    if (timezoneOffset !== undefined) {
+      // Đảm bảo timezoneOffset là số
+      const offsetValue = typeof timezoneOffset === 'string' ? parseInt(timezoneOffset) : timezoneOffset;
+      customer.timezone_offset = offsetValue;
+      // Lưu timezone_offset vào database
+    }
 
     // Tính toán phần thưởng
     let reward = 10;
@@ -224,8 +333,8 @@ exports.checkIn = async (req, res) => {
       customer_id: customerId,
       transaction_id: `ATTENDANCE_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
       amount: 0, // Giao dịch điểm danh không liên quan đến tiền
-      description: bonusReward > 0 
-        ? `Điểm danh ngày thứ ${consecutiveDays} (+${reward} xu cơ bản, +${bonusReward} xu thưởng)` 
+      description: bonusReward > 0
+        ? `Điểm danh ngày thứ ${consecutiveDays} (+${reward} xu cơ bản, +${bonusReward} xu thưởng)`
         : `Điểm danh ngày thứ ${consecutiveDays} (+${reward} xu)`,
       transaction_date: new Date(),
       coin_change: totalCoins, // Số xu thay đổi
@@ -249,14 +358,18 @@ exports.checkIn = async (req, res) => {
     // Tạo bản ghi điểm danh mới
     const attendance = new Attendance({
       customer_id: customerId,
-      date: vietnamTime,
+      date: userLocalTime,
       day,
       month,
       year,
       status: 'attended',
       streak_count: consecutiveDays,
       reward,
-      bonus_reward: bonusReward
+      bonus_reward: bonusReward,
+      timezone: timezone || 'Asia/Ho_Chi_Minh', // Lưu múi giờ của người dùng
+      timezone_offset: timezoneOffset !== undefined ?
+        (typeof timezoneOffset === 'string' ? parseInt(timezoneOffset) : timezoneOffset) :
+        420 // 420 phút = GMT+7
     });
 
     await attendance.save();
@@ -272,10 +385,14 @@ exports.checkIn = async (req, res) => {
       data: {
         attendance: {
           id: attendance._id,
-          date: vietnamTime,
+          date: userLocalTime,
           reward,
           streak_count: consecutiveDays,
-          bonus_reward: bonusReward
+          bonus_reward: bonusReward,
+          timezone: timezone || 'Asia/Ho_Chi_Minh',
+          timezone_offset: timezoneOffset !== undefined ?
+            (typeof timezoneOffset === 'string' ? parseInt(timezoneOffset) : timezoneOffset) :
+            420
         },
         transaction: {
           id: transaction._id,
@@ -286,6 +403,12 @@ exports.checkIn = async (req, res) => {
           totalDaysAttended: customer.attendance_summary.total_days,
           consecutiveDays: customer.attendance_summary.current_streak,
           maxConsecutiveDays: customer.attendance_summary.longest_streak
+        },
+        user_date: {
+          day,
+          month,
+          year,
+          date_string: userLocalTime.toISOString()
         }
       }
     });
@@ -304,14 +427,18 @@ exports.checkIn = async (req, res) => {
  */
 exports.updateMissedDays = async () => {
   try {
+    // Sử dụng múi giờ Việt Nam (GMT+7) cho cron job
     const today = new Date();
-    const yesterday = new Date(today);
+    const vietnamTime = new Date(today.getTime() + (7 * 60 * 60 * 1000));
+    const yesterday = new Date(vietnamTime);
     yesterday.setDate(yesterday.getDate() - 1);
     yesterday.setHours(0, 0, 0, 0);
 
     const day = yesterday.getDate();
     const month = yesterday.getMonth();
     const year = yesterday.getFullYear();
+
+    // Cập nhật trạng thái missed cho ngày hôm qua
 
     // Lấy tất cả người dùng có last_attendance_date khác với ngày hôm qua
     const customers = await Customer.find({
@@ -342,7 +469,7 @@ exports.updateMissedDays = async () => {
       }
     }
 
-    console.log(`Updated missed days for ${customers.length} users`);
+    // Đã cập nhật trạng thái missed cho các người dùng
     return true;
   } catch (error) {
     console.error('Error updating missed days:', error);

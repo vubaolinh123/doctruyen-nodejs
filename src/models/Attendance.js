@@ -75,6 +75,19 @@ const attendanceSchema = new Schema({
     type: String,
     default: '',
     description: 'Ghi chú bổ sung về lần điểm danh này'
+  },
+
+  // Thông tin múi giờ của người dùng
+  timezone: {
+    type: String,
+    default: 'Asia/Ho_Chi_Minh',
+    description: 'Múi giờ của người dùng khi điểm danh (ví dụ: Asia/Ho_Chi_Minh, America/New_York)'
+  },
+
+  timezone_offset: {
+    type: Number,
+    default: 420, // 420 phút = GMT+7
+    description: 'Độ lệch múi giờ so với UTC tính bằng phút'
   }
 }, {
   timestamps: true,

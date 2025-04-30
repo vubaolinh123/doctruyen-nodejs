@@ -8,13 +8,6 @@ const slugify = require('slugify');
  */
 const storySchema = new Schema({
   // Thông tin cơ bản
-  name: {
-    type: String,
-    required: true,
-    trim: true,
-    index: true
-  },
-
   slug: {
     type: String,
     unique: true,
@@ -26,17 +19,24 @@ const storySchema = new Schema({
     default: ''
   },
 
+  name: {
+    type: String,
+    required: true,
+    trim: true,
+    index: true
+  },
+
   desc: {
     type: String,
     default: ''
   },
 
   // Tham chiếu đến tác giả
-  author_id: {
+  author_id: [{
     type: Schema.Types.ObjectId,
     ref: 'Author',
     index: true
-  },
+  }],
 
   // Thông tin thể loại
   categories: [{
@@ -44,54 +44,18 @@ const storySchema = new Schema({
     ref: 'Category'
   }],
 
-  // Thông tin trạng thái
-  status: {
-    type: Number,
-    enum: [0, 1, 2], // 0: Đang cập nhật, 1: Hoàn thành, 2: Tạm ngưng
+  // Thông tin đánh giá
+  stars: {
+    type: Number, 
     default: 0,
-    index: true
+    min: 0,
+    max: 10
   },
 
-  approve: {
+  count_star: {
     type: Number,
-    enum: [0, 1], // 0: Chưa duyệt, 1: Đã duyệt
     default: 0,
-    index: true
-  },
-
-  is_full: {
-    type: Number,
-    enum: [0, 1], // 0: Chưa hoàn thành, 1: Đã hoàn thành
-    default: 0
-  },
-
-  // Thông tin nổi bật
-  is_hot: {
-    type: Number,
-    enum: [0, 1], // 0: Không nổi bật, 1: Nổi bật
-    default: 0,
-    index: true
-  },
-
-  hot_day: {
-    type: Date,
-    default: null
-  },
-
-  hot_month: {
-    type: Date,
-    default: null
-  },
-
-  hot_all_time: {
-    type: Number,
-    default: 0
-  },
-
-  show_slider: {
-    type: Number,
-    enum: [0, 1], // 0: Không hiển thị trên slider, 1: Hiển thị trên slider
-    default: 0
+    min: 0
   },
 
   // Thông tin lượt xem
@@ -101,60 +65,54 @@ const storySchema = new Schema({
     min: 0
   },
 
-  // Thông tin mua truyện
-  tra_phi: {
-    type: Number,
-    enum: [0, 1], // 0: Miễn phí, 1: Trả phí
-    default: 0
+  // Thông tin trạng thái
+  is_full: {
+    type: Boolean,
+    default: false
   },
 
-  coin_mua: {
-    type: Number,
-    default: 0,
-    min: 0
+  // Thông tin nổi bật
+  is_hot: {
+    type: Boolean,
+    default: false,
+    index: true
   },
 
-  // Thông tin bổ sung
-  crawl_link: {
-    type: String,
-    default: ''
+  is_new: {
+    type: Boolean,
+    default: false
   },
 
-  // Thông tin thống kê
-  total_chapters: {
-    type: Number,
-    default: 0,
-    min: 0
+  show_ads: {
+    type: Boolean,
+    default: false
   },
 
-  total_comments: {
-    type: Number,
-    default: 0,
-    min: 0
+  hot_day: {
+    type: Boolean,
+    default: false
   },
 
-  total_bookmarks: {
-    type: Number,
-    default: 0,
-    min: 0
+  hot_month: {
+    type: Boolean,
+    default: false
   },
 
-  average_rating: {
-    type: Number,
-    default: 0,
-    min: 0,
-    max: 5
+  hot_all_time: {
+    type: Boolean,
+    default: false
   },
 
-  total_ratings: {
-    type: Number,
-    default: 0,
-    min: 0
+  status: {
+    type: Boolean,
+    default: true,
+    index: true
   }
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
-  toObject: { virtuals: true }
+  toObject: { virtuals: true },
+  collection: 'stories'
 });
 
 // Tạo các index để tối ưu truy vấn
@@ -162,10 +120,7 @@ storySchema.index({ name: 'text', desc: 'text' });
 storySchema.index({ createdAt: -1 });
 storySchema.index({ updatedAt: -1 });
 storySchema.index({ views: -1 });
-storySchema.index({ is_hot: 1, hot_day: -1 });
-storySchema.index({ is_hot: 1, hot_month: -1 });
-storySchema.index({ is_hot: 1, hot_all_time: -1 });
-storySchema.index({ status: 1, approve: 1 });
+storySchema.index({ stars: -1 });
 
 // Virtuals
 storySchema.virtual('chapters', {
@@ -174,23 +129,10 @@ storySchema.virtual('chapters', {
   foreignField: 'story_id'
 });
 
-storySchema.virtual('author', {
+storySchema.virtual('authors', {
   ref: 'Author',
   localField: 'author_id',
-  foreignField: '_id',
-  justOne: true
-});
-
-storySchema.virtual('bookmarks', {
-  ref: 'Bookmark',
-  localField: '_id',
-  foreignField: 'story_id'
-});
-
-storySchema.virtual('ratings', {
-  ref: 'Star',
-  localField: '_id',
-  foreignField: 'story_id'
+  foreignField: '_id'
 });
 
 // Middleware pre-save
@@ -209,33 +151,55 @@ storySchema.pre('save', function(next) {
 
 // Phương thức tĩnh để tìm truyện theo slug
 storySchema.statics.findBySlug = function(slug) {
-  return this.findOne({ slug });
+  return this.findOne({ 
+    slug: slug,
+    status: true
+  });
 };
 
 // Phương thức tĩnh để tìm truyện nổi bật
 storySchema.statics.findHotStories = function(limit = 10) {
-  return this.find({ is_hot: 1, approve: 1 })
-    .sort({ hot_day: -1 })
+  return this.find({ 
+    is_hot: true, 
+    status: true 
+  })
+    .sort({ createdAt: -1 })
+    .limit(limit);
+};
+
+// Phương thức tĩnh để tìm truyện được đánh giá cao
+storySchema.statics.findTopRatedStories = function(limit = 10) {
+  return this.find({ 
+    status: true,
+    count_star: { $gt: 0 }
+  })
+    .sort({ stars: -1, count_star: -1 })
     .limit(limit);
 };
 
 // Phương thức tĩnh để tìm truyện mới cập nhật
 storySchema.statics.findRecentlyUpdated = function(limit = 10) {
-  return this.find({ approve: 1 })
+  return this.find({ status: true })
     .sort({ updatedAt: -1 })
     .limit(limit);
 };
 
 // Phương thức tĩnh để tìm truyện theo thể loại
 storySchema.statics.findByCategory = function(categoryId, limit = 10) {
-  return this.find({ categories: categoryId, approve: 1 })
+  return this.find({ 
+    categories: categoryId, 
+    status: true
+  })
     .sort({ updatedAt: -1 })
     .limit(limit);
 };
 
 // Phương thức tĩnh để tìm truyện theo tác giả
 storySchema.statics.findByAuthor = function(authorId, limit = 10) {
-  return this.find({ author_id: authorId, approve: 1 })
+  return this.find({ 
+    author_id: authorId, 
+    status: true
+  })
     .sort({ updatedAt: -1 })
     .limit(limit);
 };
@@ -244,15 +208,10 @@ storySchema.statics.findByAuthor = function(authorId, limit = 10) {
 storySchema.statics.search = function(keyword, limit = 10) {
   return this.find({
     $text: { $search: keyword },
-    approve: 1
+    status: true
   })
     .sort({ score: { $meta: 'textScore' } })
     .limit(limit);
-};
-
-// Phương thức tĩnh để tăng lượt xem
-storySchema.statics.increaseViews = async function(storyId) {
-  return this.findByIdAndUpdate(storyId, { $inc: { views: 1 } });
 };
 
 module.exports = mongoose.model('Story', storySchema);

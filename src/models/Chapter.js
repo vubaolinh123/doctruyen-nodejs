@@ -7,6 +7,12 @@ const slugify = require('slugify');
  * Lưu thông tin các chapter của truyện
  */
 const chapterSchema = new Schema({
+  // Tham chiếu đến kho truyện chapter (nếu có)
+  kho_truyen_chapter_id: {
+    type: Number,
+    default: 0
+  },
+
   // Tham chiếu đến truyện
   story_id: {
     type: Schema.Types.ObjectId,
@@ -34,12 +40,7 @@ const chapterSchema = new Schema({
   },
 
   // Nội dung chapter
-  content1: {
-    type: String,
-    default: ''
-  },
-
-  content2: {
+  content: {
     type: String,
     default: ''
   },
@@ -51,77 +52,38 @@ const chapterSchema = new Schema({
   },
 
   audio_show: {
-    type: Number,
-    enum: [0, 1], // 0: Không hiển thị audio, 1: Hiển thị audio
-    default: 0
+    type: Boolean,
+    default: false
   },
 
-  // Thông tin trạng thái
-  is_new: {
-    type: Number,
-    enum: [0, 1], // 0: Không mới, 1: Mới
-    default: 0,
-    index: true
+  // Hiển thị quảng cáo
+  show_ads: {
+    type: Boolean,
+    default: false
   },
 
-  required_login: {
-    type: Number,
-    enum: [0, 1], // 0: Không yêu cầu đăng nhập, 1: Yêu cầu đăng nhập
-    default: 0
-  },
-
-  // Thông tin mua chapter
-  tra_phi: {
-    type: Number,
-    enum: [0, 1], // 0: Miễn phí, 1: Trả phí
-    default: 0,
-    index: true
-  },
-
-  coin_mua: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-
-  // Thông tin loại chapter
-  type: {
-    type: String,
-    enum: ['text', 'image', 'mixed'],
-    default: 'text'
-  },
-
-  // Thông tin bổ sung
-  crawl_link: {
+  // Link tham khảo
+  link_ref: {
     type: String,
     default: ''
   },
 
-  // Thông tin thống kê
-  views: {
-    type: Number,
-    default: 0,
-    min: 0
+  // Mã truy cập nếu có
+  pass_code: {
+    type: String,
+    default: ''
   },
 
-  total_comments: {
-    type: Number,
-    default: 0,
-    min: 0
+  // Thông tin chapter mới
+  is_new: {
+    type: Boolean,
+    default: false
   },
 
-  // Thông tin sắp xếp
-  order: {
-    type: Number,
-    default: 0
-  },
-
-  // Thông tin trạng thái
+  // Trạng thái hiển thị
   status: {
-    type: Number,
-    enum: [0, 1], // 0: Ẩn, 1: Hiển thị
-    default: 1,
-    index: true
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true,
@@ -133,7 +95,6 @@ const chapterSchema = new Schema({
 chapterSchema.index({ story_id: 1, chapter: 1 });
 chapterSchema.index({ story_id: 1, createdAt: -1 });
 chapterSchema.index({ story_id: 1, status: 1 });
-chapterSchema.index({ story_id: 1, tra_phi: 1 });
 chapterSchema.index({ createdAt: -1 });
 
 // Virtuals
@@ -148,7 +109,7 @@ chapterSchema.virtual('story', {
 chapterSchema.pre('save', function(next) {
   // Tạo slug nếu chưa có
   if (!this.slug && this.name) {
-    this.slug = slugify(`${this.chapter}-${this.name}`, {
+    this.slug = slugify(`chuong-${this.chapter}-${this.name}`, {
       lower: true,
       strict: true,
       locale: 'vi'
@@ -163,7 +124,7 @@ chapterSchema.statics.findByStoryAndNumber = function(storyId, chapterNumber) {
   return this.findOne({
     story_id: storyId,
     chapter: chapterNumber,
-    status: 1
+    status: true
   });
 };
 
@@ -172,7 +133,7 @@ chapterSchema.statics.findByStoryAndSlug = function(storyId, slug) {
   return this.findOne({
     story_id: storyId,
     slug: slug,
-    status: 1
+    status: true
   });
 };
 
@@ -180,7 +141,7 @@ chapterSchema.statics.findByStoryAndSlug = function(storyId, slug) {
 chapterSchema.statics.findByStory = function(storyId, limit = 0, skip = 0) {
   const query = this.find({
     story_id: storyId,
-    status: 1
+    status: true
   }).sort({ chapter: 1 });
 
   if (limit > 0) {
@@ -198,7 +159,7 @@ chapterSchema.statics.findByStory = function(storyId, limit = 0, skip = 0) {
 chapterSchema.statics.findLatestByStory = function(storyId) {
   return this.findOne({
     story_id: storyId,
-    status: 1
+    status: true
   }).sort({ chapter: -1 });
 };
 
@@ -206,7 +167,7 @@ chapterSchema.statics.findLatestByStory = function(storyId) {
 chapterSchema.statics.findFirstByStory = function(storyId) {
   return this.findOne({
     story_id: storyId,
-    status: 1
+    status: true
   }).sort({ chapter: 1 });
 };
 
@@ -215,7 +176,7 @@ chapterSchema.statics.findNextChapter = function(storyId, currentChapter) {
   return this.findOne({
     story_id: storyId,
     chapter: { $gt: currentChapter },
-    status: 1
+    status: true
   }).sort({ chapter: 1 });
 };
 
@@ -224,13 +185,8 @@ chapterSchema.statics.findPreviousChapter = function(storyId, currentChapter) {
   return this.findOne({
     story_id: storyId,
     chapter: { $lt: currentChapter },
-    status: 1
+    status: true
   }).sort({ chapter: -1 });
-};
-
-// Phương thức tĩnh để tăng lượt xem
-chapterSchema.statics.increaseViews = async function(chapterId) {
-  return this.findByIdAndUpdate(chapterId, { $inc: { views: 1 } });
 };
 
 module.exports = mongoose.model('Chapter', chapterSchema);

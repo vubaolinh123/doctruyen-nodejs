@@ -2,7 +2,10 @@ const express = require('express');
 const router = express.Router();
 const controller = require('../controllers/authorController');
 
+// Basic CRUD routes
 router.get('/', controller.getAll);
+router.get('/active', controller.getActive);
+router.get('/slug/:slug', controller.getBySlug);
 router.get('/:id', controller.getById);
 router.post('/', controller.create);
 router.put('/:id', controller.update);

@@ -112,6 +112,19 @@ const customerSchema = new Schema({
     }
   },
 
+  // Thông tin múi giờ của người dùng
+  timezone: {
+    type: String,
+    default: 'Asia/Ho_Chi_Minh',
+    description: 'Múi giờ của người dùng (ví dụ: Asia/Ho_Chi_Minh, America/New_York)'
+  },
+
+  timezone_offset: {
+    type: Number,
+    default: 420, // 420 phút = GMT+7
+    description: 'Độ lệch múi giờ so với UTC tính bằng phút'
+  },
+
   // Các trường khác
   tu_vi: {
     type: String,
@@ -198,7 +211,7 @@ customerSchema.methods.isAuthor = function() {
 // Phương thức cập nhật thông tin điểm danh
 customerSchema.methods.updateAttendance = async function(date) {
   const lastDate = this.attendance_summary.last_attendance;
-  
+
   // Nếu đã điểm danh hôm nay
   if (lastDate && lastDate.toDateString() === date.toDateString()) {
     return false;
