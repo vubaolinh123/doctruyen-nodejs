@@ -30,8 +30,6 @@ const authorSchema = new Schema({
 
 // Tạo index cho các trường tìm kiếm phổ biến
 authorSchema.index({ name: 1 });
-authorSchema.index({ slug: 1 });
-authorSchema.index({ status: 1 });
 authorSchema.index({ createdAt: -1 });
 
 // Middleware pre-save

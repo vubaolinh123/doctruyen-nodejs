@@ -77,9 +77,6 @@ exports.authenticateToken = async (req, res, next) => {
       email_verified_at: freshCustomer.email_verified_at
     };
 
-    // Log để debug
-    console.log(`Authenticated user ${freshCustomer.email} with fresh data from database`);
-
     next();
   } catch (error) {
     if (error.name === 'TokenExpiredError') {

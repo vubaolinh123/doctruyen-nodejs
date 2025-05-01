@@ -2,9 +2,6 @@ const apiLogger = (req, res, next) => {
   // Lưu thời gian bắt đầu
   const start = Date.now();
 
-  // Ghi log khi request đến
-  console.log(`🌐 [${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
-
   // Lưu hàm gốc của res.json
   const originalJson = res.json;
 
@@ -13,20 +10,27 @@ const apiLogger = (req, res, next) => {
     // Tính thời gian xử lý
     const duration = Date.now() - start;
 
-    // Xác định icon dựa trên status code
-    let icon = '⚠️';
-    if (res.statusCode >= 200 && res.statusCode < 300) {
-      icon = '✅';
-    } else if (res.statusCode >= 400) {
-      icon = '❌';
+    // Xác định màu và icon dựa trên status code
+    let statusIcon = '✅';
+    let methodColor = '\x1b[32m'; // Xanh lá
+    let resetColor = '\x1b[0m';
+    
+    if (res.statusCode >= 400 && res.statusCode < 500) {
+      statusIcon = '⚠️';
+      methodColor = '\x1b[33m'; // Vàng
+    } else if (res.statusCode >= 500) {
+      statusIcon = '❌';
+      methodColor = '\x1b[31m'; // Đỏ
     }
 
-    // Log response với status code và icon
-    console.log(`${icon} [${new Date().toISOString()}] ${req.method} ${req.originalUrl} - Status: ${res.statusCode} - Duration: ${duration}ms`);
+    // Format log để hiển thị rõ ràng: METHOD URL STATUS
+    console.log(
+      `${methodColor}${req.method}${resetColor} ${req.originalUrl} ${statusIcon} [${res.statusCode}] - ${duration}ms`
+    );
     
-    // Nếu là lỗi, log thêm thông tin lỗi
-    if (res.statusCode >= 400) {
-      console.log(`❌ Error details:`, body);
+    // Nếu có lỗi, hiển thị thông tin lỗi
+    if (res.statusCode >= 400 && body && (body.error || body.message)) {
+      console.error(`Error details: ${JSON.stringify(body.error || body.message)}`);
     }
 
     // Gọi hàm gốc

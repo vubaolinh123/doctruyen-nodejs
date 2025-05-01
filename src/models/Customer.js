@@ -152,7 +152,6 @@ const customerSchema = new Schema({
 });
 
 // Tạo các index để tối ưu truy vấn
-customerSchema.index({ email: 1 });
 customerSchema.index({ role: 1, status: 1 });
 customerSchema.index({ 'attendance_summary.last_attendance': 1 });
 

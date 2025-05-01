@@ -83,7 +83,8 @@ const chapterSchema = new Schema({
   // Trạng thái hiển thị
   status: {
     type: Boolean,
-    default: false
+    default: false,
+    index: true
   }
 }, {
   timestamps: true,
@@ -94,7 +95,6 @@ const chapterSchema = new Schema({
 // Tạo các index để tối ưu truy vấn
 chapterSchema.index({ story_id: 1, chapter: 1 });
 chapterSchema.index({ story_id: 1, createdAt: -1 });
-chapterSchema.index({ story_id: 1, status: 1 });
 chapterSchema.index({ createdAt: -1 });
 
 // Virtuals

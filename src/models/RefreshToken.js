@@ -48,7 +48,6 @@ const refreshTokenSchema = new mongoose.Schema({
 });
 
 // Index để tìm kiếm token nhanh hơn
-refreshTokenSchema.index({ token: 1 });
 refreshTokenSchema.index({ userId: 1 });
 
 /**

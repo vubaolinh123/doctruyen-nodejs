@@ -100,7 +100,6 @@ const transactionSchema = new Schema({
 transactionSchema.index({ transaction_date: -1 });
 transactionSchema.index({ customer_id: 1, transaction_date: -1 });
 transactionSchema.index({ type: 1, transaction_date: -1 });
-transactionSchema.index({ status: 1 });
 
 // Virtuals
 transactionSchema.virtual('customer', {

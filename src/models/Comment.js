@@ -94,7 +94,7 @@ const commentSchema = new Schema({
 
 // Index để tìm kiếm nhanh
 commentSchema.index({ story_id: 1, chapter_id: 1, parent_id: 1 });
-commentSchema.index({ customer_id: 1, status: 1 });
+commentSchema.index({ customer_id: 1 });
 commentSchema.index({ 'metadata.type': 1, 'metadata.position': 1 });
 
 // Virtuals

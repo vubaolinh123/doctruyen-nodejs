@@ -104,9 +104,6 @@ attendanceSchema.index({ customer_id: 1, year: 1, month: 1 });
 // Index để tìm kiếm nhanh theo ngày
 attendanceSchema.index({ date: 1 });
 
-// Index để tìm kiếm nhanh theo status
-attendanceSchema.index({ status: 1 });
-
 // Virtuals
 attendanceSchema.virtual('customer', {
   ref: 'Customer',

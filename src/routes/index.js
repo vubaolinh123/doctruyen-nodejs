@@ -3,7 +3,8 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 
 router.use('/authors', auth, require('./authors'));
-router.use('/categories', auth, require('./categories'));
+// Categories route đã được cấu hình xác thực bên trong file route
+router.use('/categories', require('./categories'));
 router.use('/chapters', auth, require('./chapters'));
 router.use('/customers', auth, require('./customers'));
 router.use('/purchased-stories', auth, require('./purchasedStories'));

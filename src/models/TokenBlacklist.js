@@ -29,9 +29,6 @@ const tokenBlacklistSchema = new mongoose.Schema({
   }
 });
 
-// Index để tìm kiếm token nhanh hơn
-tokenBlacklistSchema.index({ token: 1 });
-
 // Tạo model
 const TokenBlacklist = mongoose.model('TokenBlacklist', tokenBlacklistSchema);
 

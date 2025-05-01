@@ -35,8 +35,6 @@ const categorySchema = new Schema({
 
 // Tạo index cho các trường tìm kiếm phổ biến
 categorySchema.index({ name: 1 });
-categorySchema.index({ slug: 1 });
-categorySchema.index({ status: 1 });
 categorySchema.index({ createdAt: -1 });
 
 // Middleware pre-save
