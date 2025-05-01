@@ -16,5 +16,7 @@ router.use('/bookmarks', auth, require('./bookmarks'));
 router.use('/stars', auth, require('./stars'));
 // Route attendance không cần middleware auth ở đây vì đã có authenticateToken trong route
 router.use('/attendance', require('./attendance'));
+// Route admin
+router.use('/admin', require('./admin'));
 
 module.exports = router;

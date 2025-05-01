@@ -3,6 +3,8 @@ const router = express.Router();
 const controller = require('../controllers/authController');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const rateLimit = require('express-rate-limit');
+const Customer = require('../models/Customer');
+const jwt = require('jsonwebtoken');
 
 // Rate limiting để ngăn chặn brute force
 const loginLimiter = rateLimit({
@@ -33,5 +35,58 @@ router.post('/refresh-token', controller.refreshToken);
 router.get('/me', authenticateToken, controller.getMe);
 router.post('/update-profile', authenticateToken, controller.updateProfile);
 router.post('/logout', authenticateToken, controller.logout);
+
+/**
+ * @route POST /api/auth/token
+ * @desc Lấy token mới cho admin dựa trên email
+ * @access Public
+ */
+router.post('/token', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email không được để trống'
+      });
+    }
+    
+    // Tìm user với email và role là admin
+    const admin = await Customer.findOne({ email, role: 'admin' });
+    
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy tài khoản admin với email này'
+      });
+    }
+    
+    // Tạo token mới cho admin
+    const payload = {
+      id: admin._id,
+      email: admin.email,
+      name: admin.name,
+      role: admin.role
+    };
+    
+    const accessToken = jwt.sign(
+      payload,
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+    
+    return res.json({
+      success: true,
+      accessToken
+    });
+  } catch (error) {
+    console.error('Error generating token:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ nội bộ'
+    });
+  }
+});
 
 module.exports = router;

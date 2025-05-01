@@ -10,9 +10,12 @@ const { TokenBlacklist } = require('../models/TokenBlacklist');
  */
 exports.authenticateToken = async (req, res, next) => {
   try {
+    console.log('Authenticating request to:', req.method, req.originalUrl);
     const authHeader = req.headers.authorization;
+    console.log('Auth header:', authHeader ? `${authHeader.substring(0, 35)}...` : 'undefined');
 
     if (!authHeader?.startsWith('Bearer ')) {
+      console.log('No Bearer token found in Authorization header');
       return res.status(401).json({
         code: 'UNAUTHORIZED',
         message: 'Không có token xác thực'
@@ -20,10 +23,20 @@ exports.authenticateToken = async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
+    console.log('Token received:', token ? `${token.substring(0, 15)}...` : 'undefined', 'length:', token?.length);
+
+    if (!token) {
+      console.log('Token is empty after split');
+      return res.status(401).json({
+        code: 'UNAUTHORIZED',
+        message: 'Token không hợp lệ'
+      });
+    }
 
     // Kiểm tra token có trong blacklist không
     const isBlacklisted = await TokenBlacklist.findOne({ token });
     if (isBlacklisted) {
+      console.log('Token is blacklisted');
       return res.status(401).json({
         code: 'TOKEN_BLACKLISTED',
         message: 'Token đã hết hạn hoặc bị vô hiệu hóa'
@@ -31,10 +44,25 @@ exports.authenticateToken = async (req, res, next) => {
     }
 
     // Xác thực token
+    console.log('JWT_SECRET:', process.env.JWT_SECRET ? 'exists' : 'missing');
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      console.log('Decoded token:', {
+        id: decoded.id,
+        email: decoded.email,
+        role: decoded.role,
+        exp: decoded.exp ? new Date(decoded.exp * 1000).toISOString() : 'undefined'
+      });
+    } catch (jwtError) {
+      console.error('JWT verification error:', jwtError.name, jwtError.message);
+      throw jwtError;
+    }
+
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     // Kiểm tra user có tồn tại không
     const customer = await Customer.findById(decoded.id);
+    console.log('Customer found:', customer ? 'yes' : 'no');
     if (!customer) {
       return res.status(404).json({
         code: 'USER_NOT_FOUND',
@@ -115,8 +143,8 @@ exports.requireAdmin = (req, res, next) => {
     });
   }
 
-  // Role 2 là admin
-  if (req.user.role !== 2) {
+  // Kiểm tra quyền admin
+  if (req.user.role !== 'admin') {
     return res.status(403).json({
       code: 'FORBIDDEN',
       message: 'Bạn không có quyền truy cập'
@@ -165,7 +193,7 @@ exports.requireOwnership = (getResourceOwnerId) => {
       }
 
       // Admin luôn có quyền truy cập
-      if (req.user.role === 2) {
+      if (req.user.role === 'admin') {
         return next();
       }
 

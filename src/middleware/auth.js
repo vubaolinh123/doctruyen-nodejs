@@ -45,10 +45,38 @@ const authenticateToken = (req, res, next) => {
   }
 };
 
+// Middleware để xác thực người dùng đã đăng nhập
+const isAuthenticated = (req, res, next) => {
+  authenticateToken(req, res, next);
+};
+
+// Middleware để kiểm tra quyền admin
+const isAdmin = (req, res, next) => {
+  // Đảm bảo người dùng đã được xác thực
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized. Please login first.'
+    });
+  }
+
+  // Kiểm tra quyền admin
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      error: 'Forbidden. Admin access required.'
+    });
+  }
+
+  next();
+};
+
 // Export middleware mặc định cho các route cũ
 module.exports = (req, res, next) => {
   authenticateToken(req, res, next);
 };
 
-// Export authenticateToken cho các route mới
+// Export các middleware
 module.exports.authenticateToken = authenticateToken;
+module.exports.isAuthenticated = isAuthenticated;
+module.exports.isAdmin = isAdmin;
