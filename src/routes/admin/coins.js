@@ -168,12 +168,16 @@ router.get('/transactions', async (req, res) => {
       page = 1,
       limit = 10,
       type,
+      direction,
+      status,
+      agent,
       startDate,
       endDate,
       search
     } = req.query;
 
     console.log(`[Admin API] Lấy lịch sử giao dịch - userId: ${userId}, page: ${page}, limit: ${limit}`);
+    console.log(`[Admin API] Các bộ lọc: type=${type}, direction=${direction}, status=${status}, agent=${agent}, search=${search}`);
 
     if (!userId) {
       return res.status(400).json({
@@ -194,6 +198,31 @@ router.get('/transactions', async (req, res) => {
       query.type = type;
     }
 
+    // Thêm điều kiện lọc theo hướng giao dịch (in/out)
+    if (direction && direction !== 'all') {
+      query.direction = direction;
+    }
+
+    // Thêm điều kiện lọc theo trạng thái
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+
+    // Thêm điều kiện lọc theo tác nhân (admin/system)
+    if (agent && agent !== 'all') {
+      if (agent === 'admin') {
+        query.$or = [
+          { type: 'admin' },
+          { 'metadata.admin_name': { $exists: true } }
+        ];
+      } else if (agent === 'system') {
+        query.$and = [
+          { type: { $ne: 'admin' } },
+          { 'metadata.admin_name': { $exists: false } }
+        ];
+      }
+    }
+
     // Thêm điều kiện lọc theo khoảng thời gian
     if (startDate && endDate) {
       query.transaction_date = {
@@ -208,10 +237,27 @@ router.get('/transactions', async (req, res) => {
 
     // Thêm điều kiện tìm kiếm theo ghi chú
     if (search) {
-      query.$or = [
-        { description: { $regex: search, $options: 'i' } },
-        { 'metadata.note': { $regex: search, $options: 'i' } }
-      ];
+      // Nếu đã có $or từ bộ lọc agent, chuyển thành $and
+      if (query.$or) {
+        const agentCondition = query.$or;
+        delete query.$or;
+        
+        query.$and = [
+          { $or: agentCondition }, 
+          { $or: [
+              { description: { $regex: search, $options: 'i' } },
+              { 'metadata.note': { $regex: search, $options: 'i' } },
+              { 'metadata.reason': { $regex: search, $options: 'i' } }
+            ]
+          }
+        ];
+      } else {
+        query.$or = [
+          { description: { $regex: search, $options: 'i' } },
+          { 'metadata.note': { $regex: search, $options: 'i' } },
+          { 'metadata.reason': { $regex: search, $options: 'i' } }
+        ];
+      }
     }
 
     console.log(`[Admin API] Query lịch sử giao dịch:`, JSON.stringify(query));
@@ -234,7 +280,8 @@ router.get('/transactions', async (req, res) => {
         page: pageNumber,
         limit: limitNumber,
         totalItems,
-        totalPages: Math.ceil(totalItems / limitNumber)
+        totalPages: Math.ceil(totalItems / limitNumber),
+        totalRecords: totalItems
       }
     });
   } catch (error) {

@@ -6,12 +6,14 @@ const authRoutes = require('./routes/auth');
 const cors = require('cors');
 const errorHandler = require('./middleware/errorHandler');
 const setupAttendanceCron = require('./cron/attendanceCron');
-const mongoose = require('mongoose');
 const apiLogger = require('./middleware/apiLogger');
 
 const app = express();
 console.log('🚀 Server starting...');
-connectDB();
+
+// Thiết lập timezone cho Việt Nam
+process.env.TZ = 'Asia/Ho_Chi_Minh';
+console.log(`⏰ Timezone set to: ${process.env.TZ} (${new Date().toString()})`);
 
 app.use(express.json());
 app.use(cors({
@@ -31,17 +33,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api', routes);
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 8000;
-app.listen(PORT, () => {
-  console.log(`🌍 Server running on port ${PORT}`);
-  console.log(`📍 API endpoint: http://localhost:${PORT}/api`);
-
-  // Khởi động cron job cho điểm danh
-  setupAttendanceCron();
-  console.log('📅 Attendance cron job scheduled');
-});
-
-// Thêm vào cuối file, trước app.listen
+// Global error handler
 app.use((err, req, res, next) => {
   console.error('❌ Global error:', err);
   res.status(500).json({ error: 'Internal server error' });
@@ -58,14 +50,22 @@ process.on('unhandledRejection', (err) => {
   process.exit(1);
 });
 
-// Kết nối MongoDB
-mongoose.connect(process.env.MONGODB_URI)
+const PORT = process.env.PORT || 8000;
+
+// Kết nối MongoDB và khởi động server
+connectDB()
   .then(() => {
-    console.log('✅ Connected to MongoDB');
+    // Khởi động server sau khi kết nối MongoDB thành công
     app.listen(PORT, () => {
+      console.log(`🌍 Server running on port ${PORT}`);
       console.log(`📍 API endpoint: http://localhost:${PORT}/api`);
+
+      // Khởi động cron job cho điểm danh
+      setupAttendanceCron();
+      console.log('📅 Attendance cron job scheduled');
     });
   })
   .catch((error) => {
-    console.error('❌ MongoDB connection error:', error);
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
   });

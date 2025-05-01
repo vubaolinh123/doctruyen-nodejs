@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
+const vietnamTimezonePlugin = require('../plugins/vietnamTimezone');
 
 /**
  * Schema cho điểm danh hàng ngày
@@ -88,6 +89,13 @@ const attendanceSchema = new Schema({
     type: Number,
     default: 420, // 420 phút = GMT+7
     description: 'Độ lệch múi giờ so với UTC tính bằng phút'
+  },
+
+  // Thêm trường để lưu thời gian điểm danh chính xác
+  attendance_time: {
+    type: Date,
+    default: Date.now,
+    description: 'Thời gian chính xác khi người dùng điểm danh'
   }
 }, {
   timestamps: true,
@@ -157,7 +165,9 @@ attendanceSchema.statics.createAttendance = async function(customerId, date, str
     notes = `Điểm danh ${streakCount} ngày liên tiếp! Thưởng thêm ${bonusReward} xu.`;
   }
 
-  // Tạo bản ghi mới
+  // Tạo bản ghi mới với thời gian hiện tại theo múi giờ Việt Nam
+  const now = new Date(); // Sử dụng múi giờ đã thiết lập (Asia/Ho_Chi_Minh)
+
   return this.create({
     customer_id: customerId,
     date,
@@ -168,7 +178,8 @@ attendanceSchema.statics.createAttendance = async function(customerId, date, str
     year,
     streak_count: streakCount,
     bonus_reward: bonusReward,
-    notes
+    notes,
+    attendance_time: now
   });
 };
 
@@ -177,6 +188,9 @@ attendanceSchema.statics.createMissedAttendance = async function(customerId, dat
   const day = date.getDate();
   const month = date.getMonth();
   const year = date.getFullYear();
+
+  // Sử dụng múi giờ Việt Nam
+  const now = new Date();
 
   return this.create({
     customer_id: customerId,
@@ -188,8 +202,12 @@ attendanceSchema.statics.createMissedAttendance = async function(customerId, dat
     year,
     streak_count: 0,
     bonus_reward: 0,
-    notes: 'Bỏ lỡ điểm danh'
+    notes: 'Bỏ lỡ điểm danh',
+    attendance_time: now
   });
 };
+
+// Áp dụng plugin timezone Việt Nam
+attendanceSchema.plugin(vietnamTimezonePlugin);
 
 module.exports = mongoose.model('Attendance', attendanceSchema);
