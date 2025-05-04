@@ -318,51 +318,86 @@ exports.searchStories = async (req, res) => {
 // Get suggested stories based on categories and views
 exports.getSuggestedStories = async (req, res) => {
   try {
-    const { storyId, page = 1, limit = 6 } = req.query;
-
-    if (!storyId) {
-      return res.status(400).json({ error: 'Story ID is required' });
-    }
+    const {
+      storyId,
+      page = 1,
+      limit = 6,
+      sortBy = 'views', // Mặc định sắp xếp theo lượt xem
+      sortOrder = 'desc', // Mặc định sắp xếp giảm dần
+      categoryFilter // Lọc theo thể loại cụ thể (tùy chọn)
+    } = req.query;
 
     // Import mongoose
     const mongoose = require('mongoose');
 
-    // Kiểm tra storyId có phải là ObjectId hợp lệ không
-    if (!mongoose.Types.ObjectId.isValid(storyId)) {
-      return res.status(400).json({ error: 'Invalid story ID' });
+    // Tạo query cơ bản
+    let query = { status: true };
+    let categoryIds = [];
+
+    // Nếu có storyId, lấy thông tin truyện và thể loại của nó
+    if (storyId) {
+      // Kiểm tra storyId có phải là ObjectId hợp lệ không
+      if (!mongoose.Types.ObjectId.isValid(storyId)) {
+        return res.status(400).json({ error: 'Invalid story ID' });
+      }
+
+      // Lấy thông tin truyện hiện tại
+      const currentStory = await Story.findById(storyId);
+      if (!currentStory) {
+        return res.status(404).json({ error: 'Story not found' });
+      }
+
+      // Lấy danh sách thể loại của truyện hiện tại
+      categoryIds = currentStory.categories;
+
+      // Loại trừ truyện hiện tại khỏi kết quả
+      query._id = { $ne: storyId };
+
+      // Nếu không có thể loại nào, trả về danh sách trống
+      if (!categoryIds || categoryIds.length === 0) {
+        return res.json({
+          items: [],
+          total: 0,
+          totalPages: 0,
+          currentPage: parseInt(page)
+        });
+      }
+
+      // Thêm điều kiện lọc theo thể loại của truyện hiện tại
+      query.categories = { $in: categoryIds };
+    }
+    // Nếu không có storyId nhưng có categoryFilter, lọc theo categoryFilter
+    else if (categoryFilter) {
+      // Kiểm tra categoryFilter có phải là ObjectId hợp lệ không
+      if (!mongoose.Types.ObjectId.isValid(categoryFilter)) {
+        return res.status(400).json({ error: 'Invalid category ID' });
+      }
+
+      // Thêm điều kiện lọc theo thể loại được chỉ định
+      query.categories = { $in: [categoryFilter] };
     }
 
-    // Lấy thông tin truyện hiện tại
-    const currentStory = await Story.findById(storyId);
-    if (!currentStory) {
-      return res.status(404).json({ error: 'Story not found' });
-    }
-
-    // Lấy danh sách thể loại của truyện hiện tại
-    const categoryIds = currentStory.categories;
-
-    // Nếu không có thể loại nào, trả về danh sách trống
-    if (!categoryIds || categoryIds.length === 0) {
-      return res.json({
-        items: [],
-        total: 0,
-        totalPages: 0,
-        currentPage: parseInt(page)
-      });
-    }
+    // Xác định cách sắp xếp
+    const sortOptions = {};
+    sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
 
     // Lấy danh sách truyện đề xuất
-    const suggestedStories = await Story.findSuggestedStories(
-      categoryIds,
-      storyId,
-      parseInt(page),
-      parseInt(limit)
-    )
+    const suggestedStories = await Story.find(query)
+      .sort(sortOptions)
+      .skip((parseInt(page) - 1) * parseInt(limit))
+      .limit(parseInt(limit))
       .populate('author_id', 'name slug')
       .populate('categories', 'name slug');
 
     // Đếm tổng số truyện đề xuất
-    const total = await Story.countSuggestedStories(categoryIds, storyId);
+    let total = 0;
+    if (storyId) {
+      total = await Story.countDocuments(query);
+    } else if (categoryFilter) {
+      total = await Story.countDocuments(query);
+    } else {
+      total = 0;
+    }
 
     // Lấy số lượng chapter cho mỗi truyện
     const Chapter = require('../models/Chapter');
