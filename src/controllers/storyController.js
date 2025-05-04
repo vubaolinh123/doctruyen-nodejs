@@ -6,27 +6,27 @@ exports.getAll = async (req, res) => {
   try {
     const { page = 1, limit = 10, ...filters } = req.query;
     const query = {};
-    
+
     // Filter by status if provided
     if (filters.status !== undefined) {
       query.status = filters.status === 'true';
     }
-    
+
     // Filter by categories if provided
     if (filters.category) {
       query.categories = filters.category;
     }
-    
+
     // Filter by author if provided
     if (filters.author) {
       query.author_id = filters.author;
     }
-    
+
     // Filter by name if provided
     if (filters.name) {
       query.name = { $regex: filters.name, $options: 'i' };
     }
-    
+
     // Filter by slug if provided
     if (filters.slug) {
       query.slug = filters.slug;
@@ -36,11 +36,11 @@ exports.getAll = async (req, res) => {
     if (filters.is_hot !== undefined) {
       query.is_hot = filters.is_hot === 'true';
     }
-    
+
     if (filters.is_new !== undefined) {
       query.is_new = filters.is_new === 'true';
     }
-    
+
     if (filters.is_full !== undefined) {
       query.is_full = filters.is_full === 'true';
     }
@@ -54,7 +54,7 @@ exports.getAll = async (req, res) => {
 
     // Count total
     const total = await Story.countDocuments(query);
-    
+
     res.json({
       items,
       total,
@@ -71,9 +71,9 @@ exports.getById = async (req, res) => {
     const item = await Story.findById(req.params.id)
       .populate('authors', 'name slug')
       .populate('categories', 'name slug');
-      
+
     if (!item) return res.status(404).json({ error: 'Not found' });
-    
+
     res.json(item);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -83,12 +83,26 @@ exports.getById = async (req, res) => {
 exports.getBySlug = async (req, res) => {
   try {
     const item = await Story.findBySlug(req.params.slug)
-      .populate('authors', 'name slug')
+      .populate('author_id', 'name slug')
       .populate('categories', 'name slug');
-      
+
     if (!item) return res.status(404).json({ error: 'Not found' });
-    
-    res.json(item);
+
+    // Lấy số lượng chapter
+    const Chapter = require('../models/Chapter');
+    const chapterCount = await Chapter.countDocuments({ story_id: item._id });
+
+    // Lấy chapter mới nhất
+    const latestChapter = await Chapter.findOne({ story_id: item._id })
+      .sort({ chapter: -1 })
+      .select('chapter name createdAt');
+
+    // Chuyển đổi thành object để có thể thêm trường
+    const storyData = item.toObject();
+    storyData.chapter_count = chapterCount;
+    storyData.latest_chapter = latestChapter;
+
+    res.json(storyData);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -115,12 +129,12 @@ exports.create = async (req, res) => {
       hot_all_time,
       status
     } = req.body;
-    
+
     // Check if name is provided
     if (!name) {
       return res.status(400).json({ error: 'Story name is required' });
     }
-    
+
     // Prepare data
     const storyData = {
       name,
@@ -140,15 +154,15 @@ exports.create = async (req, res) => {
       hot_all_time: Boolean(hot_all_time),
       status: status !== undefined ? Boolean(status) : true
     };
-    
+
     // Add slug if provided, otherwise will be auto-generated
     if (slug) {
       storyData.slug = slug;
     }
-    
+
     const item = new Story(storyData);
     await item.save();
-    
+
     res.status(201).json(item);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -158,7 +172,7 @@ exports.create = async (req, res) => {
 exports.update = async (req, res) => {
   try {
     const updateData = {};
-    
+
     // Only update fields that are present in request
     if (req.body.name !== undefined) updateData.name = req.body.name;
     if (req.body.slug !== undefined) updateData.slug = req.body.slug;
@@ -177,7 +191,7 @@ exports.update = async (req, res) => {
     if (req.body.hot_month !== undefined) updateData.hot_month = Boolean(req.body.hot_month);
     if (req.body.hot_all_time !== undefined) updateData.hot_all_time = Boolean(req.body.hot_all_time);
     if (req.body.status !== undefined) updateData.status = Boolean(req.body.status);
-    
+
     // If name is updated but slug is not provided, regenerate the slug
     if (req.body.name && req.body.slug === undefined) {
       updateData.slug = slugify(req.body.name, {
@@ -186,16 +200,16 @@ exports.update = async (req, res) => {
         locale: 'vi'
       });
     }
-    
+
     const item = await Story.findByIdAndUpdate(
-      req.params.id, 
-      updateData, 
+      req.params.id,
+      updateData,
       { new: true }
     ).populate('authors', 'name slug')
      .populate('categories', 'name slug');
-    
+
     if (!item) return res.status(404).json({ error: 'Not found' });
-    
+
     res.json(item);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -219,7 +233,7 @@ exports.getHotStories = async (req, res) => {
     const stories = await Story.findHotStories(parseInt(limit))
       .populate('authors', 'name slug')
       .populate('categories', 'name slug');
-      
+
     res.json(stories);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -233,7 +247,7 @@ exports.getTopRatedStories = async (req, res) => {
     const stories = await Story.findTopRatedStories(parseInt(limit))
       .populate('authors', 'name slug')
       .populate('categories', 'name slug');
-      
+
     res.json(stories);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -247,7 +261,7 @@ exports.getRecentStories = async (req, res) => {
     const stories = await Story.findRecentlyUpdated(parseInt(limit))
       .populate('authors', 'name slug')
       .populate('categories', 'name slug');
-      
+
     res.json(stories);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -261,7 +275,7 @@ exports.getStoriesByCategory = async (req, res) => {
     const stories = await Story.findByCategory(req.params.categoryId, parseInt(limit))
       .populate('authors', 'name slug')
       .populate('categories', 'name slug');
-      
+
     res.json(stories);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -275,7 +289,7 @@ exports.getStoriesByAuthor = async (req, res) => {
     const stories = await Story.findByAuthor(req.params.authorId, parseInt(limit))
       .populate('authors', 'name slug')
       .populate('categories', 'name slug');
-      
+
     res.json(stories);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -286,16 +300,96 @@ exports.getStoriesByAuthor = async (req, res) => {
 exports.searchStories = async (req, res) => {
   try {
     const { keyword, limit = 10 } = req.query;
-    
+
     if (!keyword) {
       return res.status(400).json({ error: 'Keyword is required' });
     }
-    
+
     const stories = await Story.search(keyword, parseInt(limit))
       .populate('authors', 'name slug')
       .populate('categories', 'name slug');
-      
+
     res.json(stories);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Get suggested stories based on categories and views
+exports.getSuggestedStories = async (req, res) => {
+  try {
+    const { storyId, page = 1, limit = 6 } = req.query;
+
+    if (!storyId) {
+      return res.status(400).json({ error: 'Story ID is required' });
+    }
+
+    // Import mongoose
+    const mongoose = require('mongoose');
+
+    // Kiểm tra storyId có phải là ObjectId hợp lệ không
+    if (!mongoose.Types.ObjectId.isValid(storyId)) {
+      return res.status(400).json({ error: 'Invalid story ID' });
+    }
+
+    // Lấy thông tin truyện hiện tại
+    const currentStory = await Story.findById(storyId);
+    if (!currentStory) {
+      return res.status(404).json({ error: 'Story not found' });
+    }
+
+    // Lấy danh sách thể loại của truyện hiện tại
+    const categoryIds = currentStory.categories;
+
+    // Nếu không có thể loại nào, trả về danh sách trống
+    if (!categoryIds || categoryIds.length === 0) {
+      return res.json({
+        items: [],
+        total: 0,
+        totalPages: 0,
+        currentPage: parseInt(page)
+      });
+    }
+
+    // Lấy danh sách truyện đề xuất
+    const suggestedStories = await Story.findSuggestedStories(
+      categoryIds,
+      storyId,
+      parseInt(page),
+      parseInt(limit)
+    )
+      .populate('author_id', 'name slug')
+      .populate('categories', 'name slug');
+
+    // Đếm tổng số truyện đề xuất
+    const total = await Story.countSuggestedStories(categoryIds, storyId);
+
+    // Lấy số lượng chapter cho mỗi truyện
+    const Chapter = require('../models/Chapter');
+    const storiesWithChapterCount = await Promise.all(
+      suggestedStories.map(async (story) => {
+        const storyObj = story.toObject();
+
+        // Đếm số lượng chapter
+        const chapterCount = await Chapter.countDocuments({ story_id: story._id });
+        storyObj.chapter_count = chapterCount;
+
+        // Lấy chapter mới nhất
+        const latestChapter = await Chapter.findOne({ story_id: story._id })
+          .sort({ chapter: -1 })
+          .select('chapter name createdAt');
+        storyObj.latest_chapter = latestChapter;
+
+        return storyObj;
+      })
+    );
+
+    res.json({
+      items: storiesWithChapterCount,
+      total,
+      totalPages: Math.ceil(total / parseInt(limit)),
+      currentPage: parseInt(page)
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

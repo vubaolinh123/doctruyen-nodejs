@@ -46,7 +46,7 @@ const storySchema = new Schema({
 
   // Thông tin đánh giá
   stars: {
-    type: Number, 
+    type: Number,
     default: 0,
     min: 0,
     max: 10
@@ -151,7 +151,7 @@ storySchema.pre('save', function(next) {
 
 // Phương thức tĩnh để tìm truyện theo slug
 storySchema.statics.findBySlug = function(slug) {
-  return this.findOne({ 
+  return this.findOne({
     slug: slug,
     status: true
   });
@@ -159,9 +159,9 @@ storySchema.statics.findBySlug = function(slug) {
 
 // Phương thức tĩnh để tìm truyện nổi bật
 storySchema.statics.findHotStories = function(limit = 10) {
-  return this.find({ 
-    is_hot: true, 
-    status: true 
+  return this.find({
+    is_hot: true,
+    status: true
   })
     .sort({ createdAt: -1 })
     .limit(limit);
@@ -169,7 +169,7 @@ storySchema.statics.findHotStories = function(limit = 10) {
 
 // Phương thức tĩnh để tìm truyện được đánh giá cao
 storySchema.statics.findTopRatedStories = function(limit = 10) {
-  return this.find({ 
+  return this.find({
     status: true,
     count_star: { $gt: 0 }
   })
@@ -186,8 +186,8 @@ storySchema.statics.findRecentlyUpdated = function(limit = 10) {
 
 // Phương thức tĩnh để tìm truyện theo thể loại
 storySchema.statics.findByCategory = function(categoryId, limit = 10) {
-  return this.find({ 
-    categories: categoryId, 
+  return this.find({
+    categories: categoryId,
     status: true
   })
     .sort({ updatedAt: -1 })
@@ -196,8 +196,8 @@ storySchema.statics.findByCategory = function(categoryId, limit = 10) {
 
 // Phương thức tĩnh để tìm truyện theo tác giả
 storySchema.statics.findByAuthor = function(authorId, limit = 10) {
-  return this.find({ 
-    author_id: authorId, 
+  return this.find({
+    author_id: authorId,
     status: true
   })
     .sort({ updatedAt: -1 })
@@ -212,6 +212,41 @@ storySchema.statics.search = function(keyword, limit = 10) {
   })
     .sort({ score: { $meta: 'textScore' } })
     .limit(limit);
+};
+
+// Phương thức tĩnh để tìm truyện đề xuất dựa trên thể loại và lượt xem
+storySchema.statics.findSuggestedStories = function(categoryIds, excludeStoryId, page = 1, limit = 6) {
+  // Tạo query để tìm truyện có cùng thể loại, trừ truyện hiện tại
+  const query = {
+    categories: { $in: categoryIds },
+    status: true
+  };
+
+  // Loại trừ truyện hiện tại nếu có
+  if (excludeStoryId) {
+    query._id = { $ne: excludeStoryId };
+  }
+
+  return this.find(query)
+    .sort({ views: -1 }) // Sắp xếp theo lượt xem giảm dần
+    .skip((page - 1) * limit)
+    .limit(limit);
+};
+
+// Phương thức tĩnh để đếm tổng số truyện đề xuất
+storySchema.statics.countSuggestedStories = function(categoryIds, excludeStoryId) {
+  // Tạo query để tìm truyện có cùng thể loại, trừ truyện hiện tại
+  const query = {
+    categories: { $in: categoryIds },
+    status: true
+  };
+
+  // Loại trừ truyện hiện tại nếu có
+  if (excludeStoryId) {
+    query._id = { $ne: excludeStoryId };
+  }
+
+  return this.countDocuments(query);
 };
 
 module.exports = mongoose.model('Story', storySchema);

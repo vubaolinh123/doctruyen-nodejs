@@ -2,14 +2,16 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 
-router.use('/authors', auth, require('./authors'));
-// Categories route đã được cấu hình xác thực bên trong file route
+// Các route công khai, không cần xác thực
+router.use('/stories', require('./stories'));
+router.use('/chapters', require('./chapters'));
 router.use('/categories', require('./categories'));
-router.use('/chapters', auth, require('./chapters'));
+router.use('/authors', require('./authors'));
+router.use('/slides', require('./slides'));
+
+// Các route cần xác thực
 router.use('/customers', auth, require('./customers'));
 router.use('/purchased-stories', auth, require('./purchasedStories'));
-router.use('/slides', auth, require('./slides'));
-router.use('/stories', auth, require('./stories'));
 router.use('/stories-reading', auth, require('./storiesReading'));
 router.use('/transactions', auth, require('./transactions'));
 router.use('/bookmarks', auth, require('./bookmarks'));

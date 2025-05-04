@@ -1,19 +1,23 @@
 const express = require('express');
 const router = express.Router();
 const controller = require('../controllers/storyController');
+const auth = require('../middleware/auth');
 
-// Basic CRUD routes
+// Các route công khai, không cần xác thực
 router.get('/', controller.getAll);
 router.get('/hot', controller.getHotStories);
 router.get('/top-rated', controller.getTopRatedStories);
 router.get('/recent', controller.getRecentStories);
+router.get('/suggest', controller.getSuggestedStories);
 router.get('/category/:categoryId', controller.getStoriesByCategory);
 router.get('/author/:authorId', controller.getStoriesByAuthor);
 router.get('/search', controller.searchStories);
 router.get('/slug/:slug', controller.getBySlug);
 router.get('/:id', controller.getById);
-router.post('/', controller.create);
-router.put('/:id', controller.update);
-router.delete('/:id', controller.remove);
+
+// Các route cần xác thực (thường là admin)
+router.post('/', auth, controller.create);
+router.put('/:id', auth, controller.update);
+router.delete('/:id', auth, controller.remove);
 
 module.exports = router;
