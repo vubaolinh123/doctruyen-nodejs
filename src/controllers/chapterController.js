@@ -231,6 +231,104 @@ exports.getChapterBySlug = async (req, res) => {
   }
 };
 
+// Lấy thông tin chi tiết của một chapter theo slug của chapter và slug của truyện
+exports.getChapterByStoryAndChapterSlug = async (req, res) => {
+  try {
+    const { storySlug, chapterSlug } = req.params;
+
+    console.log(`[API] Lấy chapter theo slug truyện: ${storySlug} và slug chapter: ${chapterSlug}`);
+
+    // Tìm truyện theo slug
+    const story = await Story.findOne({ slug: storySlug });
+
+    if (!story) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy truyện'
+      });
+    }
+
+    // Tìm chapter theo slug và story_id
+    let chapter = await Chapter.findOne({
+      slug: chapterSlug,
+      story_id: story._id,
+      status: true
+    });
+
+    // Nếu không tìm thấy, thử tìm với slug chứa một phần của slug đã cho
+    if (!chapter) {
+      const regex = new RegExp(chapterSlug, 'i');
+      chapter = await Chapter.findOne({
+        slug: regex,
+        story_id: story._id,
+        status: true
+      });
+    }
+
+    console.log('Kết quả tìm kiếm chapter:', chapter ? `Tìm thấy: ${chapter.slug}` : 'Không tìm thấy');
+
+    if (!chapter) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy chapter trong truyện này'
+      });
+    }
+
+    // Lấy tổng số chapter của truyện
+    const totalChapters = await Chapter.countDocuments({
+      story_id: story._id,
+      status: true
+    });
+
+    // Lấy chapter trước và sau
+    const prevChapter = await Chapter.findPreviousChapter(story._id, chapter.chapter);
+    const nextChapter = await Chapter.findNextChapter(story._id, chapter.chapter);
+
+    // Tạo đối tượng navigation
+    const navigation = {
+      prev: prevChapter ? {
+        id: prevChapter._id,
+        chapter: prevChapter.chapter,
+        name: prevChapter.name,
+        slug: prevChapter.slug
+      } : null,
+      next: nextChapter ? {
+        id: nextChapter._id,
+        chapter: nextChapter.chapter,
+        name: nextChapter.name,
+        slug: nextChapter.slug
+      } : null
+    };
+
+    return res.json({
+      success: true,
+      chapter: {
+        _id: chapter._id,
+        chapter: chapter.chapter,
+        name: chapter.name,
+        content: chapter.content,
+        slug: chapter.slug,
+        createdAt: chapter.createdAt,
+        updatedAt: chapter.updatedAt
+      },
+      story: {
+        id: story._id,
+        name: story.name,
+        slug: story.slug
+      },
+      navigation,
+      totalChapters
+    });
+  } catch (err) {
+    console.error('[API] Error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi server',
+      error: err.message
+    });
+  }
+};
+
 // Lấy danh sách slug của tất cả các chapter của một truyện theo slug của truyện
 exports.getChaptersByStorySlug = async (req, res) => {
   try {

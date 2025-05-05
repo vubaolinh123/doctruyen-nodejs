@@ -24,6 +24,7 @@ router.get('/debug/slugs', async (req, res) => {
   }
 });
 router.get('/slug/:slug', controller.getChapterBySlug);
+router.get('/story/:storySlug/chapter/:chapterSlug', controller.getChapterByStoryAndChapterSlug);
 router.get('/story/slug/:storySlug', controller.getChaptersByStorySlug);
 router.get('/story/:storyId/latest', controller.getLatestChapter);
 router.get('/story/:storyId', controller.getChaptersByStory);
