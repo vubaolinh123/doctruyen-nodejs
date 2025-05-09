@@ -24,7 +24,11 @@ router.get('/', async (req, res) => {
       is_new,
       is_full,
       category,
-      author
+      author,
+      // Thêm các tham số lọc theo số lượng chapter
+      hasChapters,
+      chapterCount,
+      chapterCountOp = 'eq' // eq: bằng, gt: lớn hơn, lt: nhỏ hơn, gte: lớn hơn hoặc bằng, lte: nhỏ hơn hoặc bằng
     } = req.query;
 
     console.log(`[Admin API] Lấy danh sách truyện - page: ${page}, limit: ${limit}, search: ${search}`);
@@ -107,33 +111,133 @@ router.get('/', async (req, res) => {
       }
     }
 
-    // Thực hiện truy vấn với phân trang
-    const stories = await Story.find(query)
+    // Kiểm tra xem có lọc hoặc sắp xếp theo số lượng chapter không
+    const isChapterFiltering = hasChapters !== undefined || chapterCount !== undefined;
+    const isChapterSorting = sort.includes('chapter_count');
+
+    // Nếu không có lọc hoặc sắp xếp theo số lượng chapter, thực hiện truy vấn bình thường với phân trang
+    if (!isChapterFiltering && !isChapterSorting) {
+      // Thực hiện truy vấn với phân trang
+      const stories = await Story.find(query)
+        .populate('categories', 'name slug')
+        .populate('author_id', 'name slug')
+        .sort(sort)
+        .skip((parseInt(page) - 1) * parseInt(limit))
+        .limit(parseInt(limit));
+
+      // Đếm tổng số truyện thỏa mãn điều kiện
+      const total = await Story.countDocuments(query);
+
+      // Lấy thông tin số chapter cho mỗi truyện
+      const storiesWithChapterCount = await Promise.all(
+        stories.map(async (story) => {
+          const chapterCount = await Chapter.countDocuments({ story_id: story._id });
+          const storyObj = story.toObject();
+          storyObj.chapter_count = chapterCount;
+          return storyObj;
+        })
+      );
+
+      return res.json({
+        success: true,
+        stories: storiesWithChapterCount,
+        pagination: {
+          total,
+          totalPages: Math.ceil(total / parseInt(limit)),
+          currentPage: parseInt(page),
+          limit: parseInt(limit)
+        }
+      });
+    }
+
+    // Nếu có lọc hoặc sắp xếp theo số lượng chapter, cần lấy tất cả truyện và xử lý thủ công
+    // Lấy tất cả truyện thỏa mãn điều kiện cơ bản (không phân trang)
+    const allStories = await Story.find(query)
       .populate('categories', 'name slug')
-      .populate('author_id', 'name slug')
-      .sort(sort)
-      .skip((parseInt(page) - 1) * parseInt(limit))
-      .limit(parseInt(limit));
+      .populate('author_id', 'name slug');
 
-    // Đếm tổng số truyện thỏa mãn điều kiện
-    const total = await Story.countDocuments(query);
-
-    // Lấy thông tin số chapter cho mỗi truyện
+    // Lấy thông tin số chapter cho tất cả truyện
     const storiesWithChapterCount = await Promise.all(
-      stories.map(async (story) => {
-        const chapterCount = await Chapter.countDocuments({ story_id: story._id });
+      allStories.map(async (story) => {
+        const count = await Chapter.countDocuments({ story_id: story._id });
         const storyObj = story.toObject();
-        storyObj.chapter_count = chapterCount;
+        storyObj.chapter_count = count;
         return storyObj;
       })
     );
 
+    // Lọc truyện theo số lượng chapter nếu cần
+    let filteredStories = storiesWithChapterCount;
+
+    // Nếu có lọc theo hasChapters
+    if (hasChapters !== undefined) {
+      const hasChaptersBool = hasChapters === 'true';
+      filteredStories = storiesWithChapterCount.filter(story =>
+        hasChaptersBool ? story.chapter_count > 0 : story.chapter_count === 0
+      );
+    }
+
+    // Nếu có lọc theo số lượng chapter cụ thể
+    if (chapterCount !== undefined) {
+      const chapterCountNum = parseInt(chapterCount);
+
+      filteredStories = filteredStories.filter(story => {
+        const count = story.chapter_count;
+
+        switch (chapterCountOp) {
+          case 'eq': // Bằng
+            return count === chapterCountNum;
+          case 'gt': // Lớn hơn
+            return count > chapterCountNum;
+          case 'lt': // Nhỏ hơn
+            return count < chapterCountNum;
+          case 'gte': // Lớn hơn hoặc bằng
+            return count >= chapterCountNum;
+          case 'lte': // Nhỏ hơn hoặc bằng
+            return count <= chapterCountNum;
+          default:
+            return count === chapterCountNum;
+        }
+      });
+    }
+
+    // Sắp xếp theo số lượng chapter nếu cần
+    if (isChapterSorting) {
+      const sortField = 'chapter_count';
+      const sortOrder = sort.startsWith('-') ? -1 : 1;
+
+      filteredStories.sort((a, b) => {
+        return (a[sortField] - b[sortField]) * sortOrder;
+      });
+    } else if (sort) {
+      // Sắp xếp theo trường khác
+      const sortField = sort.startsWith('-') ? sort.substring(1) : sort;
+      const sortOrder = sort.startsWith('-') ? -1 : 1;
+
+      filteredStories.sort((a, b) => {
+        if (typeof a[sortField] === 'string') {
+          return a[sortField].localeCompare(b[sortField]) * sortOrder;
+        } else {
+          return (a[sortField] - b[sortField]) * sortOrder;
+        }
+      });
+    }
+
+    // Tính toán tổng số truyện sau khi lọc
+    const totalFiltered = filteredStories.length;
+    const totalPages = Math.ceil(totalFiltered / parseInt(limit));
+
+    // Phân trang kết quả đã lọc và sắp xếp
+    const startIndex = (parseInt(page) - 1) * parseInt(limit);
+    const endIndex = startIndex + parseInt(limit);
+    const paginatedStories = filteredStories.slice(startIndex, endIndex);
+
     return res.json({
       success: true,
-      stories: storiesWithChapterCount,
+      stories: paginatedStories,
       pagination: {
-        total,
-        totalPages: Math.ceil(total / parseInt(limit)),
+        total: totalFiltered,
+        totalPages: totalPages,
         currentPage: parseInt(page),
         limit: parseInt(limit)
       }

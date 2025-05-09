@@ -2,20 +2,16 @@ const Transaction = require('../models/Transaction');
 
 exports.getAll = async (req, res) => {
   try {
-    console.log('TransactionController.getAll called');
-    console.log('User from token:', req.user);
 
     const { customers_id, type, search = '', page = 1, limit = 10, sort = '-createdAt' } = req.query;
     const query = {};
 
     // Nếu người dùng đã đăng nhập, lấy giao dịch của họ
     if (req.user && req.user.id) {
-      console.log('Using user ID from token:', req.user.id);
       query.customer_id = req.user.id;
     }
     // Nếu có tham số customers_id, sử dụng nó (cho admin)
     else if (customers_id) {
-      console.log('Using customers_id from query:', customers_id);
       query.customer_id = customers_id;
     }
     // Nếu không có thông tin người dùng, trả về lỗi
@@ -29,19 +25,14 @@ exports.getAll = async (req, res) => {
 
     // Thêm các điều kiện lọc khác
     if (type) {
-      console.log('Filtering by type:', type);
       query.type = type;
     }
     if (search) {
-      console.log('Searching for:', search);
       query.description = { $regex: search, $options: 'i' };
     }
 
-    console.log('Final query:', query);
-
     // Đếm tổng số giao dịch thỏa mãn điều kiện
     const total = await Transaction.countDocuments(query);
-    console.log('Total matching transactions:', total);
 
     // Lấy danh sách giao dịch với phân trang
     const items = await Transaction.find(query)
@@ -59,7 +50,6 @@ exports.getAll = async (req, res) => {
       totalPages: Math.ceil(total / parseInt(limit))
     };
 
-    console.log('Sending response with', items.length, 'items');
     res.json(result);
   } catch (err) {
     res.status(500).json({
