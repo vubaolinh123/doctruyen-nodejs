@@ -1,18 +1,18 @@
 const mongoose = require('mongoose');
 
-// Thiết lập timezone mặc định cho toàn bộ ứng dụng trước khi kết nối MongoDB
+// Set default timezone for the entire application before connecting to MongoDB
 process.env.TZ = 'Asia/Ho_Chi_Minh';
 
-// Ghi đè phương thức toJSON mặc định của mongoose để chuyển đổi các trường Date sang múi giờ Việt Nam
+// Override default mongoose toJSON method to convert Date fields to Vietnam timezone
 mongoose.set('toJSON', {
   transform: (doc, ret) => {
     if (ret.createdAt) {
-      // Chuyển đổi createdAt từ UTC sang múi giờ Việt Nam
+      // Convert createdAt from UTC to Vietnam timezone
       const createdDate = new Date(ret.createdAt);
       ret.createdAt = new Date(createdDate.getTime() + (7 * 60 * 60 * 1000));
     }
     if (ret.updatedAt) {
-      // Chuyển đổi updatedAt từ UTC sang múi giờ Việt Nam
+      // Convert updatedAt from UTC to Vietnam timezone
       const updatedDate = new Date(ret.updatedAt);
       ret.updatedAt = new Date(updatedDate.getTime() + (7 * 60 * 60 * 1000));
     }
@@ -20,15 +20,16 @@ mongoose.set('toJSON', {
   }
 });
 
-// Ghi đè hàm Date.now() để trả về thời gian theo múi giờ Việt Nam
+// Override Date.now() function to return time in Vietnam timezone
 const originalDateNow = Date.now;
 Date.now = function() {
-  return originalDateNow();
+  // Add 7 hours (7 * 60 * 60 * 1000 milliseconds) to current time
+  return originalDateNow() + (7 * 60 * 60 * 1000);
 };
 
 const connectDB = async () => {
   try {
-    // Cấu hình kết nối MongoDB với timezone Việt Nam (UTC+7)
+    // Configure MongoDB connection with Vietnam timezone (UTC+7)
     await mongoose.connect(process.env.MONGODB_URI, {
       serverApi: {
         version: '1',
@@ -37,7 +38,7 @@ const connectDB = async () => {
       }
     });
 
-    // Log thời gian hiện tại để kiểm tra timezone
+    // Log current time to verify timezone
     const now = new Date();
     console.log(`✅ MongoDB connected with timezone: Asia/Ho_Chi_Minh`);
     console.log(`⏰ Current time: ${now.toISOString()} (${now.toString()})`);

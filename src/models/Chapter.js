@@ -88,7 +88,24 @@ const chapterSchema = new Schema({
   }
 }, {
   timestamps: true,
-  toJSON: { virtuals: true },
+  toJSON: {
+    virtuals: true,
+    transform: function(doc, ret) {
+      if (ret.createdAt) {
+        // Convert createdAt to Vietnam timezone (UTC+7)
+        const createdAtVN = new Date(ret.createdAt);
+        createdAtVN.setHours(createdAtVN.getHours() + 7);
+        ret.createdAt = createdAtVN;
+      }
+      if (ret.updatedAt) {
+        // Convert updatedAt to Vietnam timezone (UTC+7)
+        const updatedAtVN = new Date(ret.updatedAt);
+        updatedAtVN.setHours(updatedAtVN.getHours() + 7);
+        ret.updatedAt = updatedAtVN;
+      }
+      return ret;
+    }
+  },
   toObject: { virtuals: true }
 });
 

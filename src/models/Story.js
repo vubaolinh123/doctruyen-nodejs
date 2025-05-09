@@ -19,6 +19,11 @@ const storySchema = new Schema({
     default: ''
   },
 
+  banner: {
+    type: String,
+    default: ''
+  },
+
   name: {
     type: String,
     required: true,

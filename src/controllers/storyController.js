@@ -114,6 +114,7 @@ exports.create = async (req, res) => {
       name,
       slug,
       image,
+      banner,
       desc,
       author_id,
       categories,
@@ -139,6 +140,7 @@ exports.create = async (req, res) => {
     const storyData = {
       name,
       image: image || '',
+      banner: banner || '',
       desc: desc || '',
       author_id: author_id || [],
       categories: categories || [],
@@ -177,6 +179,7 @@ exports.update = async (req, res) => {
     if (req.body.name !== undefined) updateData.name = req.body.name;
     if (req.body.slug !== undefined) updateData.slug = req.body.slug;
     if (req.body.image !== undefined) updateData.image = req.body.image;
+    if (req.body.banner !== undefined) updateData.banner = req.body.banner;
     if (req.body.desc !== undefined) updateData.desc = req.body.desc;
     if (req.body.author_id !== undefined) updateData.author_id = req.body.author_id;
     if (req.body.categories !== undefined) updateData.categories = req.body.categories;
@@ -312,6 +315,86 @@ exports.searchStories = async (req, res) => {
     res.json(stories);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+};
+
+// Tăng lượt view cho truyện theo slug
+exports.incrementViews = async (req, res) => {
+  try {
+    const { slug } = req.params;
+
+    if (!slug) {
+      return res.status(400).json({ success: false, message: 'Slug is required' });
+    }
+
+    // Tìm truyện theo slug
+    const story = await Story.findOne({ slug, status: true });
+
+    if (!story) {
+      return res.status(404).json({ success: false, message: 'Story not found' });
+    }
+
+    // Tăng lượt view lên 1
+    story.views += 1;
+    await story.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'View count incremented successfully',
+      views: story.views
+    });
+  } catch (err) {
+    console.error('Error incrementing views:', err);
+    return res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  }
+};
+
+// Get new stories (is_new = true)
+exports.getNewStories = async (req, res) => {
+  try {
+    const { limit = 10 } = req.query;
+
+    // Tìm truyện có is_new = true và status = true
+    const stories = await Story.find({
+      is_new: true,
+      status: true
+    })
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .populate('author_id', 'name slug')
+      .populate('categories', 'name slug');
+
+    // Lấy số lượng chapter và chapter mới nhất cho mỗi truyện
+    const Chapter = require('../models/Chapter');
+    const storiesWithChapterInfo = await Promise.all(
+      stories.map(async (story) => {
+        const storyObj = story.toObject();
+
+        // Đếm số lượng chapter
+        const chapterCount = await Chapter.countDocuments({ story_id: story._id });
+        storyObj.chapter_count = chapterCount;
+
+        // Lấy chapter mới nhất
+        const latestChapter = await Chapter.findOne({ story_id: story._id })
+          .sort({ chapter: -1 })
+          .select('chapter name createdAt');
+        storyObj.latest_chapter = latestChapter;
+
+        return storyObj;
+      })
+    );
+
+    res.json({
+      success: true,
+      stories: storiesWithChapterInfo
+    });
+  } catch (err) {
+    console.error('Error getting new stories:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: err.message
+    });
   }
 };
 

@@ -8,8 +8,8 @@ const jwt = require('jsonwebtoken');
 
 // Rate limiting để ngăn chặn brute force
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 phút
-  max: 10, // Tối đa 10 request trong 15 phút
+  windowMs: 1 * 60 * 1000, // 15 phút
+  max: 100, // Tối đa 10 request trong 15 phút
   message: {
     code: 'TOO_MANY_REQUESTS',
     message: 'Quá nhiều yêu cầu đăng nhập, vui lòng thử lại sau 15 phút'
