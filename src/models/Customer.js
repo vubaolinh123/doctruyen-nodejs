@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
+const slugify = require('slugify');
 
 /**
  * Schema cho người dùng
@@ -11,6 +12,11 @@ const customerSchema = new Schema({
     type: String,
     required: true,
     trim: true
+  },
+  slug: {
+    type: String,
+    unique: true,
+    index: true
   },
   email: {
     type: String,
@@ -31,6 +37,10 @@ const customerSchema = new Schema({
   },
   birthday: Date,
   avatar: {
+    type: String,
+    default: null
+  },
+  banner: {
     type: String,
     default: null
   },
@@ -177,6 +187,7 @@ const customerSchema = new Schema({
 // Tạo các index để tối ưu truy vấn
 customerSchema.index({ role: 1, status: 1 });
 customerSchema.index({ 'attendance_summary.last_attendance': 1 });
+customerSchema.index({ slug: 1 }, { unique: true });
 
 // Virtuals
 customerSchema.virtual('bookmarks', {
@@ -444,6 +455,59 @@ customerSchema.methods.updateCoinStats = async function() {
 
   await this.save();
   return this.coin_stats;
+};
+
+// Hàm tạo slug từ tên người dùng
+function generateUniqueSlug(name, suffix = '') {
+  // Tạo slug cơ bản từ tên
+  let baseSlug = slugify(name, {
+    lower: true,           // Chuyển thành chữ thường
+    strict: true,          // Loại bỏ các ký tự đặc biệt
+    locale: 'vi',          // Hỗ trợ tiếng Việt
+    trim: true             // Cắt khoảng trắng ở đầu và cuối
+  });
+
+  // Thêm hậu tố nếu có
+  return suffix ? `${baseSlug}-${suffix}` : baseSlug;
+}
+
+// Middleware trước khi lưu để tạo slug
+customerSchema.pre('save', async function(next) {
+  // Nếu không có slug hoặc name đã thay đổi, tạo slug mới
+  if (!this.slug || this.isModified('name')) {
+    try {
+      // Tạo slug cơ bản
+      let slug = generateUniqueSlug(this.name);
+      let isUnique = false;
+      let counter = 1;
+
+      // Kiểm tra xem slug đã tồn tại chưa
+      while (!isUnique) {
+        // Tìm kiếm trong database xem có slug nào trùng không
+        const existingUser = await mongoose.model('Customer').findOne({ slug, _id: { $ne: this._id } });
+
+        // Nếu không có slug trùng, thoát khỏi vòng lặp
+        if (!existingUser) {
+          isUnique = true;
+        } else {
+          // Nếu có slug trùng, thêm số vào cuối và thử lại
+          slug = generateUniqueSlug(this.name, counter);
+          counter++;
+        }
+      }
+
+      // Gán slug đã kiểm tra vào document
+      this.slug = slug;
+    } catch (error) {
+      return next(error);
+    }
+  }
+  next();
+});
+
+// Phương thức tĩnh để tìm người dùng theo slug
+customerSchema.statics.findBySlug = function(slug) {
+  return this.findOne({ slug });
 };
 
 module.exports = mongoose.model('Customer', customerSchema);

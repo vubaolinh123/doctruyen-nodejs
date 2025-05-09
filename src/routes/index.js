@@ -8,6 +8,7 @@ router.use('/chapters', require('./chapters'));
 router.use('/categories', require('./categories'));
 router.use('/authors', require('./authors'));
 router.use('/slides', require('./slides'));
+router.use('/users', require('./public/users')); // Route mới để lấy thông tin người dùng theo slug
 
 // Các route cần xác thực
 router.use('/customers', auth, require('./customers'));

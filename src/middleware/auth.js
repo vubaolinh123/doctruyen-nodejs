@@ -76,7 +76,33 @@ module.exports = (req, res, next) => {
   authenticateToken(req, res, next);
 };
 
+// Middleware xác thực tùy chọn - không bắt buộc phải có token
+const optionalAuth = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  // Nếu không có header hoặc token, vẫn cho phép tiếp tục nhưng không set req.user
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return next();
+  }
+
+  const token = authHeader.split(' ')[1];
+  if (!token) {
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded; // Lưu thông tin người dùng vào req.user nếu token hợp lệ
+  } catch (err) {
+    // Nếu token không hợp lệ, vẫn cho phép tiếp tục nhưng không set req.user
+    console.log('Optional auth token invalid:', err.message);
+  }
+
+  next();
+};
+
 // Export các middleware
 module.exports.authenticateToken = authenticateToken;
 module.exports.isAuthenticated = isAuthenticated;
 module.exports.isAdmin = isAdmin;
+module.exports.optional = optionalAuth;

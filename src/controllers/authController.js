@@ -44,9 +44,11 @@ const getUserResponse = (customer) => {
     accountType: customer.accountType || 'email',
     gender: customer.gender || '',
     birthday: customer.birthday || null,
+    slug: customer.slug || '',
     diem_danh: customer.diem_danh || 0,
     coin: customer.coin || 0,
     coin_total: customer.coin_total || 0,
+    coin_spent: customer.coin_spent || 0,
     created_at: customer.createdAt || null,
     isActive: customer.isActive || false,
     email_verified_at: customer.email_verified_at || null
@@ -474,7 +476,7 @@ exports.getMe = async (req, res) => {
 exports.updateProfile = async (req, res) => {
   try {
     // Lấy thông tin từ request body
-    const { name, avatar, gender, birthday, currentPassword, newPassword } = req.body;
+    const { name, avatar, banner, gender, birthday, currentPassword, newPassword } = req.body;
 
     // Tìm người dùng
     const customer = await Customer.findById(req.user.id);
@@ -497,6 +499,7 @@ exports.updateProfile = async (req, res) => {
     const updateData = {};
     if (name) updateData.name = name;
     if (avatar) updateData.avatar = avatar;
+    if (banner) updateData.banner = banner;
     if (gender) updateData.gender = gender;
     if (birthday) updateData.birthday = new Date(birthday);
 
