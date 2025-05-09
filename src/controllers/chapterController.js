@@ -157,8 +157,6 @@ exports.getChapterBySlug = async (req, res) => {
       chapter = await Chapter.findOne({ slug: regex, status: true });
     }
 
-    console.log('Kết quả tìm kiếm chapter:', chapter ? `Tìm thấy: ${chapter.slug}` : 'Không tìm thấy');
-
     if (!chapter) {
       return res.status(404).json({
         success: false,
@@ -236,8 +234,6 @@ exports.getChapterByStoryAndChapterSlug = async (req, res) => {
   try {
     const { storySlug, chapterSlug } = req.params;
 
-    console.log(`[API] Lấy chapter theo slug truyện: ${storySlug} và slug chapter: ${chapterSlug}`);
-
     // Tìm truyện theo slug
     const story = await Story.findOne({ slug: storySlug });
 
@@ -264,8 +260,6 @@ exports.getChapterByStoryAndChapterSlug = async (req, res) => {
         status: true
       });
     }
-
-    console.log('Kết quả tìm kiếm chapter:', chapter ? `Tìm thấy: ${chapter.slug}` : 'Không tìm thấy');
 
     if (!chapter) {
       return res.status(404).json({
@@ -333,8 +327,6 @@ exports.getChapterByStoryAndChapterSlug = async (req, res) => {
 exports.getChaptersByStorySlug = async (req, res) => {
   try {
     const { storySlug } = req.params;
-    console.log(`[API] Lấy danh sách slug chapter theo slug truyện: ${storySlug}`);
-
     // Tìm truyện theo slug
     const story = await Story.findOne({ slug: storySlug });
 
