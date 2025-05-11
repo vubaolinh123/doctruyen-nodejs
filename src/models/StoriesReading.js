@@ -7,9 +7,9 @@ const { Schema } = mongoose;
  */
 const storiesReadingSchema = new Schema({
   // Tham chiếu đến người dùng
-  customer_id: {
+  user_id: {
     type: Schema.Types.ObjectId,
-    ref: 'Customer',
+    ref: 'User',
     required: true,
     index: true
   },
@@ -63,8 +63,8 @@ const storiesReadingSchema = new Schema({
 });
 
 // Tạo các index để tối ưu truy vấn
-storiesReadingSchema.index({ customer_id: 1, story_id: 1 }, { unique: true });
-storiesReadingSchema.index({ customer_id: 1, updatedAt: -1 });
+storiesReadingSchema.index({ user_id: 1, story_id: 1 }, { unique: true });
+storiesReadingSchema.index({ user_id: 1, updatedAt: -1 });
 
 // Virtuals
 storiesReadingSchema.virtual('story', {
@@ -88,25 +88,25 @@ storiesReadingSchema.virtual('chapter_read', {
   justOne: true
 });
 
-storiesReadingSchema.virtual('customer', {
-  ref: 'Customer',
-  localField: 'customer_id',
+storiesReadingSchema.virtual('user', {
+  ref: 'User',
+  localField: 'user_id',
   foreignField: '_id',
   justOne: true
 });
 
-// Phương thức tĩnh để tìm lịch sử đọc theo customer_id và story_id
-storiesReadingSchema.statics.findByCustomerAndStory = function(customerId, storyId) {
+// Phương thức tĩnh để tìm lịch sử đọc theo user_id và story_id
+storiesReadingSchema.statics.findByCustomerAndStory = function(userId, storyId) {
   return this.findOne({
-    customer_id: customerId,
+    user_id: userId,
     story_id: storyId
   });
 };
 
 // Phương thức tĩnh để lấy danh sách lịch sử đọc của người dùng
-storiesReadingSchema.statics.findByCustomer = function(customerId, limit = 10, skip = 0) {
+storiesReadingSchema.statics.findByCustomer = function(userId, limit = 10, skip = 0) {
   return this.find({
-    customer_id: customerId
+    user_id: userId
   })
     .sort({ updatedAt: -1 })
     .skip(skip)
@@ -116,14 +116,14 @@ storiesReadingSchema.statics.findByCustomer = function(customerId, limit = 10, s
 };
 
 // Phương thức tĩnh để cập nhật hoặc tạo mới lịch sử đọc
-storiesReadingSchema.statics.upsertReading = async function(customerId, storyId, chapterId, position = 0) {
+storiesReadingSchema.statics.upsertReading = async function(userId, storyId, chapterId, position = 0) {
   return this.findOneAndUpdate(
-    { customer_id: customerId, story_id: storyId },
+    { user_id: userId, story_id: storyId },
     {
       chapter_id_reading: chapterId,
       reading_position: position,
       $inc: { read_count: 1 },
-      $setOnInsert: { customer_id: customerId, story_id: storyId }
+      $setOnInsert: { user_id: userId, story_id: storyId }
     },
     {
       new: true,
@@ -133,9 +133,9 @@ storiesReadingSchema.statics.upsertReading = async function(customerId, storyId,
 };
 
 // Phương thức tĩnh để cập nhật chapter đã đọc
-storiesReadingSchema.statics.updateChapterRead = async function(customerId, storyId, chapterId) {
+storiesReadingSchema.statics.updateChapterRead = async function(userId, storyId, chapterId) {
   return this.findOneAndUpdate(
-    { customer_id: customerId, story_id: storyId },
+    { user_id: userId, story_id: storyId },
     {
       chapter_id_read: chapterId
     },

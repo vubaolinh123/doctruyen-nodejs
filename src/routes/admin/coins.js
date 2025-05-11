@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Customer = require('../../models/Customer');
+const User = require('../../models/user');
 const Transaction = require('../../models/Transaction');
 const coinRepair = require('../../utils/coinRepair');
 
@@ -78,9 +78,9 @@ router.post('/manage', async (req, res) => {
     }
 
     // Tìm người dùng
-    const customer = await Customer.findById(userId);
+    const user = await User.findById(userId);
 
-    if (!customer) {
+    if (!user) {
       console.log(`[Admin API] Không tìm thấy người dùng với ID: ${userId}`);
       return res.status(404).json({
         success: false,
@@ -98,7 +98,7 @@ router.post('/manage', async (req, res) => {
 
     switch (action) {
       case 'give':
-        result = await customer.addCoins(Number(amount), {
+        result = await user.addCoins(Number(amount), {
           description: note || 'Thêm xu bởi admin',
           type: 'admin',
           metadata: adminInfo
@@ -106,15 +106,15 @@ router.post('/manage', async (req, res) => {
         break;
 
       case 'take':
-        if (customer.coin < Number(amount)) {
-          console.log(`[Admin API] Số xu không đủ - hiện tại: ${customer.coin}, cần trừ: ${amount}`);
+        if (user.coin < Number(amount)) {
+          console.log(`[Admin API] Số xu không đủ - hiện tại: ${user.coin}, cần trừ: ${amount}`);
           return res.status(400).json({
             success: false,
             message: 'Số xu không đủ để trừ'
           });
         }
 
-        result = await customer.subtractCoins(Number(amount), {
+        result = await user.subtractCoins(Number(amount), {
           description: note || 'Trừ xu bởi admin',
           type: 'admin',
           metadata: adminInfo
@@ -122,7 +122,7 @@ router.post('/manage', async (req, res) => {
         break;
 
       case 'edit':
-        result = await customer.updateCoins(Number(amount), {
+        result = await user.updateCoins(Number(amount), {
           description: note || 'Cập nhật xu bởi admin',
           type: 'admin',
           metadata: adminInfo
@@ -191,7 +191,7 @@ router.get('/transactions', async (req, res) => {
     const skip = (pageNumber - 1) * limitNumber;
 
     // Xây dựng query
-    const query = { customer_id: userId };
+    const query = { user_id: userId };
 
     // Thêm điều kiện lọc theo loại giao dịch
     if (type && type !== 'all') {

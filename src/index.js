@@ -7,6 +7,8 @@ const cors = require('cors');
 const errorHandler = require('./middleware/errorHandler');
 const setupAttendanceCron = require('./cron/attendanceCron');
 const apiLogger = require('./middleware/apiLogger');
+const swaggerUI = require('swagger-ui-express');
+const swaggerSpecs = require('./config/swagger');
 
 const app = express();
 console.log('🚀 Server starting...');
@@ -28,6 +30,20 @@ app.use((req, res, next) => {
 });
 
 app.use(apiLogger);
+
+// Cấu hình Swagger UI
+app.use('/api-docs', swaggerUI.serve, swaggerUI.setup(swaggerSpecs, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'API Truyện - Tài liệu',
+  customfavIcon: '/favicon.ico',
+  swaggerOptions: {
+    tagsSorter: 'alpha',
+    operationsSorter: 'alpha',
+    docExpansion: 'none',
+    persistAuthorization: true,
+    filter: true,
+  },
+}));
 
 app.use('/api/auth', authRoutes);
 app.use('/api', routes);
@@ -59,6 +75,7 @@ connectDB()
     app.listen(PORT, () => {
       console.log(`🌍 Server running on port ${PORT}`);
       console.log(`📍 API endpoint: http://localhost:${PORT}/api`);
+      console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
 
       // Khởi động cron job cho điểm danh
       setupAttendanceCron();

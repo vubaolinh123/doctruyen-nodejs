@@ -18,9 +18,9 @@ Date.prototype.getWeek = function() {
  */
 const transactionSchema = new Schema({
   // ID của người dùng
-  customer_id: {
+  user_id: {
     type: Schema.Types.ObjectId,
-    ref: 'Customer',
+    ref: 'User',
     required: true,
     index: true
   },
@@ -103,9 +103,9 @@ const transactionSchema = new Schema({
   },
 
   // Trường tương thích ngược - sẽ loại bỏ trong tương lai
-  customers_id: {
+  users_id: {
     type: Schema.Types.ObjectId,
-    ref: 'Customer'
+    ref: 'User'
   },
   up_point: {
     type: Number,
@@ -119,24 +119,24 @@ const transactionSchema = new Schema({
 
 // Tạo các index để tối ưu truy vấn
 transactionSchema.index({ transaction_date: -1 });
-transactionSchema.index({ customer_id: 1, transaction_date: -1 });
+transactionSchema.index({ user_id: 1, transaction_date: -1 });
 transactionSchema.index({ type: 1, transaction_date: -1 });
 
 // Virtuals
-transactionSchema.virtual('customer', {
-  ref: 'Customer',
-  localField: 'customer_id',
+transactionSchema.virtual('user', {
+  ref: 'User',
+  localField: 'user_id',
   foreignField: '_id',
   justOne: true
 });
 
 // Middleware pre-save để đảm bảo tương thích ngược
 transactionSchema.pre('save', function(next) {
-  // Đảm bảo customers_id luôn đồng bộ với customer_id
-  if (this.customer_id && !this.customers_id) {
-    this.customers_id = this.customer_id;
-  } else if (this.customers_id && !this.customer_id) {
-    this.customer_id = this.customers_id;
+  // Đảm bảo users_id luôn đồng bộ với user_id
+  if (this.user_id && !this.users_id) {
+    this.users_id = this.user_id;
+  } else if (this.users_id && !this.user_id) {
+    this.user_id = this.users_id;
   }
 
   // Đảm bảo up_point luôn đồng bộ với coin_change
@@ -152,7 +152,7 @@ transactionSchema.pre('save', function(next) {
 // Phương thức tĩnh để tạo giao dịch mới
 transactionSchema.statics.createTransaction = async function(data) {
   const {
-    customer_id,
+    user_id,
     description,
     type,
     coin_change,
@@ -173,10 +173,10 @@ transactionSchema.statics.createTransaction = async function(data) {
   let finalBalance = balance_after;
   if (finalBalance === undefined) {
     try {
-      const Customer = mongoose.model('Customer');
-      const customer = await Customer.findById(customer_id);
-      if (customer) {
-        finalBalance = customer.coin;
+      const User = mongoose.model('User');
+      const user = await User.findById(user_id);
+      if (user) {
+        finalBalance = user.coin;
       }
     } catch (error) {
       console.error('Không thể lấy số dư hiện tại:', error);
@@ -184,7 +184,7 @@ transactionSchema.statics.createTransaction = async function(data) {
   }
 
   return this.create({
-    customer_id,
+    user_id,
     transaction_id,
     description,
     transaction_date: now, // Sử dụng biến now đã tạo ở trên với timezone Việt Nam
@@ -197,7 +197,7 @@ transactionSchema.statics.createTransaction = async function(data) {
     reference_id: reference_id || null,
     metadata: metadata || {},
     // Trường tương thích ngược
-    customers_id: customer_id,
+    users_id: user_id,
     up_point: coin_change
   });
 };
@@ -248,9 +248,9 @@ transactionSchema.statics.getCoinStats = async function(timeRange = 'all') {
     console.log("Thống kê xu cho tất cả thời gian");
   }
 
-  // Lấy tổng xu hiện tại từ tất cả khách hàng trong bảng Customer
-  const Customer = mongoose.model('Customer');
-  const totalCoinsAgg = await Customer.aggregate([
+  // Lấy tổng xu hiện tại từ tất cả người dùng trong bảng User
+  const User = mongoose.model('User');
+  const totalCoinsAgg = await User.aggregate([
     {
       $group: {
         _id: null,
@@ -307,7 +307,7 @@ transactionSchema.statics.getCoinStats = async function(timeRange = 'all') {
   const totalSpentInRange = spentAgg.length > 0 ? spentAgg[0].total : 0;
 
   console.log(`Kết quả truy vấn trong khoảng thời gian: totalReceivedInRange = ${totalReceivedInRange}, totalSpentInRange = ${totalSpentInRange}`);
-  console.log(`Tổng dữ liệu từ Customer: totalCoinTotal = ${totalCoinTotal}, totalCoinSpent = ${totalCoinSpent}`);
+  console.log(`Tổng dữ liệu từ User: totalCoinTotal = ${totalCoinTotal}, totalCoinSpent = ${totalCoinSpent}`);
 
   // Nếu không có dữ liệu giao dịch trong khoảng thời gian được chọn
   if (totalReceivedInRange === 0 && totalSpentInRange === 0) {
@@ -336,8 +336,8 @@ transactionSchema.statics.getCoinStats = async function(timeRange = 'all') {
 
   const result = {
     totalCoins,
-    totalCoinTotal,  // Thêm tổng xu đã nhận từ bảng Customer
-    totalCoinSpent,  // Thêm tổng xu đã tiêu từ bảng Customer
+    totalCoinTotal,  // Thêm tổng xu đã nhận từ bảng User
+    totalCoinSpent,  // Thêm tổng xu đã tiêu từ bảng User
     totalReceived: totalReceivedInRange,  // Đổi tên biến để rõ ràng hơn
     totalSpent: totalSpentInRange,        // Đổi tên biến để rõ ràng hơn
     averageDaily: dailyAverage,

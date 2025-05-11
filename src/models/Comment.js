@@ -7,9 +7,9 @@ const { Schema } = mongoose;
  */
 const commentSchema = new Schema({
   // ID của người dùng bình luận
-  customer_id: {
+  user_id: {
     type: Schema.Types.ObjectId,
-    ref: 'Customer',
+    ref: 'User',
     required: true,
     index: true
   },
@@ -54,7 +54,7 @@ const commentSchema = new Schema({
   // Danh sách ID người dùng đã thích (để tránh like nhiều lần)
   liked_by: [{
     type: Schema.Types.ObjectId,
-    ref: 'Customer'
+    ref: 'User'
   }],
 
   // Số bình luận con
@@ -94,13 +94,13 @@ const commentSchema = new Schema({
 
 // Index để tìm kiếm nhanh
 commentSchema.index({ story_id: 1, chapter_id: 1, parent_id: 1 });
-commentSchema.index({ customer_id: 1 });
+commentSchema.index({ user_id: 1 });
 commentSchema.index({ 'metadata.type': 1, 'metadata.position': 1 });
 
 // Virtuals
-commentSchema.virtual('customer', {
-  ref: 'Customer',
-  localField: 'customer_id',
+commentSchema.virtual('user', {
+  ref: 'User',
+  localField: 'user_id',
   foreignField: '_id',
   justOne: true
 });

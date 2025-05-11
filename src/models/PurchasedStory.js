@@ -7,9 +7,9 @@ const { Schema } = mongoose;
  */
 const purchasedStorySchema = new Schema({
   // Tham chiếu đến người dùng
-  customer_id: {
+  user_id: {
     type: Schema.Types.ObjectId,
-    ref: 'Customer',
+    ref: 'User',
     required: true,
     index: true
   },
@@ -56,8 +56,8 @@ const purchasedStorySchema = new Schema({
 });
 
 // Tạo các index để tối ưu truy vấn
-purchasedStorySchema.index({ customer_id: 1, story_id: 1 }, { unique: true });
-purchasedStorySchema.index({ customer_id: 1, createdAt: -1 });
+purchasedStorySchema.index({ user_id: 1, story_id: 1 }, { unique: true });
+purchasedStorySchema.index({ user_id: 1, createdAt: -1 });
 purchasedStorySchema.index({ expire_date: 1 }, { sparse: true });
 
 // Virtuals
@@ -68,9 +68,9 @@ purchasedStorySchema.virtual('story', {
   justOne: true
 });
 
-purchasedStorySchema.virtual('customer', {
-  ref: 'Customer',
-  localField: 'customer_id',
+purchasedStorySchema.virtual('user', {
+  ref: 'User',
+  localField: 'user_id',
   foreignField: '_id',
   justOne: true
 });
@@ -83,9 +83,9 @@ purchasedStorySchema.virtual('transaction', {
 });
 
 // Phương thức tĩnh để kiểm tra người dùng đã mua truyện chưa
-purchasedStorySchema.statics.checkPurchased = async function(customerId, storyId) {
+purchasedStorySchema.statics.checkPurchased = async function(userId, storyId) {
   const purchase = await this.findOne({
-    customer_id: customerId,
+    user_id: userId,
     story_id: storyId,
     status: 'active'
   });
@@ -106,9 +106,9 @@ purchasedStorySchema.statics.checkPurchased = async function(customerId, storyId
 };
 
 // Phương thức tĩnh để lấy danh sách truyện đã mua của người dùng
-purchasedStorySchema.statics.findByCustomer = function(customerId, limit = 10, skip = 0) {
+purchasedStorySchema.statics.findByCustomer = function(userId, limit = 10, skip = 0) {
   return this.find({
-    customer_id: customerId,
+    user_id: userId,
     status: 'active'
   })
     .sort({ createdAt: -1 })
@@ -118,14 +118,14 @@ purchasedStorySchema.statics.findByCustomer = function(customerId, limit = 10, s
 };
 
 // Phương thức tĩnh để mua truyện
-purchasedStorySchema.statics.purchaseStory = async function(customerId, storyId, coinAmount, transactionId = null) {
+purchasedStorySchema.statics.purchaseStory = async function(userId, storyId, coinAmount, transactionId = null) {
   return this.findOneAndUpdate(
-    { customer_id: customerId, story_id: storyId },
+    { user_id: userId, story_id: storyId },
     {
       coin_bought: coinAmount,
       status: 'active',
       transaction_id: transactionId,
-      $setOnInsert: { customer_id: customerId, story_id: storyId }
+      $setOnInsert: { user_id: userId, story_id: storyId }
     },
     {
       new: true,

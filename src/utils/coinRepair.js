@@ -81,7 +81,7 @@ async function repairTransactionDirection() {
  */
 async function checkCoinDataConsistency() {
   const Transaction = mongoose.model('Transaction');
-  const Customer = mongoose.model('Customer');
+  const User = mongoose.model('User');
   
   console.log("Kiểm tra tính nhất quán của dữ liệu xu...");
   
@@ -101,15 +101,15 @@ async function checkCoinDataConsistency() {
     ]
   }).limit(5);
   
-  // Lấy tổng xu hiện tại của các khách hàng
-  const customerAgg = await Customer.aggregate([
+  // Lấy tổng xu hiện tại của các người dùng
+  const userAgg = await User.aggregate([
     {
       $group: {
         _id: null,
         totalCoins: { $sum: '$coin' },
         totalCoinTotal: { $sum: '$coin_total' },
         totalCoinSpent: { $sum: '$coin_spent' },
-        customerCount: { $sum: 1 }
+        userCount: { $sum: 1 }
       }
     }
   ]);
@@ -128,13 +128,13 @@ async function checkCoinDataConsistency() {
   
   const results = {
     invalidDirections,
-    customerStats: customerAgg.length > 0 ? customerAgg[0] : { totalCoins: 0, customerCount: 0 },
+    userStats: userAgg.length > 0 ? userAgg[0] : { totalCoins: 0, userCount: 0 },
     transactionStats: transactionAgg.length > 0 ? transactionAgg[0] : { totalReceived: 0, totalSpent: 0, transactionCount: 0 }
   };
   
   console.log("Kết quả kiểm tra dữ liệu xu:");
   console.log(`- Số giao dịch có direction không khớp: ${results.invalidDirections}`);
-  console.log(`- Thống kê khách hàng: ${results.customerStats.customerCount} khách hàng, ${results.customerStats.totalCoins} xu tổng`);
+  console.log(`- Thống kê người dùng: ${results.userStats.userCount} người dùng, ${results.userStats.totalCoins} xu tổng`);
   console.log(`- Thống kê giao dịch: ${results.transactionStats.transactionCount} giao dịch`);
   console.log(`  + Tổng xu đã nhận: ${results.transactionStats.totalReceived}`);
   console.log(`  + Tổng xu đã tiêu: ${results.transactionStats.totalSpent}`);

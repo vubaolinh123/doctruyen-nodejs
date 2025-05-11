@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const controller = require('../controllers/storyController');
+const controller = require('../controllers/story');
 const auth = require('../middleware/auth');
 
 // Các route công khai, không cần xác thực

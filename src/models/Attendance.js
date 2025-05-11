@@ -8,9 +8,9 @@ const vietnamTimezonePlugin = require('../plugins/vietnamTimezone');
  */
 const attendanceSchema = new Schema({
   // ID của người dùng
-  customer_id: {
+  user_id: {
     type: Schema.Types.ObjectId,
-    ref: 'Customer',
+    ref: 'User',
     required: true,
     index: true
   },
@@ -103,19 +103,19 @@ const attendanceSchema = new Schema({
   toObject: { virtuals: true }
 });
 
-// Index để tìm kiếm nhanh theo customer_id và date
-attendanceSchema.index({ customer_id: 1, date: 1 }, { unique: true });
+// Index để tìm kiếm nhanh theo user_id và date
+attendanceSchema.index({ user_id: 1, date: 1 }, { unique: true });
 
-// Index để tìm kiếm nhanh theo customer_id, year và month
-attendanceSchema.index({ customer_id: 1, year: 1, month: 1 });
+// Index để tìm kiếm nhanh theo user_id, year và month
+attendanceSchema.index({ user_id: 1, year: 1, month: 1 });
 
 // Index để tìm kiếm nhanh theo ngày
 attendanceSchema.index({ date: 1 });
 
 // Virtuals
-attendanceSchema.virtual('customer', {
-  ref: 'Customer',
-  localField: 'customer_id',
+attendanceSchema.virtual('user', {
+  ref: 'User',
+  localField: 'user_id',
   foreignField: '_id',
   justOne: true
 });
@@ -139,7 +139,7 @@ attendanceSchema.statics.calculateReward = function(streakCount) {
 };
 
 // Phương thức tĩnh để tạo bản ghi điểm danh mới
-attendanceSchema.statics.createAttendance = async function(customerId, date, streakCount) {
+attendanceSchema.statics.createAttendance = async function(userId, date, streakCount) {
   const day = date.getDate();
   const month = date.getMonth();
   const year = date.getFullYear();
@@ -169,7 +169,7 @@ attendanceSchema.statics.createAttendance = async function(customerId, date, str
   const now = new Date(); // Sử dụng múi giờ đã thiết lập (Asia/Ho_Chi_Minh)
 
   return this.create({
-    customer_id: customerId,
+    user_id: userId,
     date,
     status: 'attended',
     reward: baseReward + bonusReward,
@@ -184,7 +184,7 @@ attendanceSchema.statics.createAttendance = async function(customerId, date, str
 };
 
 // Phương thức tĩnh để tạo bản ghi missed
-attendanceSchema.statics.createMissedAttendance = async function(customerId, date) {
+attendanceSchema.statics.createMissedAttendance = async function(userId, date) {
   const day = date.getDate();
   const month = date.getMonth();
   const year = date.getFullYear();
@@ -193,7 +193,7 @@ attendanceSchema.statics.createMissedAttendance = async function(customerId, dat
   const now = new Date();
 
   return this.create({
-    customer_id: customerId,
+    user_id: userId,
     date,
     status: 'missed',
     reward: 0,

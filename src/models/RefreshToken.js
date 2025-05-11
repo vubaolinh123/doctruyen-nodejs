@@ -9,7 +9,7 @@ const refreshTokenSchema = new mongoose.Schema({
   // ID của user sở hữu token
   userId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Customer',
+    ref: 'User',
     required: true
   },
   // Token value

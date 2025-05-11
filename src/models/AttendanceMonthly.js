@@ -7,9 +7,9 @@ const { Schema } = mongoose;
  */
 const attendanceMonthlySchema = new Schema({
   // ID của người dùng
-  customer_id: {
+  user_id: {
     type: Schema.Types.ObjectId,
-    ref: 'Customer',
+    ref: 'User',
     required: true,
     index: true
   },
@@ -68,13 +68,13 @@ const attendanceMonthlySchema = new Schema({
   toObject: { virtuals: true }
 });
 
-// Index để tìm kiếm nhanh theo customer_id, year và month
-attendanceMonthlySchema.index({ customer_id: 1, year: 1, month: 1 }, { unique: true });
+// Index để tìm kiếm nhanh theo user_id, year và month
+attendanceMonthlySchema.index({ user_id: 1, year: 1, month: 1 }, { unique: true });
 
 // Virtuals
-attendanceMonthlySchema.virtual('customer', {
-  ref: 'Customer',
-  localField: 'customer_id',
+attendanceMonthlySchema.virtual('user', {
+  ref: 'User',
+  localField: 'user_id',
   foreignField: '_id',
   justOne: true
 });

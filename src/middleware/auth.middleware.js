@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const Customer = require('../models/Customer');
+const User = require('../models/user');
 const { TokenBlacklist } = require('../models/TokenBlacklist');
 
 /**
@@ -47,8 +47,8 @@ exports.authenticateToken = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     // Kiểm tra user có tồn tại không
-    const customer = await Customer.findById(decoded.id);
-    if (!customer) {
+    const user = await User.findById(decoded.id);
+    if (!user) {
       return res.status(404).json({
         code: 'USER_NOT_FOUND',
         message: 'Người dùng không tồn tại'
@@ -56,7 +56,7 @@ exports.authenticateToken = async (req, res, next) => {
     }
 
     // Kiểm tra user có bị vô hiệu hóa không
-    if (!customer.isActive) {
+    if (!user.isActive) {
       return res.status(403).json({
         code: 'ACCOUNT_DISABLED',
         message: 'Tài khoản đã bị vô hiệu hóa'
@@ -64,8 +64,8 @@ exports.authenticateToken = async (req, res, next) => {
     }
 
     // Lấy thông tin mới nhất từ database
-    const freshCustomer = await Customer.findById(customer._id);
-    if (!freshCustomer) {
+    const freshUser = await User.findById(user._id);
+    if (!freshUser) {
       return res.status(404).json({
         code: 'USER_NOT_FOUND',
         message: 'Không tìm thấy người dùng'
@@ -74,20 +74,21 @@ exports.authenticateToken = async (req, res, next) => {
 
     // Lưu đầy đủ thông tin user mới nhất vào request
     req.user = {
-      id: freshCustomer._id,
-      email: freshCustomer.email,
-      role: freshCustomer.role,
-      name: freshCustomer.name,
+      id: freshUser._id,
+      email: freshUser.email,
+      role: freshUser.role,
+      name: freshUser.name,
+      banner: freshUser.banner,
       // Thêm các trường khác
-      avatar: freshCustomer.avatar,
-      gender: freshCustomer.gender,
-      birthday: freshCustomer.birthday,
-      accountType: freshCustomer.accountType,
-      diem_danh: freshCustomer.diem_danh,
-      coin: freshCustomer.coin,
-      coin_total: freshCustomer.coin_total,
-      isActive: freshCustomer.isActive,
-      email_verified_at: freshCustomer.email_verified_at
+      avatar: freshUser.avatar,
+      gender: freshUser.gender,
+      birthday: freshUser.birthday,
+      accountType: freshUser.accountType,
+      diem_danh: freshUser.diem_danh,
+      coin: freshUser.coin,
+      coin_total: freshUser.coin_total,
+      isActive: freshUser.isActive,
+      email_verified_at: freshUser.email_verified_at
     };
 
     next();

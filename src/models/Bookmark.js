@@ -23,9 +23,9 @@ const bookmarkSchema = new Schema({
   },
 
   // Tham chiếu đến người dùng
-  customer_id: {
+  user_id: {
     type: Schema.Types.ObjectId,
-    ref: 'Customer',
+    ref: 'User',
     required: true,
     index: true
   },
@@ -48,8 +48,8 @@ const bookmarkSchema = new Schema({
 });
 
 // Tạo các index để tối ưu truy vấn
-bookmarkSchema.index({ customer_id: 1, story_id: 1 }, { unique: true });
-bookmarkSchema.index({ customer_id: 1, createdAt: -1 });
+bookmarkSchema.index({ user_id: 1, story_id: 1 }, { unique: true });
+bookmarkSchema.index({ user_id: 1, createdAt: -1 });
 
 // Virtuals
 bookmarkSchema.virtual('story', {
@@ -66,25 +66,25 @@ bookmarkSchema.virtual('chapter', {
   justOne: true
 });
 
-bookmarkSchema.virtual('customer', {
-  ref: 'Customer',
-  localField: 'customer_id',
+bookmarkSchema.virtual('user', {
+  ref: 'User',
+  localField: 'user_id',
   foreignField: '_id',
   justOne: true
 });
 
-// Phương thức tĩnh để tìm bookmark theo customer_id và story_id
-bookmarkSchema.statics.findByCustomerAndStory = function(customerId, storyId) {
+// Phương thức tĩnh để tìm bookmark theo user_id và story_id
+bookmarkSchema.statics.findByCustomerAndStory = function(userId, storyId) {
   return this.findOne({
-    customer_id: customerId,
+    user_id: userId,
     story_id: storyId
   });
 };
 
 // Phương thức tĩnh để lấy danh sách bookmark của người dùng
-bookmarkSchema.statics.findByCustomer = function(customerId, limit = 10, skip = 0) {
+bookmarkSchema.statics.findByCustomer = function(userId, limit = 10, skip = 0) {
   return this.find({
-    customer_id: customerId
+    user_id: userId
   })
     .sort({ updatedAt: -1 })
     .skip(skip)
@@ -94,13 +94,13 @@ bookmarkSchema.statics.findByCustomer = function(customerId, limit = 10, skip = 
 };
 
 // Phương thức tĩnh để cập nhật hoặc tạo mới bookmark
-bookmarkSchema.statics.upsertBookmark = async function(customerId, storyId, chapterId, note = '') {
+bookmarkSchema.statics.upsertBookmark = async function(userId, storyId, chapterId, note = '') {
   return this.findOneAndUpdate(
-    { customer_id: customerId, story_id: storyId },
+    { user_id: userId, story_id: storyId },
     {
       chapter_id: chapterId,
       note: note,
-      $setOnInsert: { customer_id: customerId, story_id: storyId }
+      $setOnInsert: { user_id: userId, story_id: storyId }
     },
     {
       new: true,

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Customer = require('../../models/Customer');
+const User = require('../../models/user');
 const Transaction = require('../../models/Transaction');
 
 /**
@@ -63,7 +63,7 @@ router.get('/search', async (req, res) => {
     }
 
     // Tìm kiếm người dùng theo điều kiện
-    const users = await Customer.find(searchQuery)
+    const users = await User.find(searchQuery)
       .select('_id name email avatar coin coin_total coin_spent')
       .limit(10);
 
@@ -99,10 +99,10 @@ router.get('/:id/coins', async (req, res) => {
     const { id } = req.params;
 
     // Tìm người dùng
-    const customer = await Customer.findById(id)
+    const user = await User.findById(id)
       .select('_id name email avatar coin coin_total coin_spent coin_stats');
 
-    if (!customer) {
+    if (!user) {
       return res.status(404).json({
         success: false,
         message: 'User not found'
@@ -110,14 +110,14 @@ router.get('/:id/coins', async (req, res) => {
     }
 
     // Cập nhật thống kê xu nếu cần
-    if (!customer.coin_stats || !customer.coin_stats.last_updated ||
-        new Date() - new Date(customer.coin_stats.last_updated) > 24 * 60 * 60 * 1000) {
-      await customer.updateCoinStats();
+    if (!user.coin_stats || !user.coin_stats.last_updated ||
+        new Date() - new Date(user.coin_stats.last_updated) > 24 * 60 * 60 * 1000) {
+      await user.updateCoinStats();
     }
 
     return res.json({
       success: true,
-      user: customer
+      user: user
     });
   } catch (error) {
     console.error('Error fetching user coin info:', error);

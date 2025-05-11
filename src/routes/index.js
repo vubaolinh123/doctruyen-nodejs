@@ -11,7 +11,7 @@ router.use('/slides', require('./slides'));
 router.use('/users', require('./public/users')); // Route mới để lấy thông tin người dùng theo slug
 
 // Các route cần xác thực
-router.use('/customers', auth, require('./customers'));
+router.use('/users', auth, require('./users'));
 router.use('/purchased-stories', auth, require('./purchasedStories'));
 router.use('/stories-reading', auth, require('./storiesReading'));
 router.use('/transactions', auth, require('./transactions'));
