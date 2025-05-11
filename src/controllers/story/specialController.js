@@ -1,4 +1,10 @@
 const specialStoryService = require('../../services/story/specialStoryService');
+const storyService = require('../../services/story/storyService');
+const Category = require('../../models/Category');
+const Author = require('../../models/Author');
+const Story = require('../../models/Story');
+const Chapter = require('../../models/Chapter');
+const mongoose = require('mongoose');
 
 /**
  * Lấy danh sách truyện hot
@@ -9,9 +15,16 @@ exports.getHotStories = async (req, res) => {
   try {
     const { limit = 10 } = req.query;
     const stories = await specialStoryService.getHotStories(parseInt(limit));
-    res.json(stories);
+    res.json({
+      success: true,
+      stories
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[API] Error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
   }
 };
 
@@ -24,9 +37,16 @@ exports.getTopRatedStories = async (req, res) => {
   try {
     const { limit = 10 } = req.query;
     const stories = await specialStoryService.getTopRatedStories(parseInt(limit));
-    res.json(stories);
+    res.json({
+      success: true,
+      stories
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[API] Error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
   }
 };
 
@@ -39,9 +59,16 @@ exports.getRecentStories = async (req, res) => {
   try {
     const { limit = 10 } = req.query;
     const stories = await specialStoryService.getRecentStories(parseInt(limit));
-    res.json(stories);
+    res.json({
+      success: true,
+      stories
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[API] Error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
   }
 };
 
@@ -54,9 +81,16 @@ exports.getStoriesByCategory = async (req, res) => {
   try {
     const { limit = 10 } = req.query;
     const stories = await specialStoryService.getStoriesByCategory(req.params.categoryId, parseInt(limit));
-    res.json(stories);
+    res.json({
+      success: true,
+      stories
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[API] Error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
   }
 };
 
@@ -69,9 +103,16 @@ exports.getStoriesByAuthor = async (req, res) => {
   try {
     const { limit = 10 } = req.query;
     const stories = await specialStoryService.getStoriesByAuthor(req.params.authorId, parseInt(limit));
-    res.json(stories);
+    res.json({
+      success: true,
+      stories
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[API] Error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
   }
 };
 
@@ -85,13 +126,23 @@ exports.searchStories = async (req, res) => {
     const { keyword, limit = 10 } = req.query;
 
     if (!keyword) {
-      return res.status(400).json({ error: 'Keyword is required' });
+      return res.status(400).json({
+        success: false,
+        error: 'Keyword is required'
+      });
     }
 
     const stories = await specialStoryService.searchStories(keyword, parseInt(limit));
-    res.json(stories);
+    res.json({
+      success: true,
+      stories
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[API] Error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
   }
 };
 
@@ -104,7 +155,10 @@ exports.getNewStories = async (req, res) => {
   try {
     const { limit = 10 } = req.query;
     const result = await specialStoryService.getNewStories(parseInt(limit));
-    res.json(result);
+    res.json({
+      success: true,
+      stories: result
+    });
   } catch (err) {
     console.error('Error getting new stories:', err);
     res.status(500).json({
@@ -130,10 +184,171 @@ exports.getSuggestedStories = async (req, res) => {
       sortOrder: req.query.sortOrder || 'desc',
       categoryFilter: req.query.categoryFilter
     };
-    
+
     const result = await specialStoryService.getSuggestedStories(options);
-    res.json(result);
+    res.json({
+      success: true,
+      stories: result
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[API] Error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
   }
-}; 
+};
+
+/**
+ * Lấy danh sách thể loại cho dropdown
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+exports.getCategoriesList = async (req, res) => {
+  try {
+    console.log('[API] Lấy danh sách thể loại');
+
+    const categories = await Category.find({ status: true })
+      .select('_id name slug')
+      .sort({ name: 1 });
+
+    return res.json({
+      success: true,
+      categories
+    });
+  } catch (error) {
+    console.error('[API] Error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi server',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Lấy danh sách tác giả cho dropdown
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+exports.getAuthorsList = async (req, res) => {
+  try {
+    console.log('[API] Lấy danh sách tác giả');
+
+    const authors = await Author.find({ status: true })
+      .select('_id name slug')
+      .sort({ name: 1 });
+
+    return res.json({
+      success: true,
+      authors
+    });
+  } catch (error) {
+    console.error('[API] Error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi server',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Bật/tắt trạng thái truyện
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+exports.toggleStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`[API] Toggle trạng thái truyện - id: ${id}`);
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID truyện không hợp lệ'
+      });
+    }
+
+    // Kiểm tra truyện tồn tại
+    const story = await Story.findById(id);
+    if (!story) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy truyện'
+      });
+    }
+
+    // Đảo ngược trạng thái
+    story.status = !story.status;
+    await story.save();
+
+    return res.json({
+      success: true,
+      message: `Truyện đã được ${story.status ? 'kích hoạt' : 'vô hiệu hóa'}`,
+      status: story.status
+    });
+  } catch (error) {
+    console.error('[API] Error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi server',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Bật/tắt cờ (is_hot, is_new, is_full, v.v.)
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+exports.toggleFlag = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { flag } = req.body;
+    console.log(`[API] Toggle cờ truyện - id: ${id}, flag: ${flag}`);
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID truyện không hợp lệ'
+      });
+    }
+
+    // Kiểm tra flag hợp lệ
+    const validFlags = ['is_hot', 'is_new', 'is_full', 'show_ads', 'hot_day', 'hot_month', 'hot_all_time'];
+    if (!flag || !validFlags.includes(flag)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Flag không hợp lệ'
+      });
+    }
+
+    // Kiểm tra truyện tồn tại
+    const story = await Story.findById(id);
+    if (!story) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy truyện'
+      });
+    }
+
+    // Đảo ngược giá trị flag
+    story[flag] = !story[flag];
+    await story.save();
+
+    return res.json({
+      success: true,
+      message: `Đã ${story[flag] ? 'bật' : 'tắt'} ${flag} cho truyện`,
+      [flag]: story[flag]
+    });
+  } catch (error) {
+    console.error('[API] Error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi server',
+      error: error.message
+    });
+  }
+};

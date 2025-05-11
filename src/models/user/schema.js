@@ -14,8 +14,7 @@ const userSchema = new Schema({
   },
   slug: {
     type: String,
-    unique: true,
-    index: true
+    unique: true
   },
   email: {
     type: String,
@@ -186,6 +185,5 @@ const userSchema = new Schema({
 // Tạo các index để tối ưu truy vấn
 userSchema.index({ role: 1, status: 1 });
 userSchema.index({ 'attendance_summary.last_attendance': 1 });
-userSchema.index({ slug: 1 }, { unique: true });
 
 module.exports = userSchema; 

@@ -9,9 +9,9 @@ const commentService = require('../../services/comment/commentService');
 exports.toggleLike = async (req, res) => {
   try {
     const { id } = req.params;
-    const customer_id = req.user._id;
+    const user_id = req.user._id;
     
-    const result = await commentService.toggleLike(id, customer_id);
+    const result = await commentService.toggleLike(id, user_id);
     
     res.json({
       success: true,

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const commentController = require('../controllers/comment');
-const { checkAuth } = require('../middleware/auth');
+const { authenticateToken } = require('../middleware/auth');
 const { body } = require('express-validator');
 
 // Validation middleware
@@ -35,9 +35,9 @@ const commentValidation = [
 router.get('/', commentController.getComments);
 
 // Protected routes
-router.post('/', checkAuth, commentValidation, commentController.createComment);
-router.put('/:id', checkAuth, commentController.updateComment);
-router.delete('/:id', checkAuth, commentController.deleteComment);
-router.post('/:id/like', checkAuth, commentController.toggleLike);
+router.post('/', authenticateToken, commentValidation, commentController.createComment);
+router.put('/:id', authenticateToken, commentController.updateComment);
+router.delete('/:id', authenticateToken, commentController.deleteComment);
+router.post('/:id/like', authenticateToken, commentController.toggleLike);
 
 module.exports = router; 

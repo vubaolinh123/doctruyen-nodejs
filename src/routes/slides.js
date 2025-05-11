@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const controller = require('../controllers/slideController');
+const controller = require('../controllers/slide');
 const auth = require('../middleware/auth');
 
 // Các route công khai, không cần xác thực
 router.get('/', controller.getAll);
+router.get('/active', controller.getActiveSlides);
 router.get('/:id', controller.getById);
 
 // Các route cần xác thực (thường là admin)

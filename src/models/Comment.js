@@ -10,8 +10,7 @@ const commentSchema = new Schema({
   user_id: {
     type: Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
-    index: true
+    required: true
   },
 
   // ID của truyện/chương được bình luận

@@ -1,4 +1,4 @@
-const Story = require('../../models/Story');
+const Story = require('../../models/story');
 const Chapter = require('../../models/Chapter');
 
 /**
@@ -226,4 +226,4 @@ module.exports = {
   searchStories,
   getNewStories,
   getSuggestedStories
-}; 
+};

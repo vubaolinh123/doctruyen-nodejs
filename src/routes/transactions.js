@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const controller = require('../controllers/transactionController');
+const controller = require('../controllers/transaction');
 const { authenticateToken } = require('../middleware/auth');
 
 // Middleware để log request
@@ -20,11 +20,16 @@ router.use(logRequest);
 // Áp dụng middleware xác thực cho tất cả các route
 router.use(authenticateToken);
 
-// Các route giao dịch
+// Các route CRUD cơ bản
 router.get('/', controller.getAll);
 router.get('/:id', controller.getById);
 router.post('/', controller.create);
 router.put('/:id', controller.update);
 router.delete('/:id', controller.remove);
+
+// Các route đặc biệt
+router.get('/stats/user/:userId', controller.getStatsByUser);
+router.get('/stats/chart', controller.getChartData);
+router.get('/stats/admin', controller.getAdminStats);
 
 module.exports = router;

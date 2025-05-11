@@ -10,9 +10,16 @@ module.exports = {
   remove: baseController.remove,
 
   // Controllers đặc biệt
+  getByStoryId: specialController.getByStoryId,
   getChaptersByStory: specialController.getChaptersByStory,
   getLatestChapter: specialController.getLatestChapter,
   getChapterBySlug: specialController.getChapterBySlug,
   getChapterByStoryAndChapterSlug: specialController.getChapterByStoryAndChapterSlug,
-  getChaptersByStorySlug: specialController.getChaptersByStorySlug
+  getChaptersByStorySlug: specialController.getChaptersByStorySlug,
+  
+  // Admin controllers
+  getChapters: specialController.getChapters,
+  toggleStatus: specialController.toggleStatus,
+  toggleFlag: specialController.toggleFlag,
+  getStoriesForDropdown: specialController.getStoriesForDropdown
 }; 

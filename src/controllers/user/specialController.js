@@ -92,4 +92,82 @@ exports.getSlugById = async (req, res) => {
       slug: ''
     });
   }
+};
+
+/**
+ * Tìm kiếm người dùng
+ * @route GET /api/admin/users/search
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ * @access Private (Admin)
+ */
+exports.searchUsers = async (req, res) => {
+  try {
+    console.log('API received search request:', {
+      query: req.query,
+      headers: req.headers,
+      auth: req.headers.authorization ? 'Bearer token received' : 'No auth token'
+    });
+
+    const { term } = req.query;
+
+    const users = await userService.searchUsers(term);
+    
+    console.log(`Found ${users.length} users matching "${term}"`);
+    if(users.length > 0) {
+      console.log('First user:', {
+        id: users[0]._id,
+        name: users[0].name,
+        email: users[0].email
+      });
+    }
+
+    return res.json({
+      success: true,
+      users
+    });
+  } catch (error) {
+    console.error('Error searching users:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal Server Error'
+    });
+  }
+};
+
+/**
+ * Lấy thông tin xu của người dùng
+ * @route GET /api/admin/users/:id/coins
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ * @access Private (Admin)
+ */
+exports.getUserCoins = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    try {
+      const user = await userService.getUserCoinInfo(id);
+      
+      return res.json({
+        success: true,
+        user: user
+      });
+    } catch (error) {
+      if (error.message === 'User not found') {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+      throw error;
+    }
+    
+  } catch (error) {
+    console.error('Error fetching user coin info:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal Server Error'
+    });
+  }
 }; 

@@ -49,8 +49,8 @@ exports.createComment = async (req, res) => {
       });
     }
 
-    const customer_id = req.user._id;
-    const comment = await commentService.createComment(customer_id, req.body);
+    const user_id = req.user._id;
+    const comment = await commentService.createComment(user_id, req.body);
     
     res.status(201).json({
       success: true,
@@ -76,9 +76,9 @@ exports.updateComment = async (req, res) => {
   try {
     const { id } = req.params;
     const { content } = req.body;
-    const customer_id = req.user._id;
+    const user_id = req.user._id;
     
-    const comment = await commentService.updateComment(id, customer_id, content);
+    const comment = await commentService.updateComment(id, user_id, content);
     
     res.json({
       success: true,
@@ -111,9 +111,9 @@ exports.updateComment = async (req, res) => {
 exports.deleteComment = async (req, res) => {
   try {
     const { id } = req.params;
-    const customer_id = req.user._id;
+    const user_id = req.user._id;
     
-    await commentService.deleteComment(id, customer_id);
+    await commentService.deleteComment(id, user_id);
     
     res.json({
       success: true,

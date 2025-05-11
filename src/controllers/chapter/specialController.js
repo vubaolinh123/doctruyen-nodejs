@@ -38,21 +38,11 @@ exports.getLatestChapter = async (req, res) => {
  */
 exports.getChapterBySlug = async (req, res) => {
   try {
-    const result = await chapterService.getChapterBySlug(req.params.slug);
+    const slug = req.params.slug;
+    const result = await chapterService.getChapterBySlug(slug);
     res.json(result);
   } catch (err) {
-    console.error('[API] Error:', err);
-    if (err.message === 'Không tìm thấy chapter' || err.message === 'Không tìm thấy truyện của chapter này') {
-      return res.status(404).json({
-        success: false,
-        message: err.message
-      });
-    }
-    res.status(500).json({
-      success: false,
-      message: 'Lỗi server',
-      error: err.message
-    });
+    res.status(404).json({ error: err.message });
   }
 };
 
@@ -63,22 +53,12 @@ exports.getChapterBySlug = async (req, res) => {
  */
 exports.getChapterByStoryAndChapterSlug = async (req, res) => {
   try {
-    const { storySlug, chapterSlug } = req.params;
+    const storySlug = req.params.storySlug;
+    const chapterSlug = req.params.chapterSlug;
     const result = await chapterService.getChapterByStoryAndChapterSlug(storySlug, chapterSlug);
     res.json(result);
   } catch (err) {
-    console.error('[API] Error:', err);
-    if (err.message === 'Không tìm thấy truyện' || err.message === 'Không tìm thấy chapter') {
-      return res.status(404).json({
-        success: false,
-        message: err.message
-      });
-    }
-    res.status(500).json({
-      success: false,
-      message: 'Lỗi server',
-      error: err.message
-    });
+    res.status(404).json({ error: err.message });
   }
 };
 
@@ -89,20 +69,185 @@ exports.getChapterByStoryAndChapterSlug = async (req, res) => {
  */
 exports.getChaptersByStorySlug = async (req, res) => {
   try {
-    const result = await chapterService.getChaptersByStorySlug(req.params.storySlug);
-    res.json(result);
+    const storySlug = req.params.storySlug;
+    const chapters = await chapterService.getChaptersByStorySlug(storySlug);
+    res.json({
+      success: true,
+      chapters
+    });
   } catch (err) {
-    console.error('[API] Error:', err);
-    if (err.message === 'Không tìm thấy truyện') {
-      return res.status(404).json({
-        success: false,
-        message: err.message
+    res.status(404).json({ error: err.message });
+  }
+};
+
+exports.getByStoryId = async (req, res) => {
+  try {
+    const storyId = req.params.storyId;
+    const item = await chapterService.findByStoryId(storyId);
+    if (!item) return res.status(404).json({ error: 'No chapters found for this story' });
+    res.json(item);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/**
+ * Lấy danh sách chapter có phân trang và lọc (Admin)
+ */
+exports.getChapters = async (req, res) => {
+  try {
+    const {
+      page,
+      limit,
+      sort,
+      search,
+      status,
+      is_new,
+      story_id,
+      audio_show,
+      show_ads,
+      count_by_story
+    } = req.query;
+
+    console.log(`[API] Lấy danh sách chapter - page: ${page}, limit: ${limit}, search: ${search}, count_by_story: ${count_by_story}`);
+
+    const result = await chapterService.getChapters({
+      page,
+      limit,
+      sort,
+      search,
+      status,
+      is_new,
+      story_id,
+      audio_show,
+      show_ads,
+      count_by_story
+    });
+
+    // Nếu yêu cầu đếm số lượng chapter theo truyện
+    if (count_by_story === 'true') {
+      return res.json({
+        success: true,
+        chapterCounts: result.chapterCounts,
+        latestChapters: result.latestChapters
       });
     }
-    res.status(500).json({
+
+    return res.json({
+      success: true,
+      chapters: result.chapters,
+      pagination: result.pagination
+    });
+  } catch (error) {
+    console.error('[API] Error:', error);
+    return res.status(error.status || 500).json({
+      success: false,
+      message: error.message || 'Lỗi server',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Bật/tắt trạng thái chapter
+ */
+exports.toggleStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`[API] Toggle trạng thái chapter - id: ${id}`);
+
+    const result = await chapterService.toggleStatus(id);
+
+    return res.json({
+      success: true,
+      message: `Chapter đã được ${result.status ? 'kích hoạt' : 'vô hiệu hóa'}`,
+      status: result.status
+    });
+  } catch (error) {
+    console.error('[API] Error:', error);
+
+    if (error.message === 'ID chapter không hợp lệ') {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    if (error.message === 'Không tìm thấy chapter') {
+      return res.status(404).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    return res.status(500).json({
       success: false,
       message: 'Lỗi server',
-      error: err.message
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Bật/tắt cờ (is_new, audio_show, show_ads)
+ */
+exports.toggleFlag = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { flag } = req.body;
+    console.log(`[API] Toggle cờ chapter - id: ${id}, flag: ${flag}`);
+
+    const result = await chapterService.toggleFlag(id, flag);
+
+    return res.json({
+      success: true,
+      message: `Đã ${result.value ? 'bật' : 'tắt'} ${flag} cho chapter`,
+      [flag]: result.value
+    });
+  } catch (error) {
+    console.error('[API] Error:', error);
+
+    if (error.message === 'ID chapter không hợp lệ' || error.message === 'Flag không hợp lệ') {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    if (error.message === 'Không tìm thấy chapter') {
+      return res.status(404).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi server',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Lấy danh sách truyện cho dropdown
+ */
+exports.getStoriesForDropdown = async (req, res) => {
+  try {
+    console.log('[API] Lấy danh sách truyện cho dropdown');
+
+    const stories = await chapterService.getStoriesForDropdown();
+
+    return res.json({
+      success: true,
+      stories
+    });
+  } catch (error) {
+    console.error('[API] Error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi server',
+      error: error.message
     });
   }
 }; 

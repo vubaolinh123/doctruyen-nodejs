@@ -1,4 +1,5 @@
 const User = require('../../models/user');
+const Transaction = require('../../models/transaction');
 
 /**
  * Service xử lý các tác vụ liên quan đến người dùng
@@ -181,6 +182,75 @@ class UserService {
       attendance_summary: user.attendance_summary,
       created_at: user.createdAt
     };
+  }
+
+  /**
+   * Tìm kiếm người dùng
+   * @param {string} term - Từ khóa tìm kiếm (email hoặc tên)
+   * @returns {Array} Danh sách người dùng tìm thấy
+   */
+  async searchUsers(term) {
+    // Nếu không có term, trả về mảng rỗng
+    if (!term) {
+      return [];
+    }
+
+    // Kiểm tra xem term có phải là email hay không
+    const isEmail = term.includes('@');
+
+    // Nếu term không phải là email và ngắn hơn 3 ký tự, không tìm kiếm
+    if (!isEmail && term.length < 3) {
+      return [];
+    }
+
+    // Query điều kiện tìm kiếm
+    let searchQuery;
+    
+    if (isEmail) {
+      // Nếu là email, tìm chính xác hoặc tương tự
+      searchQuery = {
+        $or: [
+          { email: term }, // Tìm chính xác email
+          { email: { $regex: term, $options: 'i' } } // Tìm email có chứa term
+        ]
+      };
+    } else {
+      // Nếu không phải email, tìm theo tên hoặc email chứa term
+      searchQuery = {
+        $or: [
+          { email: { $regex: term, $options: 'i' } },
+          { name: { $regex: term, $options: 'i' } }
+        ]
+      };
+    }
+
+    // Tìm kiếm người dùng theo điều kiện
+    return User.find(searchQuery)
+      .select('_id name email avatar coin coin_total coin_spent')
+      .limit(10);
+  }
+
+  /**
+   * Lấy thông tin xu của người dùng
+   * @param {string} userId - ID người dùng
+   * @returns {Object} Thông tin xu của người dùng
+   */
+  async getUserCoinInfo(userId) {
+    // Tìm người dùng
+    const user = await User.findById(userId)
+      .select('_id name email avatar coin coin_total coin_spent coin_stats');
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Cập nhật thống kê xu nếu cần
+    if (!user.coin_stats || !user.coin_stats.last_updated ||
+        new Date() - new Date(user.coin_stats.last_updated) > 24 * 60 * 60 * 1000) {
+      await user.updateCoinStats();
+    }
+
+    return user;
   }
 }
 

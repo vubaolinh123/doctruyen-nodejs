@@ -1,6 +1,6 @@
-const Attendance = require('../../models/Attendance');
+const Attendance = require('../../models/attendance');
 const User = require('../../models/user');
-const Transaction = require('../../models/Transaction');
+const Transaction = require('../../models/transaction');
 const mongoose = require('mongoose');
 
 /**
@@ -105,7 +105,7 @@ class AttendanceService {
     let consecutiveDays = user.attendance_summary.current_streak || 0;
     if (user.attendance_summary.last_attendance) {
       const lastDate = new Date(user.attendance_summary.last_attendance);
-      
+
       const yesterday = this._getYesterdayDate(timezone, timezoneOffset);
 
       if (lastDate.getTime() !== yesterday.getTime()) {
@@ -127,7 +127,7 @@ class AttendanceService {
    * Thực hiện điểm danh hàng ngày
    * @param {string} userId - ID của người dùng
    * @param {Object} options - Các tùy chọn
-   * @param {string} options.date - Ngày điểm danh 
+   * @param {string} options.date - Ngày điểm danh
    * @param {string} options.timezone - Múi giờ của người dùng
    * @param {number} options.timezoneOffset - Chênh lệch múi giờ (phút)
    * @returns {Object} Kết quả điểm danh và thông tin thưởng
@@ -218,7 +218,7 @@ class AttendanceService {
 
     // Tính toán số ngày liên tiếp
     let streakCount = 0;
-    
+
     // Cập nhật thông tin điểm danh
     const attendanceResult = await user.updateAttendance(vietnamToday);
     if (!attendanceResult) {
@@ -291,19 +291,19 @@ class AttendanceService {
     try {
       // Lấy tất cả người dùng
       const users = await User.find({ status: 'active' });
-      
+
       // Lấy ngày hiện tại theo múi giờ Việt Nam
       const vietnamToday = new Date();
       vietnamToday.setHours(0, 0, 0, 0);
-      
+
       // Lấy ngày hôm qua
       const yesterday = new Date(vietnamToday);
       yesterday.setDate(yesterday.getDate() - 1);
-      
+
       console.log(`Cập nhật điểm danh bỏ lỡ cho ngày ${yesterday.toISOString().split('T')[0]}`);
-      
+
       let updatedCount = 0;
-      
+
       // Kiểm tra từng người dùng
       for (const user of users) {
         // Kiểm tra xem người dùng đã điểm danh hôm qua chưa
@@ -313,23 +313,23 @@ class AttendanceService {
           month: yesterday.getMonth(),
           day: yesterday.getDate()
         });
-        
+
         // Nếu chưa điểm danh, tạo bản ghi missed
         if (!yesterdayAttendance) {
           await Attendance.createMissedAttendance(user._id, yesterday);
-          
+
           // Reset streak nếu người dùng có streak > 0
           if (user.attendance_summary && user.attendance_summary.current_streak > 0) {
             user.attendance_summary.current_streak = 0;
             await user.save();
           }
-          
+
           updatedCount++;
         }
       }
-      
+
       console.log(`Đã cập nhật ${updatedCount} người dùng bỏ lỡ điểm danh`);
-      
+
       return {
         status: 'success',
         message: `Đã cập nhật ${updatedCount} người dùng bỏ lỡ điểm danh`,
@@ -494,9 +494,9 @@ class AttendanceService {
 
     yesterday.setDate(yesterday.getDate() - 1);
     yesterday.setHours(0, 0, 0, 0);
-    
+
     return yesterday;
   }
 }
 
-module.exports = new AttendanceService(); 
+module.exports = new AttendanceService();

@@ -35,8 +35,7 @@ const chapterSchema = new Schema({
   },
 
   slug: {
-    type: String,
-    index: true
+    type: String
   },
 
   // Nội dung chapter

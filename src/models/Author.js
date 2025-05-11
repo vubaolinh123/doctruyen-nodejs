@@ -14,8 +14,7 @@ const authorSchema = new Schema({
   },
   
   slug: {
-    type: String,
-    index: true
+    type: String
   },
   
   status: {

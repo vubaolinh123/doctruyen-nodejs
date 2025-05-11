@@ -1,5 +1,5 @@
 const Comment = require('../../models/Comment');
-const Customer = require('../../models/Customer');
+const User = require('../../models/user');
 
 /**
  * Service xử lý các tác vụ liên quan đến bình luận
@@ -32,9 +32,9 @@ class CommentService {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit))
-        .populate('customer_id', 'name avatar')
-        .populate('replies', 'content customer_id createdAt')
-        .populate('replies.customer_id', 'name avatar');
+        .populate('user_id', 'name avatar')
+        .populate('replies', 'content user_id createdAt')
+        .populate('replies.user_id', 'name avatar');
 
       // Đếm tổng số bình luận
       const total = await Comment.countDocuments(query);
@@ -55,17 +55,17 @@ class CommentService {
 
   /**
    * Tạo bình luận mới
-   * @param {string} customer_id - ID người dùng
+   * @param {string} user_id - ID người dùng
    * @param {Object} commentData - Dữ liệu bình luận
    * @returns {Object} Bình luận đã tạo
    */
-  async createComment(customer_id, commentData) {
+  async createComment(user_id, commentData) {
     try {
       const { story_id, chapter_id, parent_id, content, position } = commentData;
 
       // Tạo bình luận mới
       const comment = new Comment({
-        customer_id,
+        user_id,
         story_id,
         chapter_id,
         parent_id,
@@ -79,7 +79,7 @@ class CommentService {
       await comment.save();
 
       // Cập nhật số lượng bình luận của người dùng
-      await Customer.findByIdAndUpdate(customer_id, {
+      await User.findByIdAndUpdate(user_id, {
         $inc: { 'metadata.comment_count': 1 }
       });
 
@@ -91,7 +91,7 @@ class CommentService {
       }
 
       // Populate thông tin người dùng
-      await comment.populate('customer_id', 'name avatar');
+      await comment.populate('user_id', 'name avatar');
 
       return comment;
     } catch (error) {
@@ -102,16 +102,16 @@ class CommentService {
   /**
    * Cập nhật bình luận
    * @param {string} id - ID bình luận
-   * @param {string} customer_id - ID người dùng
+   * @param {string} user_id - ID người dùng
    * @param {string} content - Nội dung mới
    * @returns {Object} Bình luận đã cập nhật
    */
-  async updateComment(id, customer_id, content) {
+  async updateComment(id, user_id, content) {
     try {
       // Tìm bình luận
       const comment = await Comment.findOne({
         _id: id,
-        customer_id,
+        user_id,
         status: 'active'
       });
 
@@ -132,15 +132,15 @@ class CommentService {
   /**
    * Xóa bình luận (soft delete)
    * @param {string} id - ID bình luận
-   * @param {string} customer_id - ID người dùng
+   * @param {string} user_id - ID người dùng
    * @returns {boolean} Kết quả xóa
    */
-  async deleteComment(id, customer_id) {
+  async deleteComment(id, user_id) {
     try {
       // Tìm bình luận
       const comment = await Comment.findOne({
         _id: id,
-        customer_id,
+        user_id,
         status: 'active'
       });
 
@@ -153,7 +153,7 @@ class CommentService {
       await comment.save();
 
       // Cập nhật số lượng bình luận của người dùng
-      await Customer.findByIdAndUpdate(customer_id, {
+      await User.findByIdAndUpdate(user_id, {
         $inc: { 'metadata.comment_count': -1 }
       });
 
@@ -173,10 +173,10 @@ class CommentService {
   /**
    * Like/Unlike bình luận
    * @param {string} id - ID bình luận
-   * @param {string} customer_id - ID người dùng
+   * @param {string} user_id - ID người dùng
    * @returns {Object} Thông tin like
    */
-  async toggleLike(id, customer_id) {
+  async toggleLike(id, user_id) {
     try {
       // Tìm bình luận
       const comment = await Comment.findById(id);
@@ -185,20 +185,20 @@ class CommentService {
       }
 
       // Kiểm tra đã like chưa
-      const hasLiked = comment.liked_by.includes(customer_id);
+      const hasLiked = comment.liked_by.includes(user_id);
       let message = '';
 
       if (hasLiked) {
         // Unlike
-        await comment.removeLike(customer_id);
-        await Customer.findByIdAndUpdate(customer_id, {
+        await comment.removeLike(user_id);
+        await User.findByIdAndUpdate(user_id, {
           $inc: { 'metadata.liked_comments_count': -1 }
         });
         message = 'Bỏ thích bình luận thành công';
       } else {
         // Like
-        await comment.addLike(customer_id);
-        await Customer.findByIdAndUpdate(customer_id, {
+        await comment.addLike(user_id);
+        await User.findByIdAndUpdate(user_id, {
           $inc: { 'metadata.liked_comments_count': 1 }
         });
         message = 'Thích bình luận thành công';

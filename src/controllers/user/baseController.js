@@ -169,4 +169,96 @@ exports.remove = async (req, res) => {
       message: 'Lỗi máy chủ nội bộ' 
     });
   }
+};
+
+/**
+ * Lấy thông tin người dùng theo slug (API công khai)
+ * @route GET /api/public/users/slug/:slug
+ * @access Public (Optional Auth)
+ */
+exports.getBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    console.log(`[Public API] Lấy thông tin người dùng theo slug: ${slug}`);
+
+    const user = await userService.findBySlug(slug);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy người dùng'
+      });
+    }
+
+    // Xác định xem người dùng đang gọi API có đang xem profile của chính họ không
+    const isOwnProfile = req.user && req.user._id.toString() === user._id.toString();
+
+    // Chuẩn bị dữ liệu trả về, ẩn các thông tin nhạy cảm
+    const userData = {
+      _id: user._id,
+      name: user.name,
+      slug: user.slug,
+      avatar: user.avatar,
+      level: user.level,
+      exp: user.exp,
+      joinDate: user.createdAt,
+      bio: user.bio || '',
+      stats: user.stats || {}
+    };
+
+    // Nếu là profile của chính họ, trả về thêm thông tin
+    if (isOwnProfile) {
+      userData.email = user.email;
+      userData.coin = user.coin;
+      userData.phone = user.phone;
+      userData.settings = user.settings;
+    }
+
+    return res.json({
+      success: true,
+      data: userData,
+      isOwnProfile
+    });
+  } catch (error) {
+    console.error('[Public API] Lỗi khi lấy thông tin người dùng theo slug:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Internal Server Error'
+    });
+  }
+};
+
+/**
+ * Lấy slug của người dùng theo ID (API công khai)
+ * @route GET /api/public/users/slug-only/:id
+ * @access Public
+ */
+exports.getSlugById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`[Public API] Lấy slug của người dùng theo ID: ${id}`);
+
+    const user = await userService.findById(id, { select: 'slug' });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy người dùng'
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        _id: user._id,
+        slug: user.slug
+      }
+    });
+  } catch (error) {
+    console.error('[Public API] Lỗi khi lấy slug của người dùng theo ID:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Internal Server Error'
+    });
+  }
 }; 

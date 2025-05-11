@@ -11,12 +11,12 @@ const slugify = require('slugify');
 const getAllStories = async (filters) => {
   const { page = 1, limit = 10, ...otherFilters } = filters;
   const query = buildStoryQuery(otherFilters);
-  
+
   // Xác định trường sắp xếp và thứ tự
   const sortField = otherFilters.sort_by || 'updatedAt';
   const sortOrder = otherFilters.sort_order === 'asc' ? 1 : -1;
   const sortOptions = {};
-  
+
   // Nếu sắp xếp theo số lượng chapter, sử dụng trường chapter_count
   if (sortField === 'chapter_count') {
     sortOptions.chapter_count = sortOrder;
@@ -27,7 +27,7 @@ const getAllStories = async (filters) => {
   // Kiểm tra xem có lọc theo số lượng chapter không
   const hasChapterFilter = checkHasChapterFilter(otherFilters);
   const sortByChapterCount = otherFilters.sort_by === 'chapter_count';
-  
+
   // Kiểm tra xem có yêu cầu thêm thông tin chapter không
   const includeChapterCount = otherFilters.include_chapter_count === 'true' || hasChapterFilter || sortByChapterCount;
   const includeLatestChapter = otherFilters.include_latest_chapter === 'true';
@@ -566,4 +566,4 @@ module.exports = {
   updateStory,
   deleteStory,
   incrementStoryViews
-}; 
+};

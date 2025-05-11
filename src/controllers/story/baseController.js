@@ -1,4 +1,6 @@
 const storyService = require('../../services/story/storyService');
+const mongoose = require('mongoose');
+const slugify = require('slugify');
 
 /**
  * Lấy danh sách tất cả truyện
@@ -7,10 +9,54 @@ const storyService = require('../../services/story/storyService');
  */
 exports.getAll = async (req, res) => {
   try {
-    const result = await storyService.getAllStories(req.query);
-    res.json(result);
+    const {
+      page = 1,
+      limit = 10,
+      sort = '-createdAt',
+      search = '',
+      status,
+      is_hot,
+      is_new,
+      is_full,
+      category,
+      author,
+      hasChapters,
+      chapterCount,
+      chapterCountOp = 'eq'
+    } = req.query;
+
+    console.log(`[API] Lấy danh sách truyện - page: ${page}, limit: ${limit}, search: ${search}`);
+
+    // Xây dựng options
+    const options = {
+      page,
+      limit,
+      sort,
+      search,
+      status,
+      is_hot,
+      is_new,
+      is_full,
+      category,
+      author,
+      hasChapters,
+      chapterCount,
+      chapterCountOp
+    };
+
+    const result = await storyService.getAllStories(options);
+    res.json({
+      success: true,
+      stories: result.stories,
+      pagination: result.pagination
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[API] Error:', err);
+    res.status(500).json({ 
+      success: false,
+      message: 'Lỗi server',
+      error: err.message 
+    });
   }
 };
 
@@ -21,11 +67,36 @@ exports.getAll = async (req, res) => {
  */
 exports.getById = async (req, res) => {
   try {
-    const item = await storyService.getStoryById(req.params.id);
-    if (!item) return res.status(404).json({ error: 'Not found' });
-    res.json(item);
+    const { id } = req.params;
+    console.log(`[API] Lấy thông tin truyện - id: ${id}`);
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID truyện không hợp lệ'
+      });
+    }
+
+    const storyData = await storyService.getStoryById(id);
+    
+    if (!storyData) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Không tìm thấy truyện' 
+      });
+    }
+
+    return res.json({
+      success: true,
+      story: storyData
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[API] Error:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Lỗi server',
+      error: err.message 
+    });
   }
 };
 
@@ -36,11 +107,29 @@ exports.getById = async (req, res) => {
  */
 exports.getBySlug = async (req, res) => {
   try {
-    const item = await storyService.getStoryBySlug(req.params.slug);
-    if (!item) return res.status(404).json({ error: 'Not found' });
-    res.json(item);
+    const { slug } = req.params;
+    console.log(`[API] Lấy thông tin truyện theo slug - slug: ${slug}`);
+
+    const item = await storyService.getStoryBySlug(slug);
+    
+    if (!item) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Không tìm thấy truyện' 
+      });
+    }
+    
+    res.json({
+      success: true,
+      story: item
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[API] Error:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Lỗi server',
+      error: err.message 
+    });
   }
 };
 
@@ -51,10 +140,67 @@ exports.getBySlug = async (req, res) => {
  */
 exports.create = async (req, res) => {
   try {
-    const item = await storyService.createStory(req.body);
-    res.status(201).json(item);
+    const {
+      name,
+      slug,
+      image,
+      banner,
+      desc,
+      author_id,
+      categories,
+      is_full,
+      is_hot,
+      is_new,
+      show_ads,
+      hot_day,
+      hot_month,
+      hot_all_time,
+      status
+    } = req.body;
+
+    console.log(`[API] Tạo truyện mới - name: ${name}`);
+
+    // Validate input data
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tên truyện là bắt buộc'
+      });
+    }
+
+    // Generate slug if not provided
+    const storyData = {
+      ...req.body,
+      slug: slug || slugify(name, {
+        lower: true,
+        strict: true,
+        locale: 'vi'
+      })
+    };
+
+    const newStory = await storyService.createStory(storyData);
+    
+    return res.status(201).json({
+      success: true,
+      message: 'Tạo truyện thành công',
+      story: newStory
+    });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('[API] Error:', err);
+    
+    // Handle duplicate slug error
+    if (err.message.includes('Slug đã tồn tại')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Slug đã tồn tại, vui lòng chọn tên khác'
+      });
+    }
+    
+    res.status(400).json({
+      success: false,
+      message: 'Lỗi khi tạo truyện',
+      error: err.message
+    });
   }
 };
 
@@ -65,11 +211,57 @@ exports.create = async (req, res) => {
  */
 exports.update = async (req, res) => {
   try {
-    const item = await storyService.updateStory(req.params.id, req.body);
-    if (!item) return res.status(404).json({ error: 'Not found' });
-    res.json(item);
+    const { id } = req.params;
+    console.log(`[API] Cập nhật truyện - id: ${id}`);
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID truyện không hợp lệ'
+      });
+    }
+
+    // Tự động tạo slug nếu có name nhưng không có slug
+    let { slug, name } = req.body;
+    if (name && !slug) {
+      slug = slugify(name, {
+        lower: true,
+        strict: true,
+        locale: 'vi'
+      });
+      req.body.slug = slug;
+    }
+
+    const updatedStory = await storyService.updateStory(id, req.body);
+
+    if (!updatedStory) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy truyện'
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Cập nhật truyện thành công',
+      story: updatedStory
+    });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('[API] Error:', err);
+    
+    // Handle duplicate slug error
+    if (err.message.includes('Slug đã tồn tại')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Slug đã tồn tại, vui lòng chọn tên khác'
+      });
+    }
+    
+    res.status(400).json({
+      success: false,
+      message: 'Lỗi khi cập nhật truyện',
+      error: err.message
+    });
   }
 };
 
@@ -80,11 +272,45 @@ exports.update = async (req, res) => {
  */
 exports.remove = async (req, res) => {
   try {
-    const item = await storyService.deleteStory(req.params.id);
-    if (!item) return res.status(404).json({ error: 'Not found' });
-    res.json({ message: 'Deleted successfully' });
+    const { id } = req.params;
+    console.log(`[API] Xóa truyện - id: ${id}`);
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID truyện không hợp lệ'
+      });
+    }
+
+    // Xóa truyện
+    const result = await storyService.deleteStory(id);
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy truyện'
+      });
+    }
+
+    // Nếu xóa thất bại vì có chapter liên quan
+    if (result.error && result.error.includes('chapter')) {
+      return res.status(400).json({
+        success: false,
+        message: result.error
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Xóa truyện thành công'
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[API] Error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi server',
+      error: err.message
+    });
   }
 };
 
@@ -98,17 +324,24 @@ exports.incrementViews = async (req, res) => {
     const { slug } = req.params;
 
     if (!slug) {
-      return res.status(400).json({ success: false, message: 'Slug is required' });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Slug là bắt buộc' 
+      });
     }
 
     const result = await storyService.incrementStoryViews(slug);
     return res.status(200).json({
       success: true,
-      message: 'View count incremented successfully',
+      message: 'Tăng lượt xem thành công',
       views: result.views
     });
   } catch (err) {
-    console.error('Error incrementing views:', err);
-    return res.status(500).json({ success: false, message: 'Server error', error: err.message });
+    console.error('[API] Error:', err);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Lỗi server', 
+      error: err.message 
+    });
   }
 }; 
