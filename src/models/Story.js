@@ -112,6 +112,15 @@ const storySchema = new Schema({
     type: Boolean,
     default: true,
     index: true
+  },
+
+  // Thêm trường chapter_count để lưu trữ số lượng chapter
+  // Trường này sẽ được cập nhật khi thêm/xóa chapter
+  chapter_count: {
+    type: Number,
+    default: 0,
+    min: 0,
+    index: true
   }
 }, {
   timestamps: true,

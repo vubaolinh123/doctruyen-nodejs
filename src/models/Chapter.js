@@ -123,7 +123,7 @@ chapterSchema.virtual('story', {
 });
 
 // Middleware pre-save
-chapterSchema.pre('save', function(next) {
+chapterSchema.pre('save', async function(next) {
   // Tạo slug nếu chưa có
   if (!this.slug && this.name) {
     this.slug = slugify(`chuong-${this.chapter}-${this.name}`, {
@@ -133,6 +133,35 @@ chapterSchema.pre('save', function(next) {
     });
   }
 
+  // Nếu là chapter mới (không phải cập nhật), tăng chapter_count trong Story
+  if (this.isNew) {
+    try {
+      const Story = mongoose.model('Story');
+      await Story.findByIdAndUpdate(
+        this.story_id,
+        { $inc: { chapter_count: 1 } }
+      );
+      console.log(`Tăng chapter_count cho truyện ${this.story_id}`);
+    } catch (error) {
+      console.error('Lỗi khi cập nhật chapter_count:', error);
+    }
+  }
+
+  next();
+});
+
+// Middleware pre-remove
+chapterSchema.pre('remove', async function(next) {
+  try {
+    const Story = mongoose.model('Story');
+    await Story.findByIdAndUpdate(
+      this.story_id,
+      { $inc: { chapter_count: -1 } }
+    );
+    console.log(`Giảm chapter_count cho truyện ${this.story_id}`);
+  } catch (error) {
+    console.error('Lỗi khi cập nhật chapter_count:', error);
+  }
   next();
 });
 
