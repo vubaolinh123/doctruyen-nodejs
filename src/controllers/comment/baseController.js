@@ -10,18 +10,18 @@ const { validationResult } = require('express-validator');
 exports.getComments = async (req, res) => {
   try {
     const { story_id, chapter_id, parent_id, page, limit } = req.query;
-    
-    const result = await commentService.getComments({ 
-      story_id, 
-      chapter_id, 
-      parent_id, 
-      page, 
-      limit 
+
+    const result = await commentService.getComments({
+      story_id,
+      chapter_id,
+      parent_id,
+      page,
+      limit
     });
-    
+
     res.json({
       success: true,
-      data: result.comments,
+      comments: result.comments,
       pagination: result.pagination
     });
   } catch (error) {
@@ -51,7 +51,7 @@ exports.createComment = async (req, res) => {
 
     const user_id = req.user._id;
     const comment = await commentService.createComment(user_id, req.body);
-    
+
     res.status(201).json({
       success: true,
       message: 'Bình luận đã được tạo thành công',
@@ -77,9 +77,9 @@ exports.updateComment = async (req, res) => {
     const { id } = req.params;
     const { content } = req.body;
     const user_id = req.user._id;
-    
+
     const comment = await commentService.updateComment(id, user_id, content);
-    
+
     res.json({
       success: true,
       message: 'Bình luận đã được cập nhật thành công',
@@ -87,14 +87,14 @@ exports.updateComment = async (req, res) => {
     });
   } catch (error) {
     console.error('Lỗi khi cập nhật bình luận:', error);
-    
+
     if (error.message === 'Bình luận không tồn tại hoặc bạn không có quyền chỉnh sửa') {
       return res.status(404).json({
         success: false,
         message: error.message
       });
     }
-    
+
     res.status(500).json({
       success: false,
       message: 'Lỗi khi cập nhật bình luận'
@@ -112,26 +112,26 @@ exports.deleteComment = async (req, res) => {
   try {
     const { id } = req.params;
     const user_id = req.user._id;
-    
+
     await commentService.deleteComment(id, user_id);
-    
+
     res.json({
       success: true,
       message: 'Xóa bình luận thành công'
     });
   } catch (error) {
     console.error('Lỗi khi xóa bình luận:', error);
-    
+
     if (error.message === 'Bình luận không tồn tại hoặc bạn không có quyền xóa') {
       return res.status(404).json({
         success: false,
         message: error.message
       });
     }
-    
+
     res.status(500).json({
       success: false,
       message: 'Lỗi khi xóa bình luận'
     });
   }
-}; 
+};

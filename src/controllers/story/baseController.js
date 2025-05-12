@@ -19,13 +19,14 @@ exports.getAll = async (req, res) => {
       is_new,
       is_full,
       category,
+      categories,
       author,
       hasChapters,
       chapterCount,
       chapterCountOp = 'eq'
     } = req.query;
 
-    console.log(`[API] Lấy danh sách truyện - page: ${page}, limit: ${limit}, search: ${search}`);
+    console.log(`[API] Lấy danh sách truyện - page: ${page}, limit: ${limit}, search: ${search}, categories: ${categories}`);
 
     // Xây dựng options
     const options = {
@@ -38,6 +39,7 @@ exports.getAll = async (req, res) => {
       is_new,
       is_full,
       category,
+      categories,
       author,
       hasChapters,
       chapterCount,
@@ -47,15 +49,19 @@ exports.getAll = async (req, res) => {
     const result = await storyService.getAllStories(options);
     res.json({
       success: true,
-      stories: result.stories,
-      pagination: result.pagination
+      stories: result.items,
+      pagination: {
+        total: result.total,
+        totalPages: result.totalPages,
+        currentPage: result.currentPage
+      }
     });
   } catch (err) {
     console.error('[API] Error:', err);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: 'Lỗi server',
-      error: err.message 
+      error: err.message
     });
   }
 };
@@ -78,11 +84,11 @@ exports.getById = async (req, res) => {
     }
 
     const storyData = await storyService.getStoryById(id);
-    
+
     if (!storyData) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Không tìm thấy truyện' 
+        message: 'Không tìm thấy truyện'
       });
     }
 
@@ -92,10 +98,10 @@ exports.getById = async (req, res) => {
     });
   } catch (err) {
     console.error('[API] Error:', err);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: 'Lỗi server',
-      error: err.message 
+      error: err.message
     });
   }
 };
@@ -111,24 +117,24 @@ exports.getBySlug = async (req, res) => {
     console.log(`[API] Lấy thông tin truyện theo slug - slug: ${slug}`);
 
     const item = await storyService.getStoryBySlug(slug);
-    
+
     if (!item) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Không tìm thấy truyện' 
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy truyện'
       });
     }
-    
+
     res.json({
       success: true,
       story: item
     });
   } catch (err) {
     console.error('[API] Error:', err);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: 'Lỗi server',
-      error: err.message 
+      error: err.message
     });
   }
 };
@@ -179,7 +185,7 @@ exports.create = async (req, res) => {
     };
 
     const newStory = await storyService.createStory(storyData);
-    
+
     return res.status(201).json({
       success: true,
       message: 'Tạo truyện thành công',
@@ -187,7 +193,7 @@ exports.create = async (req, res) => {
     });
   } catch (err) {
     console.error('[API] Error:', err);
-    
+
     // Handle duplicate slug error
     if (err.message.includes('Slug đã tồn tại')) {
       return res.status(400).json({
@@ -195,7 +201,7 @@ exports.create = async (req, res) => {
         message: 'Slug đã tồn tại, vui lòng chọn tên khác'
       });
     }
-    
+
     res.status(400).json({
       success: false,
       message: 'Lỗi khi tạo truyện',
@@ -248,7 +254,7 @@ exports.update = async (req, res) => {
     });
   } catch (err) {
     console.error('[API] Error:', err);
-    
+
     // Handle duplicate slug error
     if (err.message.includes('Slug đã tồn tại')) {
       return res.status(400).json({
@@ -256,7 +262,7 @@ exports.update = async (req, res) => {
         message: 'Slug đã tồn tại, vui lòng chọn tên khác'
       });
     }
-    
+
     res.status(400).json({
       success: false,
       message: 'Lỗi khi cập nhật truyện',
@@ -324,9 +330,9 @@ exports.incrementViews = async (req, res) => {
     const { slug } = req.params;
 
     if (!slug) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Slug là bắt buộc' 
+      return res.status(400).json({
+        success: false,
+        message: 'Slug là bắt buộc'
       });
     }
 
@@ -338,10 +344,10 @@ exports.incrementViews = async (req, res) => {
     });
   } catch (err) {
     console.error('[API] Error:', err);
-    return res.status(500).json({ 
-      success: false, 
-      message: 'Lỗi server', 
-      error: err.message 
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi server',
+      error: err.message
     });
   }
-}; 
+};

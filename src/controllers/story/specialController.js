@@ -155,10 +155,9 @@ exports.getNewStories = async (req, res) => {
   try {
     const { limit = 10 } = req.query;
     const result = await specialStoryService.getNewStories(parseInt(limit));
-    res.json({
-      success: true,
-      stories: result
-    });
+
+    // Trả về kết quả trực tiếp từ service mà không bọc thêm một lớp nữa
+    res.json(result);
   } catch (err) {
     console.error('Error getting new stories:', err);
     res.status(500).json({
@@ -186,9 +185,14 @@ exports.getSuggestedStories = async (req, res) => {
     };
 
     const result = await specialStoryService.getSuggestedStories(options);
+
+    // Trả về kết quả trực tiếp từ service mà không bọc thêm một lớp nữa
     res.json({
       success: true,
-      stories: result
+      items: result.items,
+      total: result.total,
+      totalPages: result.totalPages,
+      currentPage: result.currentPage
     });
   } catch (err) {
     console.error('[API] Error:', err);

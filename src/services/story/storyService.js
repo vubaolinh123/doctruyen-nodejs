@@ -4,13 +4,237 @@ const mongoose = require('mongoose');
 const slugify = require('slugify');
 
 /**
+ * Xây dựng query cho truyện dựa trên các bộ lọc
+ * @param {Object} filters - Các tham số lọc
+ * @returns {Promise<Object>} - Query đã xây dựng
+ */
+const buildStoryQuery = async (filters) => {
+  let query = {};
+
+  // Filter by status if provided
+  if (filters.status !== undefined) {
+    query.status = filters.status === 'true';
+  }
+
+  // Filter by single category if provided
+  if (filters.category) {
+    console.log("buildStoryQuery - Processing single category:", filters.category);
+    query = await processCategoryFilter(query, filters.category);
+    console.log("buildStoryQuery - Query after processCategoryFilter:", JSON.stringify(query));
+  }
+
+  // Filter by multiple categories if provided
+  if (filters.categories) {
+    console.log("buildStoryQuery - Processing multiple categories:", filters.categories);
+    query = await processMultipleCategoriesFilter(query, filters.categories);
+    console.log("buildStoryQuery - Query after processMultipleCategoriesFilter:", JSON.stringify(query));
+  }
+
+  // Filter by author if provided
+  if (filters.author) {
+    query.author_id = filters.author;
+  }
+
+  // Filter by name if provided
+  if (filters.name) {
+    query.name = { $regex: filters.name, $options: 'i' };
+  }
+
+  // Filter by slug if provided
+  if (filters.slug) {
+    query.slug = filters.slug;
+  }
+
+  // Filter by flags if provided
+  processFlagsFilters(query, filters);
+
+  console.log("buildStoryQuery - Final query:", JSON.stringify(query));
+  return query;
+};
+
+/**
+ * Xử lý filter theo một category
+ * @param {Object} query - Query đang xây dựng
+ * @param {string} categoryValue - Giá trị category cần lọc
+ * @returns {Promise<Object>} - Query đã cập nhật
+ */
+const processCategoryFilter = async (query, categoryValue) => {
+  console.log("processCategoryFilter - categoryValue:", categoryValue);
+
+  if (mongoose.Types.ObjectId.isValid(categoryValue)) {
+    // Sử dụng trực tiếp ID
+    query.categories = categoryValue;
+    console.log("processCategoryFilter - Using ID directly:", categoryValue);
+  } else {
+    try {
+      // Nếu là slug, cần tìm category trước
+      const Category = require('../../models/category');
+
+      // Tìm chính xác slug
+      const category = await Category.findOne({ slug: categoryValue });
+
+      if (category) {
+        // Sử dụng ID của category
+        query.categories = category._id;
+        console.log("processCategoryFilter - Found category by slug:", categoryValue, "ID:", category._id);
+      } else {
+        console.log("processCategoryFilter - Category not found for slug:", categoryValue);
+
+        // Thử tìm kiếm với regex
+        console.log("processCategoryFilter - Trying with regex");
+        const regexCategory = await Category.findOne({
+          slug: new RegExp('^' + categoryValue + '$', 'i')
+        });
+
+        if (regexCategory) {
+          // Sử dụng ID của category tìm thấy bằng regex
+          query.categories = regexCategory._id;
+          console.log("processCategoryFilter - Found category by regex:", categoryValue, "ID:", regexCategory._id);
+        } else {
+          console.log("processCategoryFilter - Category not found even with regex for slug:", categoryValue);
+
+          // Liệt kê tất cả các thể loại trong DB để debug
+          const allCategories = await Category.find({}).select('name slug');
+          console.log("processCategoryFilter - All categories in DB:",
+            allCategories.map(cat => ({
+              name: cat.name,
+              slug: cat.slug
+            }))
+          );
+        }
+      }
+    } catch (error) {
+      console.error("processCategoryFilter - Error:", error);
+    }
+  }
+
+  // Trả về query đã cập nhật
+  return query;
+};
+
+/**
+ * Xử lý filter theo nhiều categories
+ * @param {Object} query - Query đang xây dựng
+ * @param {string|Array} categoriesValue - Giá trị categories cần lọc
+ * @returns {Promise<Object>} - Query đã cập nhật
+ */
+const processMultipleCategoriesFilter = async (query, categoriesValue) => {
+  console.log("processMultipleCategoriesFilter - categoriesValue:", categoriesValue);
+
+  // Kiểm tra nếu categoriesValue là undefined hoặc null
+  if (!categoriesValue) {
+    console.log("processMultipleCategoriesFilter - categoriesValue is undefined or null");
+    return query;
+  }
+
+  // Handle both array and single value
+  const categoryValues = Array.isArray(categoriesValue) ? categoriesValue : [categoriesValue];
+
+  // Xử lý và làm sạch các giá trị
+  const cleanCategoryValues = categoryValues
+    .map(val => typeof val === 'string' ? val.trim() : val)
+    .filter(val => val); // Lọc bỏ các giá trị rỗng
+
+  console.log("processMultipleCategoriesFilter - cleanCategoryValues:", cleanCategoryValues);
+
+  if (cleanCategoryValues.length > 0) {
+    try {
+      // Luôn xử lý như slug, vì frontend luôn gửi slug
+      const Category = require('../../models/category');
+
+      // Tìm tất cả thể loại theo slug - CHÍNH XÁC slug, không phải regex
+      const categories = await Category.find({ slug: { $in: cleanCategoryValues } });
+
+      console.log("processMultipleCategoriesFilter - MongoDB query:", { slug: { $in: cleanCategoryValues } });
+      console.log("processMultipleCategoriesFilter - Found categories count:", categories.length);
+
+      if (categories.length > 0) {
+        console.log("processMultipleCategoriesFilter - Found categories:",
+          categories.map(cat => ({
+            _id: cat._id.toString(),
+            name: cat.name,
+            slug: cat.slug
+          }))
+        );
+
+        // Lấy ID của các thể loại
+        const categoryIds = categories.map(cat => cat._id);
+
+        // Sử dụng $in để lấy truyện thuộc về MỘT TRONG các thể loại đã chọn
+        query.categories = { $in: categoryIds };
+
+        console.log("processMultipleCategoriesFilter - Updated query:", JSON.stringify(query));
+      } else {
+        // Thử tìm kiếm với regex để xem có vấn đề gì với slug không
+        console.log("processMultipleCategoriesFilter - No categories found with exact match, trying with regex");
+
+        const regexPromises = cleanCategoryValues.map(slug =>
+          Category.findOne({ slug: new RegExp('^' + slug + '$', 'i') })
+        );
+
+        const regexResults = await Promise.all(regexPromises);
+        const foundCategories = regexResults.filter(Boolean);
+
+        console.log("processMultipleCategoriesFilter - Found categories with regex:",
+          foundCategories.map(cat => ({
+            _id: cat._id.toString(),
+            name: cat.name,
+            slug: cat.slug
+          }))
+        );
+
+        if (foundCategories.length > 0) {
+          // Lấy ID của các thể loại tìm thấy bằng regex
+          const categoryIds = foundCategories.map(cat => cat._id);
+
+          // Sử dụng $in để lấy truyện thuộc về MỘT TRONG các thể loại đã chọn
+          query.categories = { $in: categoryIds };
+
+          console.log("processMultipleCategoriesFilter - Updated query with regex results:", JSON.stringify(query));
+        } else {
+          console.log("processMultipleCategoriesFilter - No categories found even with regex for slugs:", cleanCategoryValues);
+
+          // Liệt kê tất cả các thể loại trong DB để debug
+          const allCategories = await Category.find({}).select('name slug');
+          console.log("processMultipleCategoriesFilter - All categories in DB:",
+            allCategories.map(cat => ({
+              name: cat.name,
+              slug: cat.slug
+            }))
+          );
+        }
+      }
+    } catch (error) {
+      console.error("processMultipleCategoriesFilter - Error:", error);
+    }
+  }
+
+  // Trả về query đã cập nhật
+  return query;
+};
+
+/**
  * Lấy danh sách truyện với các bộ lọc
  * @param {Object} filters - Các tham số lọc
  * @returns {Promise<Object>} - Kết quả trả về
  */
 const getAllStories = async (filters) => {
   const { page = 1, limit = 10, ...otherFilters } = filters;
-  const query = buildStoryQuery(otherFilters);
+
+  console.log("getAllStories - Input filters:", JSON.stringify(filters));
+  console.log("getAllStories - Categories from filters:", filters.categories);
+
+  // Xử lý trực tiếp categories nếu có
+  if (filters.categories) {
+    console.log("getAllStories - Processing categories directly:", filters.categories);
+
+    // Đảm bảo otherFilters.categories tồn tại
+    otherFilters.categories = filters.categories;
+  }
+
+  // Xây dựng query dựa trên các bộ lọc
+  const query = await buildStoryQuery(otherFilters);
+  console.log("getAllStories - Final query:", JSON.stringify(query));
 
   // Xác định trường sắp xếp và thứ tự
   const sortField = otherFilters.sort_by || 'updatedAt';
@@ -40,116 +264,7 @@ const getAllStories = async (filters) => {
   }
 };
 
-/**
- * Xây dựng query cho truyện dựa trên các bộ lọc
- * @param {Object} filters - Các tham số lọc
- * @returns {Object} - Query đã xây dựng
- */
-const buildStoryQuery = async (filters) => {
-  const query = {};
 
-  // Filter by status if provided
-  if (filters.status !== undefined) {
-    query.status = filters.status === 'true';
-  }
-
-  // Filter by single category if provided
-  if (filters.category) {
-    await processCategoryFilter(query, filters.category);
-  }
-
-  // Filter by multiple categories if provided
-  if (filters.categories) {
-    await processMultipleCategoriesFilter(query, filters.categories);
-  }
-
-  // Filter by author if provided
-  if (filters.author) {
-    query.author_id = filters.author;
-  }
-
-  // Filter by name if provided
-  if (filters.name) {
-    query.name = { $regex: filters.name, $options: 'i' };
-  }
-
-  // Filter by slug if provided
-  if (filters.slug) {
-    query.slug = filters.slug;
-  }
-
-  // Filter by flags if provided
-  processFlagsFilters(query, filters);
-
-  return query;
-};
-
-/**
- * Xử lý filter theo một category
- * @param {Object} query - Query đang xây dựng
- * @param {string} categoryValue - Giá trị category cần lọc
- */
-const processCategoryFilter = async (query, categoryValue) => {
-  if (mongoose.Types.ObjectId.isValid(categoryValue)) {
-    // Sử dụng trực tiếp ID
-    query.categories = categoryValue;
-  } else {
-    // Nếu là slug, cần tìm category trước
-    const Category = require('../../models/category');
-    const category = await Category.findOne({ slug: categoryValue });
-    if (category) {
-      // Sử dụng ID của category
-      query.categories = category._id;
-    }
-  }
-};
-
-/**
- * Xử lý filter theo nhiều categories
- * @param {Object} query - Query đang xây dựng
- * @param {string|Array} categoriesValue - Giá trị categories cần lọc
- */
-const processMultipleCategoriesFilter = async (query, categoriesValue) => {
-  // Handle both array and single value
-  const categoryValues = Array.isArray(categoriesValue) ? categoriesValue : [categoriesValue];
-
-  // Xử lý và làm sạch các giá trị
-  const cleanCategoryValues = categoryValues
-    .map(val => val.trim())
-    .filter(val => val); // Lọc bỏ các giá trị rỗng
-
-  if (cleanCategoryValues.length > 0) {
-    // Luôn xử lý như slug, vì frontend luôn gửi slug
-    const Category = require('../../models/category');
-
-    try {
-      // Tìm tất cả thể loại theo slug
-      const categories = await Category.find({ slug: { $in: cleanCategoryValues } });
-
-      if (categories.length > 0) {
-        // Sử dụng $all để đảm bảo truyện phải thuộc về TẤT CẢ các thể loại đã chọn
-        const categoryIds = categories.map(cat => cat._id);
-
-        // Thay đổi cách truy vấn để tìm truyện có TẤT CẢ các thể loại
-        if (categoryIds.length === 1) {
-          // Nếu chỉ có 1 thể loại, sử dụng truy vấn đơn giản
-          query.categories = categoryIds[0];
-        } else {
-          // Nếu có nhiều thể loại, sử dụng $and với $in cho từng thể loại
-          // Cách này đảm bảo truyện phải chứa TẤT CẢ các thể loại đã chọn
-          const andConditions = categoryIds.map(catId => ({
-            categories: catId
-          }));
-
-          // Thêm điều kiện $and vào query
-          query.$and = andConditions;
-        }
-      }
-    } catch (error) {
-      console.error("Lỗi khi tìm thể loại:", error);
-    }
-  }
-};
 
 /**
  * Xử lý các bộ lọc theo flags
@@ -565,5 +680,8 @@ module.exports = {
   createStory,
   updateStory,
   deleteStory,
-  incrementStoryViews
+  incrementStoryViews,
+  buildStoryQuery,
+  processCategoryFilter,
+  processMultipleCategoriesFilter
 };
