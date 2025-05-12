@@ -12,17 +12,17 @@ exports.getBySlug = async (req, res) => {
     return res.json(category);
   } catch (error) {
     console.error('Lỗi khi lấy thể loại theo slug:', error);
-    
+
     if (error.message === 'Không tìm thấy thể loại') {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Không tìm thấy thể loại' 
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy thể loại'
       });
     }
-    
-    return res.status(500).json({ 
-      success: false, 
-      message: 'Lỗi máy chủ nội bộ' 
+
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ nội bộ'
     });
   }
 };
@@ -36,16 +36,15 @@ exports.getBySlug = async (req, res) => {
 exports.getActive = async (req, res) => {
   try {
     const { limit } = req.query;
+    console.log('[API] Lấy danh sách thể loại đang hoạt động - limit:', limit);
+
     const categories = await categoryService.getActiveCategories(limit);
-    return res.json({
-      success: true,
-      data: categories
-    });
+    console.log('[API] Số lượng thể loại đang hoạt động:', categories.length);
+
+    // Trả về mảng categories trực tiếp thay vì bọc trong object
+    return res.json(categories);
   } catch (error) {
     console.error('Lỗi khi lấy thể loại đang hoạt động:', error);
-    return res.status(500).json({ 
-      success: false, 
-      message: 'Lỗi máy chủ nội bộ' 
-    });
+    return res.status(500).json([]);  // Trả về mảng rỗng thay vì object lỗi
   }
 };

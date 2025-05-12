@@ -520,29 +520,47 @@ class ChapterService {
    * @returns {Promise<Object>} - Danh sách chapter và thông tin truyện
    */
   async getChaptersByStory(storyId) {
-    if (!mongoose.Types.ObjectId.isValid(storyId)) {
-      throw new Error('ID truyện không hợp lệ');
+    try {
+      console.log(`[Service] Lấy danh sách chapter theo story ID: ${storyId}`);
+
+      // Kiểm tra storyId có hợp lệ không
+      if (!storyId || typeof storyId !== 'string') {
+        console.error(`[Service] ID truyện không hợp lệ: ${storyId}`);
+        throw new Error('ID truyện không hợp lệ');
+      }
+
+      // Kiểm tra storyId có phải là ObjectId hợp lệ không
+      if (!mongoose.Types.ObjectId.isValid(storyId)) {
+        console.error(`[Service] ID truyện không phải là ObjectId hợp lệ: ${storyId}`);
+        throw new Error('ID truyện không hợp lệ');
+      }
+
+      // Kiểm tra truyện tồn tại
+      const story = await Story.findById(storyId);
+      if (!story) {
+        console.error(`[Service] Không tìm thấy truyện với ID: ${storyId}`);
+        throw new Error('Không tìm thấy truyện');
+      }
+
+      // Tạo ObjectId từ storyId
+      const storyObjectId = new mongoose.Types.ObjectId(storyId);
+
+      // Lấy tất cả chapter của truyện
+      const chapters = await Chapter.find({ story_id: storyObjectId })
+        .sort({ chapter: 1 }) // Sắp xếp theo số chương tăng dần
+        .lean();
+
+      console.log(`[Service] Tìm thấy ${chapters.length} chapter cho story ID: ${storyId}`);
+
+      return {
+        story,
+        chapters,
+        total: chapters.length
+      };
+    } catch (error) {
+      console.error(`[Service] Lỗi khi lấy danh sách chapter theo story ID: ${storyId}`, error);
+      throw error;
     }
-
-    // Kiểm tra truyện tồn tại
-    const story = await Story.findById(storyId);
-    if (!story) {
-      throw new Error('Không tìm thấy truyện');
-    }
-
-    // Kiểm tra xem storyId có phải là ObjectId hợp lệ không
-    const storyObjectId = new mongoose.Types.ObjectId(storyId);
-
-    // Lấy tất cả chapter của truyện
-    const chapters = await Chapter.find({ story_id: storyObjectId })
-      .sort({ chapter: 1 }) // Sắp xếp theo số chương tăng dần
-      .lean();
-
-    return {
-      story,
-      chapters,
-      total: chapters.length
-    };
   }
 
   /**

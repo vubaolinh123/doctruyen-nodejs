@@ -21,9 +21,14 @@ exports.getAll = async (req, res) => {
       category,
       categories,
       author,
-      hasChapters,
-      chapterCount,
-      chapterCountOp = 'eq'
+      has_chapters,
+      chapter_count,
+      chapter_count_op = 'eq',
+      sort_by = 'updatedAt',
+      sort_order = 'desc',
+      hot_day,
+      hot_month,
+      hot_all_time
     } = req.query;
 
     console.log(`[API] Lấy danh sách truyện - page: ${page}, limit: ${limit}, search: ${search}, categories: ${categories}`);
@@ -41,10 +46,20 @@ exports.getAll = async (req, res) => {
       category,
       categories,
       author,
-      hasChapters,
-      chapterCount,
-      chapterCountOp
+      has_chapters,
+      chapter_count,
+      chapter_count_op,
+      sort_by,
+      sort_order,
+      hot_day,
+      hot_month,
+      hot_all_time
     };
+
+    // Log để debug
+    console.log(`[API] Chapter filters - chapter_count: ${chapter_count}, chapter_count_op: ${chapter_count_op}, has_chapters: ${has_chapters}`);
+    console.log(`[API] Sort params - sort_by: ${sort_by}, sort_order: ${sort_order}`);
+    console.log(`[API] Hot filters - hot_day: ${hot_day}, hot_month: ${hot_month}, hot_all_time: ${hot_all_time}`);
 
     const result = await storyService.getAllStories(options);
     res.json({

@@ -7,10 +7,43 @@ const chapterService = require('../../services/chapter/chapterService');
  */
 exports.getChaptersByStory = async (req, res) => {
   try {
-    const chapters = await chapterService.getChaptersByStory(req.params.storyId);
-    res.json(chapters);
+    console.log(`[API] Lấy danh sách chapter theo story ID: ${req.params.storyId}`);
+
+    // Kiểm tra storyId có tồn tại không
+    if (!req.params.storyId) {
+      console.error('[API] Thiếu ID truyện');
+      return res.status(400).json({ error: 'Thiếu ID truyện' });
+    }
+
+    try {
+      const result = await chapterService.getChaptersByStory(req.params.storyId);
+
+      // Kiểm tra cấu trúc dữ liệu trả về
+      if (result && result.chapters) {
+        console.log(`[API] Tìm thấy ${result.chapters.length} chapter cho story ID: ${req.params.storyId}`);
+
+        // Trả về mảng chapters thay vì object phức tạp
+        return res.json(result.chapters);
+      } else {
+        console.log(`[API] Không tìm thấy chapter cho story ID: ${req.params.storyId}`);
+        return res.json([]);
+      }
+    } catch (serviceError) {
+      console.error(`[API] Lỗi từ service khi lấy danh sách chapter: ${serviceError.message}`);
+
+      // Xử lý các lỗi cụ thể từ service
+      if (serviceError.message.includes('ID truyện không hợp lệ')) {
+        return res.status(400).json({ error: 'ID truyện không hợp lệ' });
+      } else if (serviceError.message.includes('Không tìm thấy truyện')) {
+        return res.status(404).json({ error: 'Không tìm thấy truyện' });
+      } else {
+        // Lỗi không xác định, trả về lỗi 500
+        return res.status(500).json({ error: 'Lỗi khi lấy danh sách chapter' });
+      }
+    }
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(`[API] Lỗi không xác định khi lấy danh sách chapter theo story ID: ${req.params.storyId}`, err);
+    return res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
   }
 };
 
@@ -250,4 +283,4 @@ exports.getStoriesForDropdown = async (req, res) => {
       error: error.message
     });
   }
-}; 
+};
