@@ -1,4 +1,4 @@
-const Category = require('../../models/Category');
+const Category = require('../../models/category');
 const mongoose = require('mongoose');
 const slugify = require('slugify');
 
@@ -19,17 +19,17 @@ class CategoryService {
   async getAllCategories({ page = 1, limit = 10, sort = 'createdAt', order = 'desc', ...filters }) {
     try {
       const query = {};
-      
+
       // Lọc theo trạng thái nếu có
       if (filters.status !== undefined) {
         query.status = filters.status === 'true';
       }
-      
+
       // Lọc theo tên nếu có
       if (filters.name) {
         query.name = { $regex: filters.name, $options: 'i' };
       }
-      
+
       // Lọc theo slug nếu có
       if (filters.slug) {
         query.slug = filters.slug;
@@ -45,7 +45,7 @@ class CategoryService {
         delete itemObj.stories;
         return itemObj;
       });
-      
+
       // Sắp xếp theo trường đã chỉ định
       if (sort === 'comicCount') {
         // Sắp xếp theo số lượng truyện
@@ -65,19 +65,19 @@ class CategoryService {
           return 0;
         });
       }
-      
+
       // Đếm tổng số
       const total = formattedItems.length;
-      
+
       // Chuyển đổi page và limit sang số
       const numPage = parseInt(page);
       const numLimit = parseInt(limit);
-      
+
       // Áp dụng phân trang sau khi sắp xếp
       const startIndex = (numPage - 1) * numLimit;
       const endIndex = startIndex + numLimit;
       const paginatedItems = formattedItems.slice(startIndex, endIndex);
-      
+
       return {
         items: paginatedItems,
         total,
@@ -98,15 +98,15 @@ class CategoryService {
   async getCategoryById(id) {
     try {
       const category = await Category.findById(id).populate('stories');
-      
+
       if (!category) {
         throw new Error('Không tìm thấy thể loại');
       }
-      
+
       const response = category.toObject();
       response.comicCount = category.stories || 0;
       delete response.stories;
-      
+
       return response;
     } catch (error) {
       throw error;
@@ -120,19 +120,19 @@ class CategoryService {
    */
   async getCategoryBySlug(slug) {
     try {
-      const category = await Category.findOne({ 
+      const category = await Category.findOne({
         slug: slug,
         status: true
       }).populate('stories');
-      
+
       if (!category) {
         throw new Error('Không tìm thấy thể loại');
       }
-      
+
       const response = category.toObject();
       response.comicCount = category.stories || 0;
       delete response.stories;
-      
+
       return response;
     } catch (error) {
       throw error;
@@ -151,33 +151,33 @@ class CategoryService {
   async createCategory(categoryData) {
     try {
       const { name, slug, description, status } = categoryData;
-      
+
       // Kiểm tra nếu tên không được cung cấp
       if (!name) {
         throw new Error('Tên thể loại là bắt buộc');
       }
-      
+
       // Chuẩn bị dữ liệu
       const newCategoryData = {
         name,
         description: description || '',
         status: status !== undefined ? Boolean(status) : true
       };
-      
+
       // Thêm slug nếu được cung cấp, ngược lại sẽ tự động tạo
       if (slug) {
         newCategoryData.slug = slug;
       }
-      
+
       const category = new Category(newCategoryData);
       await category.save();
-      
+
       // Lấy số lượng truyện
       await category.populate('stories');
       const response = category.toObject();
       response.comicCount = category.stories || 0;
       delete response.stories;
-      
+
       return response;
     } catch (error) {
       throw error;
@@ -193,13 +193,13 @@ class CategoryService {
   async updateCategory(id, updateData) {
     try {
       const dataToUpdate = {};
-      
+
       // Chỉ cập nhật các trường được cung cấp trong request
       if (updateData.name !== undefined) dataToUpdate.name = updateData.name;
       if (updateData.slug !== undefined) dataToUpdate.slug = updateData.slug;
       if (updateData.description !== undefined) dataToUpdate.description = updateData.description;
       if (updateData.status !== undefined) dataToUpdate.status = Boolean(updateData.status);
-      
+
       // Nếu tên được cập nhật nhưng slug không được cung cấp, tạo lại slug
       if (updateData.name && updateData.slug === undefined) {
         dataToUpdate.slug = slugify(updateData.name, {
@@ -208,21 +208,21 @@ class CategoryService {
           locale: 'vi'
         });
       }
-      
+
       const category = await Category.findByIdAndUpdate(
-        id, 
-        dataToUpdate, 
+        id,
+        dataToUpdate,
         { new: true }
       ).populate('stories');
-      
+
       if (!category) {
         throw new Error('Không tìm thấy thể loại');
       }
-      
+
       const response = category.toObject();
       response.comicCount = category.stories || 0;
       delete response.stories;
-      
+
       return response;
     } catch (error) {
       throw error;
@@ -237,11 +237,11 @@ class CategoryService {
   async deleteCategory(id) {
     try {
       const category = await Category.findByIdAndDelete(id);
-      
+
       if (!category) {
         throw new Error('Không tìm thấy thể loại');
       }
-      
+
       return true;
     } catch (error) {
       throw error;
@@ -256,14 +256,14 @@ class CategoryService {
   async getActiveCategories(limit = 100) {
     try {
       const categories = await Category.findActive(parseInt(limit)).populate('stories');
-      
+
       const formattedCategories = categories.map(category => {
         const catObj = category.toObject();
         catObj.comicCount = category.stories || 0;
         delete catObj.stories;
         return catObj;
       });
-      
+
       return formattedCategories;
     } catch (error) {
       throw error;
@@ -271,4 +271,4 @@ class CategoryService {
   }
 }
 
-module.exports = new CategoryService(); 
+module.exports = new CategoryService();

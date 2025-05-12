@@ -1,8 +1,8 @@
 const User = require('../../models/user');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
-const { TokenBlacklist } = require('../../models/TokenBlacklist');
-const { RefreshToken } = require('../../models/RefreshToken');
+const { TokenBlacklist } = require('../../models/tokenBlacklist');
+const { RefreshToken } = require('../../models/refreshToken');
 const crypto = require('crypto');
 
 // Thời gian hết hạn của access token (15 phút)
@@ -412,4 +412,4 @@ module.exports = {
   updateUserProfile,
   getUserResponse,
   generateAccessToken
-}; 
+};

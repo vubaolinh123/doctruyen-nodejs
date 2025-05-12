@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/user');
-const { TokenBlacklist } = require('../models/TokenBlacklist');
+const { TokenBlacklist } = require('../models/tokenBlacklist');
 
 /**
  * Middleware xác thực JWT token

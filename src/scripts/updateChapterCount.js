@@ -5,8 +5,8 @@
 
 require('dotenv').config();
 const mongoose = require('mongoose');
-const Story = require('../models/Story');
-const Chapter = require('../models/Chapter');
+const Story = require('../models/story');
+const Chapter = require('../models/chapter');
 
 // Thiết lập timezone cho Việt Nam
 process.env.TZ = 'Asia/Ho_Chi_Minh';

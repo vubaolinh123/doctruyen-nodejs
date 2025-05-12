@@ -29,7 +29,4 @@ const tokenBlacklistSchema = new mongoose.Schema({
   }
 });
 
-// Tạo model
-const TokenBlacklist = mongoose.model('TokenBlacklist', tokenBlacklistSchema);
-
-module.exports = { TokenBlacklist };
+module.exports = tokenBlacklistSchema;

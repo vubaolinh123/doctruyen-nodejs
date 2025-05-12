@@ -1,5 +1,5 @@
 const Story = require('../../models/story');
-const Chapter = require('../../models/Chapter');
+const Chapter = require('../../models/chapter');
 
 /**
  * Lấy danh sách truyện hot

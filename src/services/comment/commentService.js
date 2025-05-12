@@ -1,4 +1,4 @@
-const Comment = require('../../models/Comment');
+const Comment = require('../../models/comment');
 const User = require('../../models/user');
 
 /**
@@ -38,7 +38,7 @@ class CommentService {
 
       // Đếm tổng số bình luận
       const total = await Comment.countDocuments(query);
-      
+
       return {
         comments,
         pagination: {
@@ -215,4 +215,4 @@ class CommentService {
   }
 }
 
-module.exports = new CommentService(); 
+module.exports = new CommentService();

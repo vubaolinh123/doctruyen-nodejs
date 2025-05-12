@@ -1,9 +1,9 @@
 const specialStoryService = require('../../services/story/specialStoryService');
 const storyService = require('../../services/story/storyService');
-const Category = require('../../models/Category');
-const Author = require('../../models/Author');
-const Story = require('../../models/Story');
-const Chapter = require('../../models/Chapter');
+const Category = require('../../models/category');
+const Author = require('../../models/author');
+const Story = require('../../models/story');
+const Chapter = require('../../models/chapter');
 const mongoose = require('mongoose');
 
 /**

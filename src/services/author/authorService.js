@@ -1,4 +1,4 @@
-const Author = require('../../models/Author');
+const Author = require('../../models/author');
 const mongoose = require('mongoose');
 const slugify = require('slugify');
 
@@ -17,17 +17,17 @@ class AuthorService {
   async getAllAuthors({ page = 1, limit = 10, ...filters }) {
     try {
       const query = {};
-      
+
       // Lọc theo trạng thái nếu có
       if (filters.status !== undefined) {
         query.status = filters.status === 'true';
       }
-      
+
       // Lọc theo tên nếu có
       if (filters.name) {
         query.name = { $regex: filters.name, $options: 'i' };
       }
-      
+
       // Lọc theo slug nếu có
       if (filters.slug) {
         query.slug = filters.slug;
@@ -44,7 +44,7 @@ class AuthorService {
 
       // Đếm tổng số
       const total = await Author.countDocuments(query);
-      
+
       return {
         items,
         total,
@@ -101,26 +101,26 @@ class AuthorService {
   async createAuthor(authorData) {
     try {
       const { name, slug, status } = authorData;
-      
+
       // Kiểm tra nếu tên không được cung cấp
       if (!name) {
         throw new Error('Tên tác giả là bắt buộc');
       }
-      
+
       // Chuẩn bị dữ liệu
       const newAuthorData = {
         name,
         status: status !== undefined ? Boolean(status) : true
       };
-      
+
       // Thêm slug nếu được cung cấp, ngược lại sẽ tự động tạo
       if (slug) {
         newAuthorData.slug = slug;
       }
-      
+
       const author = new Author(newAuthorData);
       await author.save();
-      
+
       return author;
     } catch (error) {
       throw error;
@@ -136,12 +136,12 @@ class AuthorService {
   async updateAuthor(id, updateData) {
     try {
       const dataToUpdate = {};
-      
+
       // Chỉ cập nhật các trường được cung cấp trong request
       if (updateData.name !== undefined) dataToUpdate.name = updateData.name;
       if (updateData.slug !== undefined) dataToUpdate.slug = updateData.slug;
       if (updateData.status !== undefined) dataToUpdate.status = Boolean(updateData.status);
-      
+
       // Nếu tên được cập nhật nhưng slug không được cung cấp, tạo lại slug
       if (updateData.name && updateData.slug === undefined) {
         dataToUpdate.slug = slugify(updateData.name, {
@@ -150,17 +150,17 @@ class AuthorService {
           locale: 'vi'
         });
       }
-      
+
       const author = await Author.findByIdAndUpdate(
-        id, 
-        dataToUpdate, 
+        id,
+        dataToUpdate,
         { new: true }
       );
-      
+
       if (!author) {
         throw new Error('Không tìm thấy tác giả');
       }
-      
+
       return author;
     } catch (error) {
       throw error;
@@ -175,11 +175,11 @@ class AuthorService {
   async deleteAuthor(id) {
     try {
       const author = await Author.findByIdAndDelete(id);
-      
+
       if (!author) {
         throw new Error('Không tìm thấy tác giả');
       }
-      
+
       return true;
     } catch (error) {
       throw error;
@@ -201,4 +201,4 @@ class AuthorService {
   }
 }
 
-module.exports = new AuthorService(); 
+module.exports = new AuthorService();

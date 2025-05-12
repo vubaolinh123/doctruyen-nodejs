@@ -1,4 +1,4 @@
-const Bookmark = require('../../models/Bookmark');
+const Bookmark = require('../../models/bookmark');
 const mongoose = require('mongoose');
 
 /**
@@ -29,7 +29,7 @@ class BookmarkService {
         .sort(sort)
         .skip((numPage - 1) * numLimit)
         .limit(numLimit);
-      
+
       return items;
     } catch (error) {
       throw error;
@@ -155,4 +155,4 @@ class BookmarkService {
   }
 }
 
-module.exports = new BookmarkService(); 
+module.exports = new BookmarkService();

@@ -1,4 +1,4 @@
-const Chapter = require('../../models/Chapter');
+const Chapter = require('../../models/chapter');
 const Story = require('../../models/story');
 const mongoose = require('mongoose');
 const slugify = require('slugify');

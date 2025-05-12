@@ -13,7 +13,7 @@ router.get('/', controller.getAll);
 // Debug slugs (hỗ trợ kiểm tra)
 router.get('/debug/slugs', async (req, res) => {
   try {
-    const Chapter = require('../models/Chapter');
+    const Chapter = require('../models/chapter');
     const chapters = await Chapter.find().select('slug name chapter');
     res.json({
       success: true,

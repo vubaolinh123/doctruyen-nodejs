@@ -1,5 +1,5 @@
-const Story = require('../../models/Story');
-const Chapter = require('../../models/Chapter');
+const Story = require('../../models/story');
+const Chapter = require('../../models/chapter');
 const mongoose = require('mongoose');
 const slugify = require('slugify');
 
@@ -95,7 +95,7 @@ const processCategoryFilter = async (query, categoryValue) => {
     query.categories = categoryValue;
   } else {
     // Nếu là slug, cần tìm category trước
-    const Category = require('../../models/Category');
+    const Category = require('../../models/category');
     const category = await Category.findOne({ slug: categoryValue });
     if (category) {
       // Sử dụng ID của category
@@ -120,7 +120,7 @@ const processMultipleCategoriesFilter = async (query, categoriesValue) => {
 
   if (cleanCategoryValues.length > 0) {
     // Luôn xử lý như slug, vì frontend luôn gửi slug
-    const Category = require('../../models/Category');
+    const Category = require('../../models/category');
 
     try {
       // Tìm tất cả thể loại theo slug
