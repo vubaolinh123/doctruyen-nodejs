@@ -30,16 +30,16 @@ class UserService {
       // Chuyển đổi page và limit thành số
       const numPage = parseInt(page);
       const numLimit = parseInt(limit);
-      
+
       // Lấy danh sách người dùng
       const users = await User.find(query)
         .sort(sort)
         .skip((numPage - 1) * numLimit)
         .limit(numLimit);
-      
+
       // Đếm tổng số
       const total = await User.countDocuments(query);
-      
+
       return {
         items: users,
         total,
@@ -205,7 +205,7 @@ class UserService {
 
     // Query điều kiện tìm kiếm
     let searchQuery;
-    
+
     if (isEmail) {
       // Nếu là email, tìm chính xác hoặc tương tự
       searchQuery = {
@@ -247,11 +247,14 @@ class UserService {
     // Cập nhật thống kê xu nếu cần
     if (!user.coin_stats || !user.coin_stats.last_updated ||
         new Date() - new Date(user.coin_stats.last_updated) > 24 * 60 * 60 * 1000) {
-      await user.updateCoinStats();
+      // Cập nhật thời gian cập nhật cuối cùng
+      user.coin_stats = user.coin_stats || {};
+      user.coin_stats.last_updated = new Date();
+      await user.save();
     }
 
     return user;
   }
 }
 
-module.exports = new UserService(); 
+module.exports = new UserService();
