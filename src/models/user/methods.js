@@ -4,6 +4,118 @@
  */
 const setupMethods = (schema) => {
   /**
+   * Kiểm tra xem người dùng có quyền cụ thể không
+   * @param {string} permissionName - Tên quyền cần kiểm tra
+   * @returns {boolean} - true nếu có quyền, false nếu không
+   */
+  schema.methods.hasPermission = function(permissionName) {
+    if (!this.permissions || !this.permissions.length) {
+      return false;
+    }
+
+    const now = new Date();
+
+    // Tìm quyền trong danh sách quyền của người dùng
+    const permission = this.permissions.find(p =>
+      p.name === permissionName &&
+      p.active === true &&
+      (!p.expires_at || p.expires_at > now)
+    );
+
+    return !!permission;
+  };
+
+  /**
+   * Thêm quyền cho người dùng
+   * @param {Object} permissionData - Thông tin quyền cần thêm
+   * @returns {Promise<Object>} - Người dùng đã cập nhật
+   */
+  schema.methods.addPermission = async function(permissionData) {
+    // Kiểm tra xem quyền đã tồn tại chưa
+    const existingPermissionIndex = this.permissions.findIndex(p => p.name === permissionData.name);
+
+    if (existingPermissionIndex >= 0) {
+      // Nếu quyền đã tồn tại, cập nhật nó
+      this.permissions[existingPermissionIndex] = {
+        ...this.permissions[existingPermissionIndex].toObject(),
+        ...permissionData,
+        granted_at: new Date()
+      };
+    } else {
+      // Nếu quyền chưa tồn tại, thêm mới
+      this.permissions.push({
+        ...permissionData,
+        granted_at: new Date()
+      });
+    }
+
+    return this.save();
+  };
+
+  /**
+   * Xóa quyền của người dùng
+   * @param {string} permissionName - Tên quyền cần xóa
+   * @returns {Promise<Object>} - Người dùng đã cập nhật
+   */
+  schema.methods.removePermission = async function(permissionName) {
+    // Lọc ra các quyền khác với quyền cần xóa
+    this.permissions = this.permissions.filter(p => p.name !== permissionName);
+
+    return this.save();
+  };
+
+  /**
+   * Vô hiệu hóa quyền của người dùng
+   * @param {string} permissionName - Tên quyền cần vô hiệu hóa
+   * @returns {Promise<Object>} - Người dùng đã cập nhật
+   */
+  schema.methods.deactivatePermission = async function(permissionName) {
+    // Tìm quyền cần vô hiệu hóa
+    const permissionIndex = this.permissions.findIndex(p => p.name === permissionName);
+
+    if (permissionIndex >= 0) {
+      // Vô hiệu hóa quyền
+      this.permissions[permissionIndex].active = false;
+    }
+
+    return this.save();
+  };
+
+  /**
+   * Kích hoạt quyền của người dùng
+   * @param {string} permissionName - Tên quyền cần kích hoạt
+   * @returns {Promise<Object>} - Người dùng đã cập nhật
+   */
+  schema.methods.activatePermission = async function(permissionName) {
+    // Tìm quyền cần kích hoạt
+    const permissionIndex = this.permissions.findIndex(p => p.name === permissionName);
+
+    if (permissionIndex >= 0) {
+      // Kích hoạt quyền
+      this.permissions[permissionIndex].active = true;
+    }
+
+    return this.save();
+  };
+
+  /**
+   * Lấy danh sách quyền đang hoạt động của người dùng
+   * @returns {Array} - Danh sách quyền đang hoạt động
+   */
+  schema.methods.getActivePermissions = function() {
+    if (!this.permissions || !this.permissions.length) {
+      return [];
+    }
+
+    const now = new Date();
+
+    // Lọc ra các quyền đang hoạt động
+    return this.permissions.filter(p =>
+      p.active === true &&
+      (!p.expires_at || p.expires_at > now)
+    );
+  };
+  /**
    * Kiểm tra xem người dùng có phải là admin hay không
    * @returns {boolean}
    */
@@ -113,4 +225,4 @@ const setupMethods = (schema) => {
   };
 };
 
-module.exports = setupMethods; 
+module.exports = setupMethods;

@@ -144,6 +144,15 @@ class UserService {
   filterPublicUserData(user) {
     if (!user) return null;
 
+    // Lấy danh sách quyền đang hoạt động
+    const activePermissions = user.getActivePermissions ? user.getActivePermissions() : [];
+
+    // Lọc ra các quyền công khai (có thể hiển thị cho người khác)
+    const publicPermissions = activePermissions.filter(p =>
+      p.type === 'appearance' ||
+      (p.metadata && p.metadata.public === true)
+    );
+
     // Chỉ trả về các thông tin công khai
     return {
       id: user._id,
@@ -152,6 +161,7 @@ class UserService {
       avatar: user.avatar,
       banner: user.banner,
       role: user.role,
+      permissions: publicPermissions,
       created_at: user.createdAt
     };
   }
@@ -163,6 +173,9 @@ class UserService {
    */
   filterPrivateUserData(user) {
     if (!user) return null;
+
+    // Lấy danh sách quyền đang hoạt động
+    const activePermissions = user.getActivePermissions ? user.getActivePermissions() : [];
 
     // Trả về thông tin đầy đủ hơn cho chủ tài khoản
     return {
@@ -179,6 +192,7 @@ class UserService {
       coin: user.coin,
       coin_total: user.coin_total,
       coin_spent: user.coin_spent,
+      permissions: activePermissions,
       attendance_summary: user.attendance_summary,
       created_at: user.createdAt
     };

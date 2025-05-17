@@ -156,6 +156,71 @@ const userSchema = new Schema({
     description: 'Độ lệch múi giờ so với UTC tính bằng phút'
   },
 
+  // Quyền đặc biệt của người dùng
+  permissions: [{
+    // Tên quyền
+    name: {
+      type: String,
+      required: true
+    },
+
+    // Mô tả quyền
+    description: {
+      type: String,
+      default: ''
+    },
+
+    // Loại quyền
+    type: {
+      type: String,
+      enum: ['feature', 'appearance', 'content', 'interaction', 'other'],
+      default: 'other'
+    },
+
+    // Giá trị của quyền (có thể là boolean, số, chuỗi, hoặc đối tượng)
+    value: {
+      type: Schema.Types.Mixed,
+      default: true
+    },
+
+    // Nguồn gốc của quyền
+    source: {
+      type: String,
+      enum: ['achievement', 'level', 'purchase', 'admin', 'other'],
+      default: 'admin'
+    },
+
+    // ID tham chiếu (nếu quyền đến từ thành tựu, cấp độ, v.v.)
+    reference_id: {
+      type: Schema.Types.ObjectId,
+      default: null
+    },
+
+    // Thời gian hết hạn (null = vĩnh viễn)
+    expires_at: {
+      type: Date,
+      default: null
+    },
+
+    // Trạng thái kích hoạt
+    active: {
+      type: Boolean,
+      default: true
+    },
+
+    // Thời gian cấp quyền
+    granted_at: {
+      type: Date,
+      default: Date.now
+    },
+
+    // Thông tin bổ sung
+    metadata: {
+      type: Schema.Types.Mixed,
+      default: {}
+    }
+  }],
+
   // Các trường khác
   tu_vi: {
     type: String,
@@ -186,4 +251,4 @@ const userSchema = new Schema({
 userSchema.index({ role: 1, status: 1 });
 userSchema.index({ 'attendance_summary.last_attendance': 1 });
 
-module.exports = userSchema; 
+module.exports = userSchema;
