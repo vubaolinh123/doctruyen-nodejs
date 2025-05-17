@@ -151,13 +151,23 @@ exports.getUserCoins = async (req, res) => {
 
       return res.json({
         success: true,
-        user: user
+        user: {
+          id: user._id,
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          coin: user.coin || 0,
+          coin_total: user.coin_total || 0,
+          coin_spent: user.coin_spent || 0,
+          avatar: user.avatar || null,
+          createdAt: user.createdAt
+        }
       });
     } catch (error) {
       if (error.message === 'User not found') {
         return res.status(404).json({
           success: false,
-          message: 'User not found'
+          message: 'Không tìm thấy người dùng'
         });
       }
       throw error;
@@ -167,7 +177,7 @@ exports.getUserCoins = async (req, res) => {
     console.error('Error fetching user coin info:', error);
     return res.status(500).json({
       success: false,
-      message: 'Internal Server Error'
+      message: 'Lỗi máy chủ nội bộ'
     });
   }
 };

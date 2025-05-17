@@ -41,8 +41,8 @@ exports.getChart = async (req, res) => {
     console.log(`[Admin API] Lấy dữ liệu biểu đồ với timeRange = ${timeRange}`);
 
     const chartData = await coinService.getChartData(timeRange);
-    console.log(`[Admin API] Lấy dữ liệu biểu đồ thành công, số lượng dữ liệu: 
-      - categories: ${chartData.categories?.length || 0} 
+    console.log(`[Admin API] Lấy dữ liệu biểu đồ thành công, số lượng dữ liệu:
+      - categories: ${chartData.categories?.length || 0}
       - series[0].data: ${chartData.series?.[0]?.data?.length || 0}`);
 
     return res.json({
@@ -84,7 +84,7 @@ exports.manageCoins = async (req, res) => {
     };
 
     const result = await coinService.manageCoins(userId, action, amount, note, adminInfo);
-    
+
     console.log(`[Admin API] Quản lý xu thành công - userId: ${userId}, action: ${action}, amount: ${amount}, new balance: ${result.newBalance}`);
 
     return res.json({
@@ -98,7 +98,7 @@ exports.manageCoins = async (req, res) => {
     });
   } catch (error) {
     console.error('[Admin API] Lỗi khi quản lý xu:', error);
-    
+
     // Xử lý lỗi cụ thể từ service
     if (error.message === 'User not found') {
       return res.status(404).json({
@@ -106,21 +106,21 @@ exports.manageCoins = async (req, res) => {
         message: 'Không tìm thấy người dùng'
       });
     }
-    
+
     if (error.message === 'Số xu không đủ để trừ') {
       return res.status(400).json({
         success: false,
         message: error.message
       });
     }
-    
+
     if (error.message === 'Invalid action') {
       return res.status(400).json({
         success: false,
         message: 'Hành động không hợp lệ'
       });
     }
-    
+
     return res.status(500).json({
       success: false,
       message: error.message || 'Internal Server Error'
@@ -177,10 +177,8 @@ exports.getTransactions = async (req, res) => {
 
     return res.json({
       success: true,
-      data: {
-        transactions: result.transactions,
-        pagination: result.pagination
-      }
+      transactions: result.transactions,
+      pagination: result.pagination
     });
   } catch (error) {
     console.error('[Admin API] Lỗi khi lấy lịch sử giao dịch:', error);
@@ -192,8 +190,68 @@ exports.getTransactions = async (req, res) => {
 };
 
 /**
- * Sửa chữa số dư xu của người dùng
+ * Kiểm tra tính nhất quán của dữ liệu xu
+ * @route POST /api/admin/coins/check-consistency
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ * @access Private (Admin)
+ */
+exports.checkConsistency = async (req, res) => {
+  try {
+    console.log(`[Admin API] Kiểm tra tính nhất quán của dữ liệu xu`);
+
+    // Sử dụng hàm kiểm tra tính nhất quán từ coinRepair
+    const coinRepair = require('../../utils/coinRepair');
+    const results = await coinRepair.checkCoinDataConsistency();
+
+    console.log(`[Admin API] Kết quả kiểm tra tính nhất quán:`, results);
+
+    return res.json({
+      success: true,
+      results
+    });
+  } catch (error) {
+    console.error('[Admin API] Lỗi khi kiểm tra tính nhất quán:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Internal Server Error'
+    });
+  }
+};
+
+/**
+ * Sửa chữa dữ liệu xu không nhất quán
  * @route POST /api/admin/coins/repair
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ * @access Private (Admin)
+ */
+exports.repairData = async (req, res) => {
+  try {
+    console.log(`[Admin API] Sửa chữa dữ liệu xu không nhất quán`);
+
+    // Sử dụng hàm sửa chữa từ coinRepair
+    const coinRepair = require('../../utils/coinRepair');
+    const results = await coinRepair.repairTransactionDirection();
+
+    console.log(`[Admin API] Kết quả sửa chữa dữ liệu xu:`, results);
+
+    return res.json({
+      success: true,
+      results
+    });
+  } catch (error) {
+    console.error('[Admin API] Lỗi khi sửa chữa dữ liệu xu:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Internal Server Error'
+    });
+  }
+};
+
+/**
+ * Sửa chữa số dư xu của người dùng
+ * @route POST /api/admin/coins/repair-coins
  * @param {Object} req - Request object
  * @param {Object} res - Response object
  * @access Private (Admin)
@@ -201,11 +259,11 @@ exports.getTransactions = async (req, res) => {
 exports.repairCoins = async (req, res) => {
   try {
     console.log(`[Admin API] Bắt đầu sửa chữa số dư xu của người dùng`);
-    
+
     const result = await coinService.repairCoins(req.user._id);
-    
+
     console.log(`[Admin API] Kết quả sửa chữa xu: ${result.fixed} người dùng được sửa, ${result.total} người dùng được kiểm tra`);
-    
+
     return res.json({
       success: true,
       message: `Đã sửa chữa số dư xu cho ${result.fixed}/${result.total} người dùng`,
@@ -218,4 +276,4 @@ exports.repairCoins = async (req, res) => {
       message: error.message || 'Internal Server Error'
     });
   }
-}; 
+};

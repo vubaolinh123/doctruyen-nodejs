@@ -26,7 +26,8 @@ router.use('/stars', auth, require('./stars'));
 router.use('/attendance', require('./attendance'));
 // Route comments
 router.use('/comments', require('./commentRoutes'));
-// Admin coins route
+// Admin routes
 router.use('/admin/coins', auth, require('./coins'));
+router.use('/admin/users', auth, require('./admin/users'));
 
 module.exports = router;

@@ -36,6 +36,10 @@ module.exports = function(schema) {
     };
 
     // Ghi log
-    coinLogger.log('transaction_created', logData);
+    if (typeof coinLogger.logTransactionDetails === 'function') {
+      coinLogger.logTransactionDetails([doc], 'Giao dịch mới được tạo');
+    } else {
+      console.log('Giao dịch mới được tạo:', logData);
+    }
   });
-}; 
+};

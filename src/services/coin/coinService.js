@@ -13,7 +13,7 @@ class CoinService {
 
   /**
    * Lấy dữ liệu biểu đồ xu
-   * @param {string} timeRange - Khoảng thời gian ('day', 'week', 'month', 'year') 
+   * @param {string} timeRange - Khoảng thời gian ('day', 'week', 'month', 'year')
    */
   async getChartData(timeRange = 'month') {
     return Transaction.getChartData(timeRange);
@@ -36,14 +36,26 @@ class CoinService {
 
     let result;
     const numAmount = Number(amount);
+    const description = note || (action === 'give' ? 'Thêm xu bởi admin' :
+                               action === 'take' ? 'Trừ xu bởi admin' :
+                               'Cập nhật xu bởi admin');
 
     switch (action) {
       case 'give':
-        result = await user.addCoins(numAmount, {
-          description: note || 'Thêm xu bởi admin',
+        // Thêm xu cho người dùng
+        await user.addCoins(numAmount);
+
+        // Tạo giao dịch
+        await Transaction.createTransaction({
+          user_id: userId,
+          description: description,
           type: 'admin',
-          metadata: adminInfo
+          coin_change: numAmount,
+          balance_after: user.coin,
+          metadata: adminInfo || {}
         });
+
+        result = user.coin;
         break;
 
       case 'take':
@@ -51,19 +63,39 @@ class CoinService {
           throw new Error('Số xu không đủ để trừ');
         }
 
-        result = await user.subtractCoins(numAmount, {
-          description: note || 'Trừ xu bởi admin',
+        // Trừ xu của người dùng
+        await user.subtractCoins(numAmount);
+
+        // Tạo giao dịch
+        await Transaction.createTransaction({
+          user_id: userId,
+          description: description,
           type: 'admin',
-          metadata: adminInfo
+          coin_change: -numAmount,
+          balance_after: user.coin,
+          metadata: adminInfo || {}
         });
+
+        result = user.coin;
         break;
 
       case 'edit':
-        result = await user.updateCoins(numAmount, {
-          description: note || 'Cập nhật xu bởi admin',
+        // Cập nhật xu của người dùng
+        const oldCoin = user.coin;
+        await user.updateCoins(numAmount);
+        const coinChange = numAmount - oldCoin;
+
+        // Tạo giao dịch
+        await Transaction.createTransaction({
+          user_id: userId,
+          description: description,
           type: 'admin',
-          metadata: adminInfo
+          coin_change: coinChange,
+          balance_after: user.coin,
+          metadata: adminInfo || {}
         });
+
+        result = user.coin;
         break;
 
       default:
@@ -179,4 +211,4 @@ class CoinService {
   }
 }
 
-module.exports = new CoinService(); 
+module.exports = new CoinService();

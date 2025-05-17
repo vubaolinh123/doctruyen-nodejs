@@ -173,10 +173,10 @@ const setupMethods = (schema) => {
   /**
    * Cộng xu cho người dùng
    * @param {number} amount - Số lượng xu
-   * @param {string} reason - Lý do cộng xu
-   * @returns {Object} - Thông tin xu sau khi cộng
+   * @param {string|Object} options - Lý do cộng xu hoặc các tùy chọn
+   * @returns {number} - Số xu hiện tại
    */
-  schema.methods.addCoins = async function(amount, reason = '') {
+  schema.methods.addCoins = async function(amount, options = '') {
     if (isNaN(amount) || amount <= 0) {
       throw new Error('Số lượng xu phải là số dương');
     }
@@ -187,12 +187,7 @@ const setupMethods = (schema) => {
 
     await this.save();
 
-    return {
-      coin: this.coin,
-      coin_total: this.coin_total,
-      added: amount,
-      reason: reason
-    };
+    return this.coin;
   };
 
   /**
@@ -222,6 +217,48 @@ const setupMethods = (schema) => {
       deducted: amount,
       reason: reason
     };
+  };
+
+  /**
+   * Trừ xu của người dùng (alias của deductCoins)
+   * @param {number} amount - Số lượng xu
+   * @param {Object} options - Các tùy chọn
+   * @returns {Object} - Thông tin xu sau khi trừ
+   */
+  schema.methods.subtractCoins = async function(amount, options = {}) {
+    return this.deductCoins(amount, options);
+  };
+
+  /**
+   * Cập nhật số xu của người dùng
+   * @param {number} newAmount - Số lượng xu mới
+   * @param {Object} options - Các tùy chọn
+   * @returns {Object} - Thông tin xu sau khi cập nhật
+   */
+  schema.methods.updateCoins = async function(newAmount, options = {}) {
+    if (isNaN(newAmount) || newAmount < 0) {
+      throw new Error('Số lượng xu phải là số không âm');
+    }
+
+    const currentCoins = this.coin;
+
+    if (newAmount > currentCoins) {
+      // Thêm xu
+      const amountToAdd = newAmount - currentCoins;
+      return this.addCoins(amountToAdd, options);
+    } else if (newAmount < currentCoins) {
+      // Trừ xu
+      const amountToDeduct = currentCoins - newAmount;
+      return this.deductCoins(amountToDeduct, options);
+    } else {
+      // Không thay đổi
+      return {
+        coin: this.coin,
+        coin_total: this.coin_total,
+        coin_spent: this.coin_spent,
+        changed: 0
+      };
+    }
   };
 };
 
