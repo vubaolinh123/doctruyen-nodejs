@@ -10,6 +10,8 @@ router.use('/categories', require('./categories'));
 router.use('/authors', require('./authors'));
 router.use('/slides', require('./slides'));
 router.use('/missions', require('./missions'));
+router.use('/seo-config', require('./seoConfig'));
+router.use('/cache-config', require('./cacheConfig'));
 
 // Route public cho user
 router.get('/public/users/slug/:slug', auth.optional, userController.getBySlug);
