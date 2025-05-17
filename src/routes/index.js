@@ -9,6 +9,7 @@ router.use('/chapters', require('./chapters'));
 router.use('/categories', require('./categories'));
 router.use('/authors', require('./authors'));
 router.use('/slides', require('./slides'));
+router.use('/missions', require('./missions'));
 
 // Route public cho user
 router.get('/public/users/slug/:slug', auth.optional, userController.getBySlug);
