@@ -16,10 +16,11 @@ module.exports = {
   getChapterBySlug: specialController.getChapterBySlug,
   getChapterByStoryAndChapterSlug: specialController.getChapterByStoryAndChapterSlug,
   getChaptersByStorySlug: specialController.getChaptersByStorySlug,
-  
+
   // Admin controllers
   getChapters: specialController.getChapters,
   toggleStatus: specialController.toggleStatus,
   toggleFlag: specialController.toggleFlag,
-  getStoriesForDropdown: specialController.getStoriesForDropdown
-}; 
+  getStoriesForDropdown: specialController.getStoriesForDropdown,
+  getNextChapterNumber: specialController.getNextChapterNumber
+};

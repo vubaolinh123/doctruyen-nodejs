@@ -54,6 +54,9 @@ router.get('/admin/stories/list', auth, controller.getStoriesForDropdown);
 // Admin - Lấy danh sách chapter theo truyện
 router.get('/admin/story/:storyId', auth, controller.getChaptersByStory);
 
+// Admin - Lấy số chương tiếp theo của một truyện
+router.get('/admin/story/:storyId/next-chapter', auth, controller.getNextChapterNumber);
+
 // Admin - Bật/tắt trạng thái chapter
 router.put('/admin/:id/toggle-status', auth, controller.toggleStatus);
 

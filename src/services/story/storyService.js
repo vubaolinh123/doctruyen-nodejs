@@ -196,17 +196,21 @@ const getAllStories = async (filters) => {
   }
 
   // Xử lý trực tiếp các tham số liên quan đến chapter
-  if (filters.chapter_count) {
+  if (filters.chapter_count !== undefined && filters.chapter_count !== '') {
     otherFilters.chapter_count = filters.chapter_count;
     console.log("getAllStories - Setting chapter_count:", filters.chapter_count);
   }
 
-  if (filters.chapter_count_op) {
+  if (filters.chapter_count_op !== undefined && filters.chapter_count_op !== '') {
     otherFilters.chapter_count_op = filters.chapter_count_op;
     console.log("getAllStories - Setting chapter_count_op:", filters.chapter_count_op);
+  } else if (otherFilters.chapter_count !== undefined) {
+    // Nếu có chapter_count nhưng không có chapter_count_op, đặt mặc định là 'eq'
+    otherFilters.chapter_count_op = 'eq';
+    console.log("getAllStories - Setting default chapter_count_op: eq");
   }
 
-  if (filters.has_chapters) {
+  if (filters.has_chapters !== undefined && filters.has_chapters !== '') {
     otherFilters.has_chapters = filters.has_chapters;
     console.log("getAllStories - Setting has_chapters:", filters.has_chapters);
   }
@@ -347,7 +351,8 @@ const checkHasChapterFilter = (filters) => {
   }
 
   // Trả về true nếu có ít nhất một tham số chapter
-  const result = hasChapterCount || hasChapterCountOp || hasHasChapters;
+  // Đảm bảo rằng nếu có chapter_count thì cũng phải có chapter_count_op
+  const result = (hasChapterCount && hasChapterCountOp) || hasHasChapters;
   console.log("checkHasChapterFilter - Result:", result);
   return result;
 };
@@ -467,8 +472,56 @@ const getStoriesWithChapterFilters = async (query, sortOptions, page, limit, inc
   // Nếu có lọc theo số lượng chapter hoặc sắp xếp theo số lượng chapter, cần xử lý thêm
   // Xử lý filter theo số lượng chapter
   if (hasChapterFilter) {
-    processChapterCountFilters(query, filters);
-    console.log("getStoriesWithChapterFilters - Query after processChapterCountFilters:", JSON.stringify(query));
+    // Xử lý filter theo số lượng chapter
+    const hasChapterCount = filters.chapter_count !== undefined && filters.chapter_count !== '';
+    const hasChapterCountOp = filters.chapter_count_op !== undefined && filters.chapter_count_op !== '';
+
+    if (hasChapterCount && hasChapterCountOp) {
+      // Đảm bảo chapter_count là số
+      const chapterCountNum = parseInt(filters.chapter_count);
+      const chapterCountOp = filters.chapter_count_op;
+
+      console.log("getStoriesWithChapterFilters - Processing chapter_count:", chapterCountNum, "with operator:", chapterCountOp);
+
+      // Thêm điều kiện lọc theo số lượng chapter vào query
+      switch (chapterCountOp) {
+        case 'eq': // Bằng
+          query.chapter_count = chapterCountNum;
+          break;
+        case 'gt': // Lớn hơn
+          query.chapter_count = { $gt: chapterCountNum };
+          break;
+        case 'lt': // Nhỏ hơn
+          query.chapter_count = { $lt: chapterCountNum };
+          break;
+        case 'gte': // Lớn hơn hoặc bằng
+          query.chapter_count = { $gte: chapterCountNum };
+          break;
+        case 'lte': // Nhỏ hơn hoặc bằng
+          query.chapter_count = { $lte: chapterCountNum };
+          break;
+        default:
+          query.chapter_count = chapterCountNum;
+      }
+    }
+
+    // Nếu có lọc theo has_chapters
+    if (filters.has_chapters !== undefined && filters.has_chapters !== '') {
+      const hasChaptersBool = filters.has_chapters === 'true';
+      console.log("getStoriesWithChapterFilters - Processing has_chapters:", hasChaptersBool);
+
+      if (hasChaptersBool) {
+        // Lọc truyện có chapter (chapter_count > 0)
+        if (!query.chapter_count) {
+          query.chapter_count = { $gt: 0 };
+        }
+      } else {
+        // Lọc truyện không có chapter (chapter_count = 0)
+        query.chapter_count = 0;
+      }
+    }
+
+    console.log("getStoriesWithChapterFilters - Query after chapter filters:", JSON.stringify(query));
   }
 
   // Lấy truyện theo query đã được cập nhật và sắp xếp
@@ -476,6 +529,8 @@ const getStoriesWithChapterFilters = async (query, sortOptions, page, limit, inc
     .populate('authors', 'name slug')
     .populate('categories', 'name slug')
     .sort(sortOptions);
+
+  console.log("getStoriesWithChapterFilters - Found items:", items.length);
 
   // Count total
   const total = items.length;

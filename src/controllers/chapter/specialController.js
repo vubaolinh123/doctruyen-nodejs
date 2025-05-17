@@ -284,3 +284,44 @@ exports.getStoriesForDropdown = async (req, res) => {
     });
   }
 };
+
+/**
+ * Lấy số chương tiếp theo của một truyện
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+exports.getNextChapterNumber = async (req, res) => {
+  try {
+    const { storyId } = req.params;
+    console.log(`[API] Lấy số chương tiếp theo cho truyện ID: ${storyId}`);
+
+    if (!storyId) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID truyện không hợp lệ'
+      });
+    }
+
+    const nextChapterNumber = await chapterService.getNextChapterNumber(storyId);
+
+    return res.json({
+      success: true,
+      nextChapterNumber
+    });
+  } catch (error) {
+    console.error('[API] Error:', error);
+
+    if (error.message.includes('ID truyện không hợp lệ')) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID truyện không hợp lệ'
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi server',
+      error: error.message
+    });
+  }
+};

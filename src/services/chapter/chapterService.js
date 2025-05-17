@@ -15,10 +15,10 @@ class ChapterService {
   /**
    * Lấy chapter theo ID
    * @param {string} id - ID của chapter
-   * @returns {Promise<Object>} - Chapter tìm thấy
+   * @returns {Promise<Object>} - Chapter tìm thấy với thông tin truyện
    */
   async getChapterById(id) {
-    return await Chapter.findById(id);
+    return await Chapter.findById(id).populate('story_id', 'name slug');
   }
 
   /**
@@ -56,8 +56,19 @@ class ChapterService {
       status: chapterData.status !== undefined ? Boolean(chapterData.status) : true
     };
 
+    // Tạo chapter mới
     const item = new Chapter(newChapterData);
-    return await item.save();
+    const savedChapter = await item.save();
+
+    // Cập nhật chapter_count trong Story
+    const currentCount = storyExists.chapter_count || 0;
+    await Story.findByIdAndUpdate(
+      chapterData.story_id,
+      { chapter_count: currentCount + 1 }
+    );
+    console.log(`[Service] Đã cập nhật chapter_count của truyện ${chapterData.story_id} từ ${currentCount} lên ${currentCount + 1}`);
+
+    return savedChapter;
   }
 
   /**
@@ -67,11 +78,24 @@ class ChapterService {
    * @returns {Promise<Object>} - Chapter sau khi cập nhật
    */
   async updateChapter(id, updateData) {
+    // Tìm chapter hiện tại để lấy story_id cũ
+    const currentChapter = await Chapter.findById(id);
+    if (!currentChapter) {
+      throw new Error('Chapter not found');
+    }
+
+    const oldStoryId = currentChapter.story_id;
+    const newStoryId = updateData.story_id;
+
+    // Kiểm tra nếu có thay đổi story_id
+    const isStoryChanged = newStoryId && newStoryId.toString() !== oldStoryId.toString();
+
     // Prepare update data
     const dataToUpdate = {};
 
     // Only update fields that are present in request
     if (updateData.kho_truyen_chapter_id !== undefined) dataToUpdate.kho_truyen_chapter_id = updateData.kho_truyen_chapter_id;
+    if (updateData.story_id !== undefined) dataToUpdate.story_id = updateData.story_id;
     if (updateData.chapter !== undefined) dataToUpdate.chapter = updateData.chapter;
     if (updateData.name !== undefined) dataToUpdate.name = updateData.name;
     if (updateData.slug !== undefined) dataToUpdate.slug = updateData.slug;
@@ -84,11 +108,41 @@ class ChapterService {
     if (updateData.is_new !== undefined) dataToUpdate.is_new = Boolean(updateData.is_new);
     if (updateData.status !== undefined) dataToUpdate.status = Boolean(updateData.status);
 
-    return await Chapter.findByIdAndUpdate(
+    // Cập nhật chapter
+    const updatedChapter = await Chapter.findByIdAndUpdate(
       id,
       dataToUpdate,
       { new: true }
     );
+
+    // Nếu có thay đổi story_id, cập nhật chapter_count cho cả truyện cũ và mới
+    if (isStoryChanged) {
+      // Giảm chapter_count của truyện cũ
+      const oldStory = await Story.findById(oldStoryId);
+      if (oldStory) {
+        const oldCount = oldStory.chapter_count || 0;
+        if (oldCount > 0) {
+          await Story.findByIdAndUpdate(
+            oldStoryId,
+            { chapter_count: oldCount - 1 }
+          );
+          console.log(`[Service] Đã giảm chapter_count của truyện cũ ${oldStoryId} từ ${oldCount} xuống ${oldCount - 1}`);
+        }
+      }
+
+      // Tăng chapter_count của truyện mới
+      const newStory = await Story.findById(newStoryId);
+      if (newStory) {
+        const newCount = newStory.chapter_count || 0;
+        await Story.findByIdAndUpdate(
+          newStoryId,
+          { chapter_count: newCount + 1 }
+        );
+        console.log(`[Service] Đã tăng chapter_count của truyện mới ${newStoryId} từ ${newCount} lên ${newCount + 1}`);
+      }
+    }
+
+    return updatedChapter;
   }
 
   /**
@@ -97,7 +151,33 @@ class ChapterService {
    * @returns {Promise<Object>} - Chapter đã xóa
    */
   async deleteChapter(id) {
-    return await Chapter.findByIdAndDelete(id);
+    // Tìm chapter để lấy story_id trước khi xóa
+    const chapter = await Chapter.findById(id);
+    if (!chapter) {
+      throw new Error('Chapter not found');
+    }
+
+    const storyId = chapter.story_id;
+
+    // Xóa chapter
+    const deletedChapter = await Chapter.findByIdAndDelete(id);
+
+    // Cập nhật chapter_count trong Story
+    if (storyId) {
+      const story = await Story.findById(storyId);
+      if (story) {
+        const currentCount = story.chapter_count || 0;
+        if (currentCount > 0) {
+          await Story.findByIdAndUpdate(
+            storyId,
+            { chapter_count: currentCount - 1 }
+          );
+          console.log(`[Service] Đã cập nhật chapter_count của truyện ${storyId} từ ${currentCount} xuống ${currentCount - 1}`);
+        }
+      }
+    }
+
+    return deletedChapter;
   }
 
   /**
@@ -512,6 +592,38 @@ class ChapterService {
       flag,
       value: chapter[flag]
     };
+  }
+
+  /**
+   * Lấy số chương tiếp theo của một truyện
+   * @param {string} storyId - ID của truyện
+   * @returns {Promise<number>} - Số chương tiếp theo
+   */
+  async getNextChapterNumber(storyId) {
+    try {
+      console.log(`[Service] Lấy số chương tiếp theo cho truyện ID: ${storyId}`);
+
+      // Kiểm tra storyId có hợp lệ không
+      if (!mongoose.Types.ObjectId.isValid(storyId)) {
+        throw new Error('ID truyện không hợp lệ');
+      }
+
+      // Tìm chapter có số chương lớn nhất của truyện
+      const latestChapter = await Chapter.findOne({ story_id: storyId })
+        .sort({ chapter: -1 })
+        .limit(1);
+
+      // Nếu không có chapter nào, trả về 1
+      if (!latestChapter) {
+        return 1;
+      }
+
+      // Trả về số chương tiếp theo
+      return latestChapter.chapter + 1;
+    } catch (error) {
+      console.error(`[Service] Error in getNextChapterNumber: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
