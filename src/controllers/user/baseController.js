@@ -9,14 +9,14 @@ const userService = require('../../services/user/userService');
 exports.getAll = async (req, res) => {
   try {
     const { search, role, page, limit, sort } = req.query;
-    const result = await userService.getAllUsers({ 
-      search, 
-      role, 
-      page, 
-      limit, 
-      sort 
+    const result = await userService.getAllUsers({
+      search,
+      role,
+      page,
+      limit,
+      sort
     });
-    
+
     res.json({
       success: true,
       data: result.items,
@@ -29,9 +29,9 @@ exports.getAll = async (req, res) => {
     });
   } catch (error) {
     console.error('Lỗi khi lấy danh sách người dùng:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Lỗi máy chủ nội bộ' 
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ nội bộ'
     });
   }
 };
@@ -45,24 +45,24 @@ exports.getAll = async (req, res) => {
 exports.getById = async (req, res) => {
   try {
     const user = await userService.getUserById(req.params.id);
-    
+
     res.json({
       success: true,
-      data: user
+      user: user
     });
   } catch (error) {
     console.error('Lỗi khi lấy người dùng theo ID:', error);
-    
+
     if (error.message === 'Không tìm thấy người dùng') {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Không tìm thấy người dùng' 
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy người dùng'
       });
     }
-    
-    res.status(500).json({ 
-      success: false, 
-      message: 'Lỗi máy chủ nội bộ' 
+
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ nội bộ'
     });
   }
 };
@@ -76,7 +76,7 @@ exports.getById = async (req, res) => {
 exports.create = async (req, res) => {
   try {
     const user = await userService.createUser(req.body);
-    
+
     res.status(201).json({
       success: true,
       message: 'Tạo người dùng thành công',
@@ -84,18 +84,18 @@ exports.create = async (req, res) => {
     });
   } catch (error) {
     console.error('Lỗi khi tạo người dùng:', error);
-    
+
     // Xử lý lỗi trùng lặp email
     if (error.code === 11000 && error.keyPattern && error.keyPattern.email) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Email đã được sử dụng' 
+      return res.status(400).json({
+        success: false,
+        message: 'Email đã được sử dụng'
       });
     }
-    
-    res.status(400).json({ 
-      success: false, 
-      message: error.message 
+
+    res.status(400).json({
+      success: false,
+      message: error.message
     });
   }
 };
@@ -109,7 +109,7 @@ exports.create = async (req, res) => {
 exports.update = async (req, res) => {
   try {
     const user = await userService.updateUser(req.params.id, req.body);
-    
+
     res.json({
       success: true,
       message: 'Cập nhật người dùng thành công',
@@ -117,25 +117,25 @@ exports.update = async (req, res) => {
     });
   } catch (error) {
     console.error('Lỗi khi cập nhật người dùng:', error);
-    
+
     if (error.message === 'Không tìm thấy người dùng') {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Không tìm thấy người dùng' 
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy người dùng'
       });
     }
-    
+
     // Xử lý lỗi trùng lặp email
     if (error.code === 11000 && error.keyPattern && error.keyPattern.email) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Email đã được sử dụng' 
+      return res.status(400).json({
+        success: false,
+        message: 'Email đã được sử dụng'
       });
     }
-    
-    res.status(400).json({ 
-      success: false, 
-      message: error.message 
+
+    res.status(400).json({
+      success: false,
+      message: error.message
     });
   }
 };
@@ -149,24 +149,24 @@ exports.update = async (req, res) => {
 exports.remove = async (req, res) => {
   try {
     await userService.deleteUser(req.params.id);
-    
+
     res.json({
       success: true,
       message: 'Xóa người dùng thành công'
     });
   } catch (error) {
     console.error('Lỗi khi xóa người dùng:', error);
-    
+
     if (error.message === 'Không tìm thấy người dùng') {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Không tìm thấy người dùng' 
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy người dùng'
       });
     }
-    
-    res.status(500).json({ 
-      success: false, 
-      message: 'Lỗi máy chủ nội bộ' 
+
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ nội bộ'
     });
   }
 };
@@ -261,4 +261,4 @@ exports.getSlugById = async (req, res) => {
       message: error.message || 'Internal Server Error'
     });
   }
-}; 
+};
