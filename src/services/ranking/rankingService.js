@@ -22,34 +22,46 @@ class RankingService {
     const ratings_sum = stats?.ratings_sum || 0;
     const comments_count = stats?.comments_count || 0;
     const bookmarks_count = stats?.bookmarks_count || 0;
+    const chapter_count = story.chapter_count || 0;
 
     // Tính điểm đánh giá trung bình
     const avgRating = ratings_count > 0 ? ratings_sum / ratings_count : 0;
 
-    // Số lượng đánh giá tối thiểu để có độ tin cậy cao
-    const minRatings = options.minRatings || 10;
+    // Số lượng đánh giá tối thiểu để có độ tin cậy cao (giảm xuống để dễ dàng hơn)
+    const minRatings = options.minRatings || 3;
 
     // Điểm đánh giá trung bình của tất cả truyện
     const avgRatingAllStories = options.avgRatingAllStories || 3.5;
 
-    // Tính toán điểm Bayesian
-    const bayesianRating = ((ratings_count / (ratings_count + minRatings)) * avgRating) +
-                          ((minRatings / (ratings_count + minRatings)) * avgRatingAllStories);
+    // Tính toán điểm Bayesian (nếu không có đánh giá, sử dụng giá trị mặc định)
+    const bayesianRating = ratings_count > 0
+      ? ((ratings_count / (ratings_count + minRatings)) * avgRating) + ((minRatings / (ratings_count + minRatings)) * avgRatingAllStories)
+      : avgRatingAllStories / 2; // Giá trị mặc định thấp hơn nếu không có đánh giá
 
     // Tính số ngày kể từ lần cập nhật cuối
     const daysSinceLastUpdate = story.updatedAt ?
       Math.max(0, moment().diff(moment(story.updatedAt), 'days')) : 0;
 
-    // Điểm cơ bản dựa trên các thông số
-    const baseScore = (views * 0.4) + (avgRating * 10 * 0.3) + (bookmarks_count * 0.2) + (comments_count * 0.1);
+    // Điểm cơ bản dựa trên các thông số (tăng trọng số cho views khi không có đánh giá)
+    let baseScore;
+    if (ratings_count > 0) {
+      // Nếu có đánh giá, sử dụng công thức cân bằng
+      baseScore = (views * 0.4) + (avgRating * 10 * 0.3) + (bookmarks_count * 0.2) + (comments_count * 0.1);
+    } else {
+      // Nếu không có đánh giá, tăng trọng số cho views và số chương
+      baseScore = (views * 0.6) + (bookmarks_count * 0.2) + (comments_count * 0.1) + (chapter_count * 0.1);
+    }
 
-    // Điều chỉnh theo thời gian (giảm 5% mỗi ngày không cập nhật)
-    const timeAdjustedScore = baseScore * Math.pow(0.95, daysSinceLastUpdate);
+    // Điều chỉnh theo thời gian (giảm 3% mỗi ngày không cập nhật thay vì 5%)
+    const timeAdjustedScore = baseScore * Math.pow(0.97, daysSinceLastUpdate);
 
-    // Điểm cuối cùng
-    const finalScore = (timeAdjustedScore * 0.7) + (bayesianRating * 10 * 0.3);
+    // Điểm cuối cùng (tăng trọng số cho timeAdjustedScore khi không có đánh giá)
+    const finalScore = ratings_count > 0
+      ? (timeAdjustedScore * 0.7) + (bayesianRating * 10 * 0.3)
+      : (timeAdjustedScore * 0.9) + (bayesianRating * 10 * 0.1);
 
-    return finalScore;
+    // Đảm bảo điểm không âm và có giá trị tối thiểu
+    return Math.max(1, finalScore);
   }
 
   /**

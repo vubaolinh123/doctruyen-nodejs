@@ -43,8 +43,8 @@ const setupStatics = (schema) => {
       date: {
         $gte: startOfDay,
         $lte: endOfDay
-      },
-      daily_rank: { $gt: 0 }
+      }
+      // Đã loại bỏ điều kiện daily_rank > 0 để hiển thị tất cả truyện
     })
       .sort({ daily_rank: 1 })
       .skip(skip)
@@ -77,8 +77,8 @@ const setupStatics = (schema) => {
       date: {
         $gte: startOfDay,
         $lte: endOfDay
-      },
-      weekly_rank: { $gt: 0 }
+      }
+      // Đã loại bỏ điều kiện weekly_rank > 0 để hiển thị tất cả truyện
     })
       .sort({ weekly_rank: 1 })
       .skip(skip)
@@ -111,8 +111,8 @@ const setupStatics = (schema) => {
       date: {
         $gte: startOfDay,
         $lte: endOfDay
-      },
-      monthly_rank: { $gt: 0 }
+      }
+      // Đã loại bỏ điều kiện monthly_rank > 0 để hiển thị tất cả truyện
     })
       .sort({ monthly_rank: 1 })
       .skip(skip)
@@ -145,8 +145,8 @@ const setupStatics = (schema) => {
       date: {
         $gte: startOfDay,
         $lte: endOfDay
-      },
-      all_time_rank: { $gt: 0 }
+      }
+      // Đã loại bỏ điều kiện all_time_rank > 0 để hiển thị tất cả truyện
     })
       .sort({ all_time_rank: 1 })
       .skip(skip)
@@ -177,8 +177,8 @@ const setupStatics = (schema) => {
       date: {
         $gte: startOfDay,
         $lte: endOfDay
-      },
-      daily_rank: { $gt: 0 }
+      }
+      // Đã loại bỏ điều kiện daily_rank > 0 để đếm tất cả truyện
     });
   };
 };

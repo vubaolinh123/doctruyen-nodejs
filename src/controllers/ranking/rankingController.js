@@ -15,24 +15,24 @@ class RankingController {
     try {
       const { limit = 10, page = 1, category } = req.query;
       const skip = (parseInt(page) - 1) * parseInt(limit);
-      
+
       // Lấy ngày hiện tại
       const today = moment().startOf('day').toDate();
-      
+
       // Lấy danh sách xếp hạng
       const rankings = await StoryRankings.findDailyRankings(today, parseInt(limit), skip);
-      
+
       // Lọc theo thể loại nếu có
       let result = rankings;
       if (category) {
-        result = rankings.filter(r => 
+        result = rankings.filter(r =>
           r.story_id.categories.some(c => c.slug === category)
         );
       }
-      
+
       // Đếm tổng số truyện
       const total = await StoryRankings.countDailyRankings(today);
-      
+
       res.json({
         success: true,
         rankings: result,
@@ -50,7 +50,7 @@ class RankingController {
       });
     }
   }
-  
+
   /**
    * Lấy xếp hạng theo tuần
    * @param {Object} req - Request object
@@ -60,30 +60,30 @@ class RankingController {
     try {
       const { limit = 10, page = 1, category } = req.query;
       const skip = (parseInt(page) - 1) * parseInt(limit);
-      
+
       // Lấy ngày hiện tại
       const today = moment().startOf('day').toDate();
-      
+
       // Lấy danh sách xếp hạng
       const rankings = await StoryRankings.findWeeklyRankings(today, parseInt(limit), skip);
-      
+
       // Lọc theo thể loại nếu có
       let result = rankings;
       if (category) {
-        result = rankings.filter(r => 
+        result = rankings.filter(r =>
           r.story_id.categories.some(c => c.slug === category)
         );
       }
-      
+
       // Đếm tổng số truyện
       const total = await StoryRankings.countDocuments({
         date: {
           $gte: moment(today).startOf('day').toDate(),
           $lte: moment(today).endOf('day').toDate()
-        },
-        weekly_rank: { $gt: 0 }
+        }
+        // Removed weekly_rank > 0 condition to count all stories
       });
-      
+
       res.json({
         success: true,
         rankings: result,
@@ -101,7 +101,7 @@ class RankingController {
       });
     }
   }
-  
+
   /**
    * Lấy xếp hạng theo tháng
    * @param {Object} req - Request object
@@ -111,30 +111,30 @@ class RankingController {
     try {
       const { limit = 10, page = 1, category } = req.query;
       const skip = (parseInt(page) - 1) * parseInt(limit);
-      
+
       // Lấy ngày hiện tại
       const today = moment().startOf('day').toDate();
-      
+
       // Lấy danh sách xếp hạng
       const rankings = await StoryRankings.findMonthlyRankings(today, parseInt(limit), skip);
-      
+
       // Lọc theo thể loại nếu có
       let result = rankings;
       if (category) {
-        result = rankings.filter(r => 
+        result = rankings.filter(r =>
           r.story_id.categories.some(c => c.slug === category)
         );
       }
-      
+
       // Đếm tổng số truyện
       const total = await StoryRankings.countDocuments({
         date: {
           $gte: moment(today).startOf('day').toDate(),
           $lte: moment(today).endOf('day').toDate()
-        },
-        monthly_rank: { $gt: 0 }
+        }
+        // Removed monthly_rank > 0 condition to count all stories
       });
-      
+
       res.json({
         success: true,
         rankings: result,
@@ -152,7 +152,7 @@ class RankingController {
       });
     }
   }
-  
+
   /**
    * Lấy xếp hạng toàn thời gian
    * @param {Object} req - Request object
@@ -162,30 +162,30 @@ class RankingController {
     try {
       const { limit = 10, page = 1, category } = req.query;
       const skip = (parseInt(page) - 1) * parseInt(limit);
-      
+
       // Lấy ngày hiện tại
       const today = moment().startOf('day').toDate();
-      
+
       // Lấy danh sách xếp hạng
       const rankings = await StoryRankings.findAllTimeRankings(today, parseInt(limit), skip);
-      
+
       // Lọc theo thể loại nếu có
       let result = rankings;
       if (category) {
-        result = rankings.filter(r => 
+        result = rankings.filter(r =>
           r.story_id.categories.some(c => c.slug === category)
         );
       }
-      
+
       // Đếm tổng số truyện
       const total = await StoryRankings.countDocuments({
         date: {
           $gte: moment(today).startOf('day').toDate(),
           $lte: moment(today).endOf('day').toDate()
-        },
-        all_time_rank: { $gt: 0 }
+        }
+        // Removed all_time_rank > 0 condition to count all stories
       });
-      
+
       res.json({
         success: true,
         rankings: result,
@@ -203,7 +203,7 @@ class RankingController {
       });
     }
   }
-  
+
   /**
    * Cập nhật xếp hạng theo ngày
    * @param {Object} req - Request object
@@ -212,7 +212,7 @@ class RankingController {
   async updateDailyRankings(req, res) {
     try {
       const count = await rankingService.updateDailyRankings();
-      
+
       res.json({
         success: true,
         message: `Updated daily rankings for ${count} stories`
@@ -226,7 +226,7 @@ class RankingController {
       });
     }
   }
-  
+
   /**
    * Cập nhật xếp hạng theo tuần
    * @param {Object} req - Request object
@@ -235,7 +235,7 @@ class RankingController {
   async updateWeeklyRankings(req, res) {
     try {
       const count = await rankingService.updateWeeklyRankings();
-      
+
       res.json({
         success: true,
         message: `Updated weekly rankings for ${count} stories`
@@ -249,7 +249,7 @@ class RankingController {
       });
     }
   }
-  
+
   /**
    * Cập nhật xếp hạng theo tháng
    * @param {Object} req - Request object
@@ -258,7 +258,7 @@ class RankingController {
   async updateMonthlyRankings(req, res) {
     try {
       const count = await rankingService.updateMonthlyRankings();
-      
+
       res.json({
         success: true,
         message: `Updated monthly rankings for ${count} stories`
@@ -272,7 +272,7 @@ class RankingController {
       });
     }
   }
-  
+
   /**
    * Cập nhật xếp hạng toàn thời gian
    * @param {Object} req - Request object
@@ -281,7 +281,7 @@ class RankingController {
   async updateAllTimeRankings(req, res) {
     try {
       const count = await rankingService.updateAllTimeRankings();
-      
+
       res.json({
         success: true,
         message: `Updated all-time rankings for ${count} stories`
@@ -295,7 +295,7 @@ class RankingController {
       });
     }
   }
-  
+
   /**
    * Cập nhật tất cả xếp hạng
    * @param {Object} req - Request object
@@ -307,7 +307,7 @@ class RankingController {
       const weeklyCount = await rankingService.updateWeeklyRankings();
       const monthlyCount = await rankingService.updateMonthlyRankings();
       const allTimeCount = await rankingService.updateAllTimeRankings();
-      
+
       res.json({
         success: true,
         message: 'Updated all rankings',
