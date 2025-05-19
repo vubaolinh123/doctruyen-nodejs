@@ -19,5 +19,6 @@ module.exports = {
   getStoriesByAuthor: specialController.getStoriesByAuthor,
   searchStories: specialController.searchStories,
   getNewStories: specialController.getNewStories,
+  getFullStories: specialController.getFullStories,
   getSuggestedStories: specialController.getSuggestedStories
-}; 
+};

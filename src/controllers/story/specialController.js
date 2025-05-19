@@ -169,6 +169,28 @@ exports.getNewStories = async (req, res) => {
 };
 
 /**
+ * Lấy danh sách truyện đã hoàn thành (is_full = true)
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+exports.getFullStories = async (req, res) => {
+  try {
+    const { limit = 10 } = req.query;
+    const result = await specialStoryService.getFullStories(parseInt(limit));
+
+    // Trả về kết quả trực tiếp từ service
+    res.json(result);
+  } catch (err) {
+    console.error('Error getting full stories:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: err.message
+    });
+  }
+};
+
+/**
  * Lấy danh sách truyện đề xuất
  * @param {Object} req - Request object
  * @param {Object} res - Response object

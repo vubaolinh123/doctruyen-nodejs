@@ -113,6 +113,43 @@ const getNewStories = async (limit = 10) => {
 };
 
 /**
+ * Lấy danh sách truyện đã hoàn thành (có is_full = true)
+ * @param {number} limit - Số lượng truyện cần lấy
+ * @returns {Promise<Object>} - Kết quả chứa danh sách truyện đã hoàn thành
+ */
+const getFullStories = async (limit = 10) => {
+  // Tìm truyện có is_full = true và status = true
+  const stories = await Story.find({
+    is_full: true,
+    status: true
+  })
+    .sort({ updatedAt: -1 })
+    .limit(parseInt(limit))
+    .populate('author_id', 'name slug')
+    .populate('categories', 'name slug');
+
+  // Lấy chapter mới nhất cho mỗi truyện
+  const storiesWithChapterInfo = await Promise.all(
+    stories.map(async (story) => {
+      const storyObj = story.toObject();
+
+      // Lấy chapter mới nhất
+      const latestChapter = await Chapter.findOne({ story_id: story._id })
+        .sort({ chapter: -1 })
+        .select('chapter name createdAt');
+      storyObj.latest_chapter = latestChapter;
+
+      return storyObj;
+    })
+  );
+
+  return {
+    success: true,
+    stories: storiesWithChapterInfo
+  };
+};
+
+/**
  * Lấy danh sách truyện đề xuất dựa trên thể loại và lượt xem
  * @param {Object} options - Các tùy chọn để lấy truyện đề xuất
  * @returns {Promise<Object>} - Kết quả chứa danh sách truyện đề xuất
@@ -225,5 +262,6 @@ module.exports = {
   getStoriesByAuthor,
   searchStories,
   getNewStories,
+  getFullStories,
   getSuggestedStories
 };
