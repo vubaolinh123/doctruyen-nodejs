@@ -777,9 +777,56 @@ const incrementStoryViews = async (slug) => {
     throw new Error('Story not found');
   }
 
-  // Tăng lượt view lên 1
+  // Tăng lượt view lên 1 trong bảng Story (để tương thích ngược)
   story.views += 1;
   await story.save();
+
+  // Tăng lượt view trong bảng StoryStats
+  try {
+    const StoryStats = require('../../models/storyStats');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Lấy thông tin ngày, tháng, năm, tuần
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    const day = today.getDate();
+    const week = require('moment')(today).isoWeek();
+
+    // Tìm hoặc tạo bản ghi thống kê cho ngày hôm nay
+    let stats = await StoryStats.findOne({
+      story_id: story._id,
+      date: today
+    });
+
+    if (!stats) {
+      // Tạo bản ghi mới nếu chưa có
+      stats = new StoryStats({
+        story_id: story._id,
+        date: today,
+        views: 1,
+        unique_views: 1,
+        ratings_count: 0,
+        ratings_sum: 0,
+        comments_count: 0,
+        bookmarks_count: 0,
+        shares_count: 0,
+        day,
+        month,
+        year,
+        week
+      });
+    } else {
+      // Cập nhật bản ghi hiện có
+      stats.views += 1;
+      stats.unique_views += 1; // Đây chỉ là giá trị tạm thời, cần logic phức tạp hơn để đếm unique views
+    }
+
+    await stats.save();
+  } catch (error) {
+    console.error('Error updating StoryStats:', error);
+    // Không throw error ở đây để không ảnh hưởng đến luồng chính
+  }
 
   return { success: true, views: story.views };
 };

@@ -6,6 +6,7 @@ const authRoutes = require('./routes/auth');
 const cors = require('cors');
 const errorHandler = require('./middleware/errorHandler');
 const setupAttendanceCron = require('./cron/attendanceCron');
+const cron = require('./cron');
 const apiLogger = require('./middleware/apiLogger');
 const swaggerUI = require('swagger-ui-express');
 const swaggerSpecs = require('./config/swagger');
@@ -80,6 +81,10 @@ connectDB()
       // Khởi động cron job cho điểm danh
       setupAttendanceCron();
       console.log('📅 Attendance cron job scheduled');
+
+      // Khởi động cron job cho xếp hạng
+      cron.startAllCrons();
+      console.log('🏆 Ranking cron jobs scheduled');
     });
   })
   .catch((error) => {

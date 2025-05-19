@@ -47,25 +47,12 @@ const storySchema = new Schema({
     ref: 'Category'
   }],
 
-  // Thông tin đánh giá
-  stars: {
-    type: Number,
-    default: 0,
-    min: 0,
-    max: 10
-  },
-
-  count_star: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-
-  // Thông tin lượt xem
+  // Thống kê lượt xem (giữ lại để tương thích ngược)
   views: {
     type: Number,
     default: 0,
-    min: 0
+    min: 0,
+    deprecated: true
   },
 
   // Thông tin trạng thái
@@ -92,6 +79,11 @@ const storySchema = new Schema({
   },
 
   hot_day: {
+    type: Boolean,
+    default: false
+  },
+
+  hot_week: {
     type: Boolean,
     default: false
   },
@@ -131,7 +123,7 @@ const storySchema = new Schema({
 storySchema.index({ name: 'text', desc: 'text' });
 storySchema.index({ createdAt: -1 });
 storySchema.index({ updatedAt: -1 });
+// Giữ lại index cho trường views để tương thích ngược
 storySchema.index({ views: -1 });
-storySchema.index({ stars: -1 });
 
 module.exports = storySchema;

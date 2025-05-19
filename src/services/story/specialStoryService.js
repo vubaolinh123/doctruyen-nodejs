@@ -18,9 +18,49 @@ const getHotStories = async (limit = 10) => {
  * @returns {Promise<Array>} - Danh sách truyện có đánh giá cao
  */
 const getTopRatedStories = async (limit = 10) => {
-  return await Story.findTopRatedStories(parseInt(limit))
-    .populate('authors', 'name slug')
-    .populate('categories', 'name slug');
+  try {
+    // Lấy từ bảng StoryRankings
+    const StoryRankings = require('../../models/storyRankings');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const rankings = await StoryRankings.find({
+      date: today,
+      all_time_rank: { $gt: 0 }
+    })
+      .sort({ all_time_rank: 1 })
+      .limit(parseInt(limit))
+      .populate({
+        path: 'story_id',
+        select: 'name slug image desc categories author_id views is_full is_hot is_new',
+        populate: [
+          { path: 'categories', select: 'name slug' },
+          { path: 'author_id', select: 'name slug' }
+        ]
+      });
+
+    if (rankings && rankings.length > 0) {
+      // Trả về danh sách truyện từ xếp hạng
+      return rankings.map(r => r.story_id);
+    }
+
+    // Nếu không có dữ liệu từ StoryRankings, lấy truyện có lượt xem cao nhất
+    console.log('No rankings data available, falling back to views-based sorting');
+    return await Story.find({ status: true })
+      .sort({ views: -1 })
+      .limit(parseInt(limit))
+      .populate('author_id', 'name slug')
+      .populate('categories', 'name slug');
+  } catch (error) {
+    console.error('Error getting top rated stories:', error);
+
+    // Fallback nếu có lỗi
+    return await Story.find({ status: true })
+      .sort({ views: -1 })
+      .limit(parseInt(limit))
+      .populate('author_id', 'name slug')
+      .populate('categories', 'name slug');
+  }
 };
 
 /**

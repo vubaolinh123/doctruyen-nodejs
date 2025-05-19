@@ -12,6 +12,7 @@ router.use('/slides', require('./slides'));
 router.use('/missions', require('./missions'));
 router.use('/seo-config', require('./seoConfig'));
 router.use('/cache-config', require('./cacheConfig'));
+router.use('/rankings', require('./rankings'));
 
 // Route public cho user
 router.get('/public/users/slug/:slug', auth.optional, userController.getBySlug);

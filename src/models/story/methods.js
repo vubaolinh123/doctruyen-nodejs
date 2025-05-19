@@ -10,12 +10,12 @@ const setupMethods = (schema) => {
    */
   schema.methods.updateChapterCount = async function(delta = 1) {
     this.chapter_count += delta;
-    
+
     // Đảm bảo chapter_count không âm
     if (this.chapter_count < 0) {
       this.chapter_count = 0;
     }
-    
+
     return this.save();
   };
 
@@ -39,13 +39,55 @@ const setupMethods = (schema) => {
     if (rating < 1 || rating > 10) {
       throw new Error('Đánh giá phải từ 1 đến 10');
     }
-    
-    // Tính toán đánh giá mới
-    const totalStars = (this.stars * this.count_star) + rating;
-    this.count_star += 1;
-    this.stars = totalStars / this.count_star;
-    
-    return this.save();
+
+    // Cập nhật đánh giá trong bảng StoryStats
+    try {
+      const StoryStats = require('../../models/storyStats');
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // Lấy thông tin ngày, tháng, năm, tuần
+      const year = today.getFullYear();
+      const month = today.getMonth();
+      const day = today.getDate();
+      const week = require('moment')(today).isoWeek();
+
+      // Tìm hoặc tạo bản ghi thống kê cho ngày hôm nay
+      let stats = await StoryStats.findOne({
+        story_id: this._id,
+        date: today
+      });
+
+      if (!stats) {
+        // Tạo bản ghi mới nếu chưa có
+        stats = new StoryStats({
+          story_id: this._id,
+          date: today,
+          views: 0,
+          unique_views: 0,
+          ratings_count: 1,
+          ratings_sum: rating,
+          comments_count: 0,
+          bookmarks_count: 0,
+          shares_count: 0,
+          day,
+          month,
+          year,
+          week
+        });
+      } else {
+        // Cập nhật bản ghi hiện có
+        stats.ratings_count += 1;
+        stats.ratings_sum += rating;
+      }
+
+      await stats.save();
+    } catch (error) {
+      console.error('Error updating StoryStats for rating:', error);
+      throw new Error('Không thể cập nhật đánh giá: ' + error.message);
+    }
+
+    return this;
   };
 };
 

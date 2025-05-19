@@ -33,13 +33,13 @@ const setupStatics = (schema) => {
    * Tìm truyện được đánh giá cao
    * @param {number} limit - Số lượng truyện cần lấy
    * @returns {Promise<Array>} - Danh sách truyện được đánh giá cao
+   * @deprecated - Sử dụng StoryRankings.findAllTimeRankings thay thế
    */
   schema.statics.findTopRatedStories = function(limit = 10) {
     return this.find({
-      status: true,
-      count_star: { $gt: 0 }
+      status: true
     })
-      .sort({ stars: -1, count_star: -1 })
+      .sort({ views: -1 })
       .limit(limit);
   };
 
