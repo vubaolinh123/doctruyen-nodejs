@@ -1,5 +1,7 @@
 const Story = require('../../models/story');
 const Chapter = require('../../models/chapter');
+const StoryStats = require('../../models/storyStats');
+const storyStatsService = require('../storyStats/storyStatsService');
 const mongoose = require('mongoose');
 const slugify = require('slugify');
 
@@ -665,6 +667,46 @@ const getStoryBySlug = async (slug) => {
   storyData.chapter_count = chapterCount;
   storyData.latest_chapter = latestChapter;
 
+  // Lấy tất cả thống kê từ StoryStats
+  try {
+    const allStats = await storyStatsService.getAllStats(item._id);
+
+    // Gán lại giá trị views từ StoryStats
+    storyData.views = allStats.totalViews;
+
+    // Gán lại giá trị ratings từ StoryStats
+    storyData.ratings_count = allStats.ratings.ratingsCount;
+    storyData.ratings_sum = allStats.ratings.ratingsSum;
+
+    // Thêm thông tin thống kê chi tiết
+    storyData.stats = {
+      views: {
+        total: allStats.totalViews,
+        byTimeRange: allStats.viewsByTimeRange,
+        daily: allStats.dailyStats.views
+      },
+      ratings: {
+        count: allStats.ratings.ratingsCount,
+        sum: allStats.ratings.ratingsSum,
+        average: allStats.ratings.averageRating,
+        daily: {
+          count: allStats.dailyStats.ratings_count,
+          sum: allStats.dailyStats.ratings_sum
+        }
+      }
+    };
+  } catch (error) {
+    console.error(`Error getting stats for story ${item._id}:`, error);
+    // Nếu có lỗi, đặt giá trị mặc định
+    storyData.views = 0;
+    storyData.ratings_count = 0;
+    storyData.ratings_sum = 0;
+    storyData.stats = {
+      views: { total: 0, byTimeRange: { day: 0, week: 0, month: 0, year: 0, all: 0 }, daily: 0 },
+      ratings: { count: 0, sum: 0, average: 0, daily: { count: 0, sum: 0 } }
+    };
+  }
+
   return storyData;
 };
 
@@ -783,7 +825,8 @@ const incrementStoryViews = async (slug) => {
 
   // Tăng lượt view trong bảng StoryStats
   try {
-    const StoryStats = require('../../models/storyStats');
+    console.log(`[API] Tăng lượt xem cho truyện ${story._id}`);
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -793,16 +836,25 @@ const incrementStoryViews = async (slug) => {
     const day = today.getDate();
     const week = require('moment')(today).isoWeek();
 
+    console.log(`[API] Thông tin ngày: ${today.toISOString()}, year: ${year}, month: ${month}, day: ${day}, week: ${week}`);
+
+    // Chuyển đổi story._id thành ObjectId
+    const storyObjectId = new mongoose.Types.ObjectId(story._id);
+    console.log(`[API] Story ID (ObjectId): ${storyObjectId}`);
+
     // Tìm hoặc tạo bản ghi thống kê cho ngày hôm nay
     let stats = await StoryStats.findOne({
-      story_id: story._id,
+      story_id: storyObjectId,
       date: today
     });
 
+    console.log(`[API] Kết quả tìm StoryStats: ${stats ? 'Tìm thấy' : 'Không tìm thấy'}`);
+
     if (!stats) {
       // Tạo bản ghi mới nếu chưa có
+      console.log(`[API] Tạo bản ghi StoryStats mới cho story_id: ${story._id}`);
       stats = new StoryStats({
-        story_id: story._id,
+        story_id: storyObjectId,
         date: today,
         views: 1,
         unique_views: 1,
@@ -818,17 +870,25 @@ const incrementStoryViews = async (slug) => {
       });
     } else {
       // Cập nhật bản ghi hiện có
+      console.log(`[API] Cập nhật bản ghi StoryStats hiện có - views: ${stats.views}, unique_views: ${stats.unique_views}`);
       stats.views += 1;
       stats.unique_views += 1; // Đây chỉ là giá trị tạm thời, cần logic phức tạp hơn để đếm unique views
     }
 
-    await stats.save();
-  } catch (error) {
-    console.error('Error updating StoryStats:', error);
-    // Không throw error ở đây để không ảnh hưởng đến luồng chính
-  }
+    console.log(`[API] Lưu StoryStats - story_id: ${story._id}, views: ${stats.views}, unique_views: ${stats.unique_views}`);
+    const savedStats = await stats.save();
+    console.log(`[API] Đã lưu StoryStats - _id: ${savedStats._id}`);
 
-  return { success: true, views: story.views };
+    // Lấy tổng lượt xem từ StoryStats
+    const totalViews = await storyStatsService.getTotalViews(story._id);
+    console.log(`[API] Tổng lượt xem cho truyện ${story._id}: ${totalViews}`);
+
+    return { success: true, views: totalViews };
+  } catch (error) {
+    console.error('[API] Error updating StoryStats:', error);
+    // Nếu có lỗi, trả về lượt xem từ Story
+    return { success: true, views: story.views };
+  }
 };
 
 module.exports = {

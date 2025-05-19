@@ -1,5 +1,71 @@
 const Story = require('../../models/story');
 const Chapter = require('../../models/chapter');
+const storyStatsService = require('../storyStats/storyStatsService');
+
+/**
+ * Thêm thông tin stats vào truyện
+ * @param {Object|Array} stories - Truyện hoặc danh sách truyện cần thêm stats
+ * @returns {Promise<Object|Array>} - Truyện hoặc danh sách truyện đã thêm stats
+ */
+const addStatsToStories = async (stories) => {
+  if (!stories) return stories;
+
+  // Nếu là một truyện duy nhất
+  if (!Array.isArray(stories)) {
+    return await addStatsToStory(stories);
+  }
+
+  // Nếu là danh sách truyện
+  return await Promise.all(stories.map(story => addStatsToStory(story)));
+};
+
+/**
+ * Thêm thông tin stats vào một truyện
+ * @param {Object} story - Truyện cần thêm stats
+ * @returns {Promise<Object>} - Truyện đã thêm stats
+ */
+const addStatsToStory = async (story) => {
+  if (!story) return story;
+
+  try {
+    // Chuyển đổi thành object nếu là document Mongoose
+    const storyObj = story.toObject ? story.toObject() : { ...story };
+
+    // Lấy tất cả thống kê từ StoryStats
+    const allStats = await storyStatsService.getAllStats(storyObj._id);
+
+    // Gán lại giá trị views từ StoryStats
+    storyObj.views = allStats.totalViews;
+
+    // Gán lại giá trị ratings từ StoryStats
+    storyObj.ratings_count = allStats.ratings.ratingsCount;
+    storyObj.ratings_sum = allStats.ratings.ratingsSum;
+
+    // Thêm thông tin thống kê chi tiết
+    storyObj.stats = {
+      views: {
+        total: allStats.totalViews,
+        byTimeRange: allStats.viewsByTimeRange,
+        daily: allStats.dailyStats.views
+      },
+      ratings: {
+        count: allStats.ratings.ratingsCount,
+        sum: allStats.ratings.ratingsSum,
+        average: allStats.ratings.averageRating,
+        daily: {
+          count: allStats.dailyStats.ratings_count,
+          sum: allStats.dailyStats.ratings_sum
+        }
+      }
+    };
+
+    return storyObj;
+  } catch (error) {
+    console.error(`Error adding stats to story ${story._id}:`, error);
+    // Nếu có lỗi, trả về truyện gốc
+    return story;
+  }
+};
 
 /**
  * Lấy danh sách truyện hot
@@ -7,9 +73,12 @@ const Chapter = require('../../models/chapter');
  * @returns {Promise<Array>} - Danh sách truyện hot
  */
 const getHotStories = async (limit = 10) => {
-  return await Story.findHotStories(parseInt(limit))
+  const stories = await Story.findHotStories(parseInt(limit))
     .populate('authors', 'name slug')
     .populate('categories', 'name slug');
+
+  // Thêm thông tin stats vào mỗi truyện
+  return await addStatsToStories(stories);
 };
 
 /**
@@ -40,26 +109,31 @@ const getTopRatedStories = async (limit = 10) => {
       });
 
     if (rankings && rankings.length > 0) {
-      // Trả về danh sách truyện từ xếp hạng
-      return rankings.map(r => r.story_id);
+      // Trả về danh sách truyện từ xếp hạng với thông tin stats
+      const stories = rankings.map(r => r.story_id);
+      return await addStatsToStories(stories);
     }
 
     // Nếu không có dữ liệu từ StoryRankings, lấy truyện có lượt xem cao nhất
     console.log('No rankings data available, falling back to views-based sorting');
-    return await Story.find({ status: true })
+    const stories = await Story.find({ status: true })
       .sort({ views: -1 })
       .limit(parseInt(limit))
       .populate('author_id', 'name slug')
       .populate('categories', 'name slug');
+
+    return await addStatsToStories(stories);
   } catch (error) {
     console.error('Error getting top rated stories:', error);
 
     // Fallback nếu có lỗi
-    return await Story.find({ status: true })
+    const stories = await Story.find({ status: true })
       .sort({ views: -1 })
       .limit(parseInt(limit))
       .populate('author_id', 'name slug')
       .populate('categories', 'name slug');
+
+    return await addStatsToStories(stories);
   }
 };
 
@@ -69,9 +143,12 @@ const getTopRatedStories = async (limit = 10) => {
  * @returns {Promise<Array>} - Danh sách truyện gần đây
  */
 const getRecentStories = async (limit = 10) => {
-  return await Story.findRecentlyUpdated(parseInt(limit))
+  const stories = await Story.findRecentlyUpdated(parseInt(limit))
     .populate('authors', 'name slug')
     .populate('categories', 'name slug');
+
+  // Thêm thông tin stats vào mỗi truyện
+  return await addStatsToStories(stories);
 };
 
 /**
@@ -81,9 +158,12 @@ const getRecentStories = async (limit = 10) => {
  * @returns {Promise<Array>} - Danh sách truyện theo thể loại
  */
 const getStoriesByCategory = async (categoryId, limit = 10) => {
-  return await Story.findByCategory(categoryId, parseInt(limit))
+  const stories = await Story.findByCategory(categoryId, parseInt(limit))
     .populate('authors', 'name slug')
     .populate('categories', 'name slug');
+
+  // Thêm thông tin stats vào mỗi truyện
+  return await addStatsToStories(stories);
 };
 
 /**
@@ -93,9 +173,12 @@ const getStoriesByCategory = async (categoryId, limit = 10) => {
  * @returns {Promise<Array>} - Danh sách truyện theo tác giả
  */
 const getStoriesByAuthor = async (authorId, limit = 10) => {
-  return await Story.findByAuthor(authorId, parseInt(limit))
+  const stories = await Story.findByAuthor(authorId, parseInt(limit))
     .populate('authors', 'name slug')
     .populate('categories', 'name slug');
+
+  // Thêm thông tin stats vào mỗi truyện
+  return await addStatsToStories(stories);
 };
 
 /**
@@ -110,9 +193,12 @@ const searchStories = async (keyword, limit = 10) => {
     throw new Error('Keyword is required');
   }
 
-  return await Story.search(keyword, parseInt(limit))
+  const stories = await Story.search(keyword, parseInt(limit))
     .populate('authors', 'name slug')
     .populate('categories', 'name slug');
+
+  // Thêm thông tin stats vào mỗi truyện
+  return await addStatsToStories(stories);
 };
 
 /**
@@ -131,9 +217,10 @@ const getNewStories = async (limit = 10) => {
     .populate('author_id', 'name slug')
     .populate('categories', 'name slug');
 
-  // Lấy chapter mới nhất cho mỗi truyện
-  const storiesWithChapterInfo = await Promise.all(
+  // Lấy chapter mới nhất cho mỗi truyện và thêm thông tin stats
+  const storiesWithInfo = await Promise.all(
     stories.map(async (story) => {
+      // Chuyển đổi thành object
       const storyObj = story.toObject();
 
       // Lấy chapter mới nhất
@@ -142,13 +229,45 @@ const getNewStories = async (limit = 10) => {
         .select('chapter name createdAt');
       storyObj.latest_chapter = latestChapter;
 
+      // Lấy thông tin stats
+      try {
+        const allStats = await storyStatsService.getAllStats(story._id);
+
+        // Gán lại giá trị views từ StoryStats
+        storyObj.views = allStats.totalViews;
+
+        // Gán lại giá trị ratings từ StoryStats
+        storyObj.ratings_count = allStats.ratings.ratingsCount;
+        storyObj.ratings_sum = allStats.ratings.ratingsSum;
+
+        // Thêm thông tin thống kê chi tiết
+        storyObj.stats = {
+          views: {
+            total: allStats.totalViews,
+            byTimeRange: allStats.viewsByTimeRange,
+            daily: allStats.dailyStats.views
+          },
+          ratings: {
+            count: allStats.ratings.ratingsCount,
+            sum: allStats.ratings.ratingsSum,
+            average: allStats.ratings.averageRating,
+            daily: {
+              count: allStats.dailyStats.ratings_count,
+              sum: allStats.dailyStats.ratings_sum
+            }
+          }
+        };
+      } catch (error) {
+        console.error(`Error adding stats to story ${story._id}:`, error);
+      }
+
       return storyObj;
     })
   );
 
   return {
     success: true,
-    stories: storiesWithChapterInfo
+    stories: storiesWithInfo
   };
 };
 
@@ -168,9 +287,10 @@ const getFullStories = async (limit = 10) => {
     .populate('author_id', 'name slug')
     .populate('categories', 'name slug');
 
-  // Lấy chapter mới nhất cho mỗi truyện
-  const storiesWithChapterInfo = await Promise.all(
+  // Lấy chapter mới nhất cho mỗi truyện và thêm thông tin stats
+  const storiesWithInfo = await Promise.all(
     stories.map(async (story) => {
+      // Chuyển đổi thành object
       const storyObj = story.toObject();
 
       // Lấy chapter mới nhất
@@ -179,13 +299,45 @@ const getFullStories = async (limit = 10) => {
         .select('chapter name createdAt');
       storyObj.latest_chapter = latestChapter;
 
+      // Lấy thông tin stats
+      try {
+        const allStats = await storyStatsService.getAllStats(story._id);
+
+        // Gán lại giá trị views từ StoryStats
+        storyObj.views = allStats.totalViews;
+
+        // Gán lại giá trị ratings từ StoryStats
+        storyObj.ratings_count = allStats.ratings.ratingsCount;
+        storyObj.ratings_sum = allStats.ratings.ratingsSum;
+
+        // Thêm thông tin thống kê chi tiết
+        storyObj.stats = {
+          views: {
+            total: allStats.totalViews,
+            byTimeRange: allStats.viewsByTimeRange,
+            daily: allStats.dailyStats.views
+          },
+          ratings: {
+            count: allStats.ratings.ratingsCount,
+            sum: allStats.ratings.ratingsSum,
+            average: allStats.ratings.averageRating,
+            daily: {
+              count: allStats.dailyStats.ratings_count,
+              sum: allStats.dailyStats.ratings_sum
+            }
+          }
+        };
+      } catch (error) {
+        console.error(`Error adding stats to story ${story._id}:`, error);
+      }
+
       return storyObj;
     })
   );
 
   return {
     success: true,
-    stories: storiesWithChapterInfo
+    stories: storiesWithInfo
   };
 };
 
@@ -271,9 +423,10 @@ const getSuggestedStories = async (options = {}) => {
     total = await Story.countDocuments(query);
   }
 
-  // Lấy chapter mới nhất cho mỗi truyện
-  const storiesWithChapterInfo = await Promise.all(
+  // Lấy chapter mới nhất cho mỗi truyện và thêm thông tin stats
+  const storiesWithInfo = await Promise.all(
     suggestedStories.map(async (story) => {
+      // Chuyển đổi thành object
       const storyObj = story.toObject();
 
       // Lấy chapter mới nhất
@@ -282,12 +435,44 @@ const getSuggestedStories = async (options = {}) => {
         .select('chapter name createdAt');
       storyObj.latest_chapter = latestChapter;
 
+      // Lấy thông tin stats
+      try {
+        const allStats = await storyStatsService.getAllStats(story._id);
+
+        // Gán lại giá trị views từ StoryStats
+        storyObj.views = allStats.totalViews;
+
+        // Gán lại giá trị ratings từ StoryStats
+        storyObj.ratings_count = allStats.ratings.ratingsCount;
+        storyObj.ratings_sum = allStats.ratings.ratingsSum;
+
+        // Thêm thông tin thống kê chi tiết
+        storyObj.stats = {
+          views: {
+            total: allStats.totalViews,
+            byTimeRange: allStats.viewsByTimeRange,
+            daily: allStats.dailyStats.views
+          },
+          ratings: {
+            count: allStats.ratings.ratingsCount,
+            sum: allStats.ratings.ratingsSum,
+            average: allStats.ratings.averageRating,
+            daily: {
+              count: allStats.dailyStats.ratings_count,
+              sum: allStats.dailyStats.ratings_sum
+            }
+          }
+        };
+      } catch (error) {
+        console.error(`Error adding stats to story ${story._id}:`, error);
+      }
+
       return storyObj;
     })
   );
 
   return {
-    items: storiesWithChapterInfo,
+    items: storiesWithInfo,
     total,
     totalPages: Math.ceil(total / parseInt(limit)),
     currentPage: parseInt(page)

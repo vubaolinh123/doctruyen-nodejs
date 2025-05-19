@@ -1,6 +1,64 @@
 const rankingService = require('../../services/ranking/rankingService');
 const StoryRankings = require('../../models/storyRankings');
 const moment = require('moment');
+const storyStatsService = require('../../services/storyStats/storyStatsService');
+
+/**
+ * Thêm thông tin stats vào truyện
+ * @param {Array} rankings - Danh sách xếp hạng
+ * @returns {Promise<Array>} - Danh sách xếp hạng đã thêm stats
+ */
+const addStatsToRankings = async (rankings) => {
+  if (!rankings || rankings.length === 0) return rankings;
+
+  return await Promise.all(rankings.map(async (ranking) => {
+    try {
+      // Lấy thông tin truyện
+      const story = ranking.story_id;
+      if (!story || !story._id) return ranking;
+
+      // Lấy tất cả thống kê từ StoryStats
+      const allStats = await storyStatsService.getAllStats(story._id);
+
+      // Tạo bản sao của story để không ảnh hưởng đến dữ liệu gốc
+      const storyWithStats = { ...story.toObject() };
+
+      // Gán lại giá trị views từ StoryStats
+      storyWithStats.views = allStats.totalViews;
+
+      // Gán lại giá trị ratings từ StoryStats
+      storyWithStats.ratings_count = allStats.ratings.ratingsCount;
+      storyWithStats.ratings_sum = allStats.ratings.ratingsSum;
+
+      // Thêm thông tin thống kê chi tiết
+      storyWithStats.stats = {
+        views: {
+          total: allStats.totalViews,
+          byTimeRange: allStats.viewsByTimeRange,
+          daily: allStats.dailyStats.views
+        },
+        ratings: {
+          count: allStats.ratings.ratingsCount,
+          sum: allStats.ratings.ratingsSum,
+          average: allStats.ratings.averageRating,
+          daily: {
+            count: allStats.dailyStats.ratings_count,
+            sum: allStats.dailyStats.ratings_sum
+          }
+        }
+      };
+
+      // Tạo bản sao của ranking để không ảnh hưởng đến dữ liệu gốc
+      const rankingWithStats = { ...ranking.toObject() };
+      rankingWithStats.story_id = storyWithStats;
+
+      return rankingWithStats;
+    } catch (error) {
+      console.error(`Error adding stats to story in ranking:`, error);
+      return ranking;
+    }
+  }));
+};
 
 /**
  * Controller xử lý các chức năng liên quan đến xếp hạng truyện
@@ -30,12 +88,15 @@ class RankingController {
         );
       }
 
+      // Thêm thông tin stats vào mỗi truyện
+      const rankingsWithStats = await addStatsToRankings(result);
+
       // Đếm tổng số truyện
       const total = await StoryRankings.countDailyRankings(today);
 
       res.json({
         success: true,
-        rankings: result,
+        rankings: rankingsWithStats,
         total,
         page: parseInt(page),
         limit: parseInt(limit),
@@ -75,6 +136,9 @@ class RankingController {
         );
       }
 
+      // Thêm thông tin stats vào mỗi truyện
+      const rankingsWithStats = await addStatsToRankings(result);
+
       // Đếm tổng số truyện
       const total = await StoryRankings.countDocuments({
         date: {
@@ -86,7 +150,7 @@ class RankingController {
 
       res.json({
         success: true,
-        rankings: result,
+        rankings: rankingsWithStats,
         total,
         page: parseInt(page),
         limit: parseInt(limit),
@@ -126,6 +190,9 @@ class RankingController {
         );
       }
 
+      // Thêm thông tin stats vào mỗi truyện
+      const rankingsWithStats = await addStatsToRankings(result);
+
       // Đếm tổng số truyện
       const total = await StoryRankings.countDocuments({
         date: {
@@ -137,7 +204,7 @@ class RankingController {
 
       res.json({
         success: true,
-        rankings: result,
+        rankings: rankingsWithStats,
         total,
         page: parseInt(page),
         limit: parseInt(limit),
@@ -177,6 +244,9 @@ class RankingController {
         );
       }
 
+      // Thêm thông tin stats vào mỗi truyện
+      const rankingsWithStats = await addStatsToRankings(result);
+
       // Đếm tổng số truyện
       const total = await StoryRankings.countDocuments({
         date: {
@@ -188,7 +258,7 @@ class RankingController {
 
       res.json({
         success: true,
-        rankings: result,
+        rankings: rankingsWithStats,
         total,
         page: parseInt(page),
         limit: parseInt(limit),

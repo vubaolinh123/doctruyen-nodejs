@@ -51,7 +51,7 @@ const setupStatics = (schema) => {
       .limit(limit)
       .populate({
         path: 'story_id',
-        select: 'name slug image desc categories author_id views is_full is_hot is_new',
+        select: 'name slug image desc categories author_id views is_full is_hot is_new chapter_count',
         populate: [
           { path: 'categories', select: 'name slug' },
           { path: 'author_id', select: 'name slug' }
@@ -85,7 +85,7 @@ const setupStatics = (schema) => {
       .limit(limit)
       .populate({
         path: 'story_id',
-        select: 'name slug image desc categories author_id views is_full is_hot is_new',
+        select: 'name slug image desc categories author_id views is_full is_hot is_new chapter_count',
         populate: [
           { path: 'categories', select: 'name slug' },
           { path: 'author_id', select: 'name slug' }
@@ -119,7 +119,7 @@ const setupStatics = (schema) => {
       .limit(limit)
       .populate({
         path: 'story_id',
-        select: 'name slug image desc categories author_id views is_full is_hot is_new',
+        select: 'name slug image desc categories author_id views is_full is_hot is_new chapter_count',
         populate: [
           { path: 'categories', select: 'name slug' },
           { path: 'author_id', select: 'name slug' }
@@ -153,7 +153,7 @@ const setupStatics = (schema) => {
       .limit(limit)
       .populate({
         path: 'story_id',
-        select: 'name slug image desc categories author_id views is_full is_hot is_new',
+        select: 'name slug image desc categories author_id views is_full is_hot is_new chapter_count',
         populate: [
           { path: 'categories', select: 'name slug' },
           { path: 'author_id', select: 'name slug' }

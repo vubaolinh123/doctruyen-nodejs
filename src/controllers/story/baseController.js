@@ -1,4 +1,5 @@
 const storyService = require('../../services/story/storyService');
+const storyStatsService = require('../../services/storyStats/storyStatsService');
 const mongoose = require('mongoose');
 const slugify = require('slugify');
 
@@ -138,6 +139,49 @@ exports.getBySlug = async (req, res) => {
         success: false,
         message: 'Không tìm thấy truyện'
       });
+    }
+
+    // Lấy tất cả thống kê từ StoryStats
+    try {
+      console.log(`[API] Lấy thống kê cho truyện ${item._id}`);
+      const allStats = await storyStatsService.getAllStats(item._id);
+
+      // Gán lại giá trị views từ StoryStats
+      item.views = allStats.totalViews;
+      console.log(`[API] Tổng lượt xem cho truyện ${item._id}: ${item.views}`);
+
+      // Gán lại giá trị ratings từ StoryStats
+      item.ratings_count = allStats.ratings.ratingsCount;
+      item.ratings_sum = allStats.ratings.ratingsSum;
+      console.log(`[API] Thống kê đánh giá cho truyện ${item._id}: count=${item.ratings_count}, sum=${item.ratings_sum}`);
+
+      // Thêm thông tin thống kê chi tiết
+      item.stats = {
+        views: {
+          total: allStats.totalViews,
+          byTimeRange: allStats.viewsByTimeRange,
+          daily: allStats.dailyStats.views
+        },
+        ratings: {
+          count: allStats.ratings.ratingsCount,
+          sum: allStats.ratings.ratingsSum,
+          average: allStats.ratings.averageRating,
+          daily: {
+            count: allStats.dailyStats.ratings_count,
+            sum: allStats.dailyStats.ratings_sum
+          }
+        }
+      };
+    } catch (statsError) {
+      console.error(`[API] Error getting stats for story ${item._id}:`, statsError);
+      // Nếu có lỗi, đặt giá trị mặc định
+      item.views = 0;
+      item.ratings_count = 0;
+      item.ratings_sum = 0;
+      item.stats = {
+        views: { total: 0, byTimeRange: { day: 0, week: 0, month: 0, year: 0, all: 0 }, daily: 0 },
+        ratings: { count: 0, sum: 0, average: 0, daily: { count: 0, sum: 0 } }
+      };
     }
 
     res.json({

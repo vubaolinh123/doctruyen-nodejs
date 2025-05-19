@@ -1,11 +1,11 @@
 const mongoose = require('mongoose');
-const starSchema = require('./schema');
+const userRatingSchema = require('./schema');
 const applyVirtuals = require('./virtuals');
 const applyStatics = require('./statics');
 
 // Apply virtuals and statics
-applyVirtuals(starSchema);
-applyStatics(starSchema);
+applyVirtuals(userRatingSchema);
+applyStatics(userRatingSchema);
 
 // Create and export the model
-module.exports = mongoose.model('Star', starSchema); 
+module.exports = mongoose.model('UserRating', userRatingSchema);

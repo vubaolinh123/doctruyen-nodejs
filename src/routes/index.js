@@ -13,6 +13,7 @@ router.use('/missions', require('./missions'));
 router.use('/seo-config', require('./seoConfig'));
 router.use('/cache-config', require('./cacheConfig'));
 router.use('/rankings', require('./rankings'));
+router.use('/story-stats', require('./storyStats'));
 
 // Route public cho user
 router.get('/public/users/slug/:slug', auth.optional, userController.getBySlug);
@@ -24,7 +25,6 @@ router.use('/purchased-stories', auth, require('./purchasedStories'));
 router.use('/stories-reading', auth, require('./storiesReading'));
 router.use('/transactions', auth, require('./transactions'));
 router.use('/bookmarks', auth, require('./bookmarks'));
-router.use('/stars', auth, require('./stars'));
 // Route attendance không cần middleware auth ở đây vì đã có authenticateToken trong route
 router.use('/attendance', require('./attendance'));
 // Route comments
