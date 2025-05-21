@@ -12,52 +12,35 @@ const slugify = require('slugify');
  */
 const buildStoryQuery = async (filters) => {
   let query = {};
-
-  console.log("[API] Lấy danh sách truyện - page:", filters.page, "limit:", filters.limit, "search:", filters.search, "categories:", filters.categories);
-  console.log("[API] Chapter filters - chapter_count:", filters.chapter_count, "chapter_count_op:", filters.chapter_count_op, "has_chapters:", filters.has_chapters);
-
   // Filter by status if provided
   if (filters.status !== undefined) {
     query.status = filters.status === 'true';
   }
-
   // Filter by single category if provided
   if (filters.category) {
-    console.log("buildStoryQuery - Processing single category:", filters.category);
     query = await processCategoryFilter(query, filters.category);
-    console.log("buildStoryQuery - Query after processCategoryFilter:", JSON.stringify(query));
   }
-
   // Filter by multiple categories if provided
   if (filters.categories) {
-    console.log("buildStoryQuery - Processing multiple categories:", filters.categories);
     query = await processMultipleCategoriesFilter(query, filters.categories);
-    console.log("buildStoryQuery - Query after processMultipleCategoriesFilter:", JSON.stringify(query));
   }
-
   // Filter by author if provided
   if (filters.author) {
     query.author_id = filters.author;
   }
-
   // Filter by name or search if provided
   if (filters.name) {
     query.name = { $regex: filters.name, $options: 'i' };
-    console.log("buildStoryQuery - Filtering by name:", filters.name);
   } else if (filters.search) {
     query.name = { $regex: filters.search, $options: 'i' };
-    console.log("buildStoryQuery - Filtering by search:", filters.search);
   }
 
   // Filter by slug if provided
   if (filters.slug) {
     query.slug = filters.slug;
   }
-
   // Filter by flags if provided
   processFlagsFilters(query, filters);
-
-  console.log("buildStoryQuery - Final query:", JSON.stringify(query));
   return query;
 };
 
@@ -68,12 +51,9 @@ const buildStoryQuery = async (filters) => {
  * @returns {Promise<Object>} - Query đã cập nhật
  */
 const processCategoryFilter = async (query, categoryValue) => {
-  console.log("processCategoryFilter - categoryValue:", categoryValue);
-
   if (mongoose.Types.ObjectId.isValid(categoryValue)) {
     // Sử dụng trực tiếp ID
     query.categories = categoryValue;
-    console.log("processCategoryFilter - Using ID directly:", categoryValue);
   } else {
     try {
       // Nếu là slug, cần tìm category trước
@@ -85,12 +65,8 @@ const processCategoryFilter = async (query, categoryValue) => {
       if (category) {
         // Sử dụng ID của category
         query.categories = category._id;
-        console.log("processCategoryFilter - Found category by slug:", categoryValue, "ID:", category._id);
       } else {
-        console.log("processCategoryFilter - Category not found for slug:", categoryValue);
-
         // Thử tìm kiếm với regex
-        console.log("processCategoryFilter - Trying with regex");
         const regexCategory = await Category.findOne({
           slug: new RegExp('^' + categoryValue + '$', 'i')
         });
@@ -98,18 +74,6 @@ const processCategoryFilter = async (query, categoryValue) => {
         if (regexCategory) {
           // Sử dụng ID của category tìm thấy bằng regex
           query.categories = regexCategory._id;
-          console.log("processCategoryFilter - Found category by regex:", categoryValue, "ID:", regexCategory._id);
-        } else {
-          console.log("processCategoryFilter - Category not found even with regex for slug:", categoryValue);
-
-          // Liệt kê tất cả các thể loại trong DB để debug
-          const allCategories = await Category.find({}).select('name slug');
-          console.log("processCategoryFilter - All categories in DB:",
-            allCategories.map(cat => ({
-              name: cat.name,
-              slug: cat.slug
-            }))
-          );
         }
       }
     } catch (error) {
@@ -188,33 +152,24 @@ const processMultipleCategoriesFilter = async (query, categoriesValue) => {
  */
 const getAllStories = async (filters) => {
   const { page = 1, limit = 10, ...otherFilters } = filters;
-
-  console.log("getAllStories - Input filters:", filters);
-
   // Xử lý trực tiếp categories nếu có
   if (filters.categories) {
     // Đảm bảo otherFilters.categories tồn tại
     otherFilters.categories = filters.categories;
   }
-
   // Xử lý trực tiếp các tham số liên quan đến chapter
   if (filters.chapter_count !== undefined && filters.chapter_count !== '') {
     otherFilters.chapter_count = filters.chapter_count;
-    console.log("getAllStories - Setting chapter_count:", filters.chapter_count);
   }
 
   if (filters.chapter_count_op !== undefined && filters.chapter_count_op !== '') {
     otherFilters.chapter_count_op = filters.chapter_count_op;
-    console.log("getAllStories - Setting chapter_count_op:", filters.chapter_count_op);
   } else if (otherFilters.chapter_count !== undefined) {
     // Nếu có chapter_count nhưng không có chapter_count_op, đặt mặc định là 'eq'
     otherFilters.chapter_count_op = 'eq';
-    console.log("getAllStories - Setting default chapter_count_op: eq");
   }
-
   if (filters.has_chapters !== undefined && filters.has_chapters !== '') {
     otherFilters.has_chapters = filters.has_chapters;
-    console.log("getAllStories - Setting has_chapters:", filters.has_chapters);
   }
 
   // Xây dựng query dựa trên các bộ lọc
@@ -224,9 +179,6 @@ const getAllStories = async (filters) => {
   const sortField = otherFilters.sort_by || 'updatedAt';
   const sortOrder = otherFilters.sort_order === 'asc' ? 1 : -1;
   const sortOptions = {};
-
-  console.log("getAllStories - Sort params:", { sortField, sortOrder });
-
   // Xử lý các trường sắp xếp đặc biệt
   switch (sortField) {
     case 'chapter_count':
@@ -253,29 +205,16 @@ const getAllStories = async (filters) => {
       // Mặc định sắp xếp theo ngày cập nhật
       sortOptions.updatedAt = sortOrder;
   }
-
-  console.log("getAllStories - Final sort options:", sortOptions);
-
   // Kiểm tra xem có lọc theo số lượng chapter không
   const hasChapterFilter = checkHasChapterFilter(otherFilters);
   const sortByChapterCount = otherFilters.sort_by === 'chapter_count';
-
-  console.log("getAllStories - hasChapterFilter:", hasChapterFilter);
-  console.log("getAllStories - sortByChapterCount:", sortByChapterCount);
-
   // Kiểm tra xem có yêu cầu thêm thông tin chapter không
   const includeChapterCount = otherFilters.include_chapter_count === 'true' || hasChapterFilter || sortByChapterCount;
   const includeLatestChapter = otherFilters.include_latest_chapter === 'true';
-
-  console.log("getAllStories - includeChapterCount:", includeChapterCount);
-  console.log("getAllStories - includeLatestChapter:", includeLatestChapter);
-
   // Nếu không có lọc theo số lượng chapter và không sắp xếp theo số lượng chapter, thực hiện truy vấn bình thường
   if (!hasChapterFilter && !sortByChapterCount) {
-    console.log("getAllStories - Using getStoriesWithoutChapterFilters");
     return await getStoriesWithoutChapterFilters(query, sortOptions, page, limit, includeChapterCount, includeLatestChapter);
   } else {
-    console.log("getAllStories - Using getStoriesWithChapterFilters");
     return await getStoriesWithChapterFilters(query, sortOptions, page, limit, includeLatestChapter, hasChapterFilter, otherFilters);
   }
 };
@@ -288,41 +227,33 @@ const getAllStories = async (filters) => {
  * @param {Object} filters - Các tham số lọc flags
  */
 const processFlagsFilters = (query, filters) => {
-  console.log("processFlagsFilters - Input filters:", filters);
 
   // Filter by flags
   if (filters.is_hot !== undefined) {
     query.is_hot = filters.is_hot === 'true';
-    console.log("processFlagsFilters - Setting is_hot:", query.is_hot);
   }
 
   if (filters.is_new !== undefined) {
     query.is_new = filters.is_new === 'true';
-    console.log("processFlagsFilters - Setting is_new:", query.is_new);
   }
 
   if (filters.is_full !== undefined) {
     query.is_full = filters.is_full === 'true';
-    console.log("processFlagsFilters - Setting is_full:", query.is_full);
   }
 
   // Filter by hot_day, hot_month, hot_all_time
   if (filters.hot_day !== undefined) {
     query.hot_day = filters.hot_day === 'true';
-    console.log("processFlagsFilters - Setting hot_day:", query.hot_day);
   }
 
   if (filters.hot_month !== undefined) {
     query.hot_month = filters.hot_month === 'true';
-    console.log("processFlagsFilters - Setting hot_month:", query.hot_month);
   }
 
   if (filters.hot_all_time !== undefined) {
     query.hot_all_time = filters.hot_all_time === 'true';
-    console.log("processFlagsFilters - Setting hot_all_time:", query.hot_all_time);
   }
 
-  console.log("processFlagsFilters - Final query:", JSON.stringify(query));
 };
 
 /**
@@ -336,26 +267,15 @@ const checkHasChapterFilter = (filters) => {
   const hasChapterCountOp = filters.chapter_count_op !== undefined && filters.chapter_count_op !== '';
   const hasHasChapters = filters.has_chapters !== undefined && filters.has_chapters !== '';
 
-  // Log để debug
-  console.log("checkHasChapterFilter - Params:", {
-    chapter_count: filters.chapter_count,
-    chapter_count_op: filters.chapter_count_op,
-    has_chapters: filters.has_chapters,
-    hasChapterCount,
-    hasChapterCountOp,
-    hasHasChapters
-  });
 
   // Chuyển đổi kiểu dữ liệu của filters.chapter_count từ string sang number nếu cần
   if (hasChapterCount) {
     filters.chapter_count = parseInt(filters.chapter_count);
-    console.log("checkHasChapterFilter - Converted chapter_count to number:", filters.chapter_count);
   }
 
   // Trả về true nếu có ít nhất một tham số chapter
   // Đảm bảo rằng nếu có chapter_count thì cũng phải có chapter_count_op
   const result = (hasChapterCount && hasChapterCountOp) || hasHasChapters;
-  console.log("checkHasChapterFilter - Result:", result);
   return result;
 };
 
@@ -467,10 +387,6 @@ const getStoriesWithoutChapterFilters = async (query, sortOptions, page, limit, 
  * @returns {Promise<Object>} - Kết quả trả về
  */
 const getStoriesWithChapterFilters = async (query, sortOptions, page, limit, includeLatestChapter, hasChapterFilter, filters) => {
-  console.log("getStoriesWithChapterFilters - Input query:", JSON.stringify(query));
-  console.log("getStoriesWithChapterFilters - hasChapterFilter:", hasChapterFilter);
-  console.log("getStoriesWithChapterFilters - filters:", filters);
-
   // Nếu có lọc theo số lượng chapter hoặc sắp xếp theo số lượng chapter, cần xử lý thêm
   // Xử lý filter theo số lượng chapter
   if (hasChapterFilter) {
@@ -483,7 +399,6 @@ const getStoriesWithChapterFilters = async (query, sortOptions, page, limit, inc
       const chapterCountNum = parseInt(filters.chapter_count);
       const chapterCountOp = filters.chapter_count_op;
 
-      console.log("getStoriesWithChapterFilters - Processing chapter_count:", chapterCountNum, "with operator:", chapterCountOp);
 
       // Thêm điều kiện lọc theo số lượng chapter vào query
       switch (chapterCountOp) {
@@ -510,7 +425,6 @@ const getStoriesWithChapterFilters = async (query, sortOptions, page, limit, inc
     // Nếu có lọc theo has_chapters
     if (filters.has_chapters !== undefined && filters.has_chapters !== '') {
       const hasChaptersBool = filters.has_chapters === 'true';
-      console.log("getStoriesWithChapterFilters - Processing has_chapters:", hasChaptersBool);
 
       if (hasChaptersBool) {
         // Lọc truyện có chapter (chapter_count > 0)
@@ -523,7 +437,6 @@ const getStoriesWithChapterFilters = async (query, sortOptions, page, limit, inc
       }
     }
 
-    console.log("getStoriesWithChapterFilters - Query after chapter filters:", JSON.stringify(query));
   }
 
   // Lấy truyện theo query đã được cập nhật và sắp xếp
@@ -532,7 +445,6 @@ const getStoriesWithChapterFilters = async (query, sortOptions, page, limit, inc
     .populate('categories', 'name slug')
     .sort(sortOptions);
 
-  console.log("getStoriesWithChapterFilters - Found items:", items.length);
 
   // Count total
   const total = items.length;
@@ -574,12 +486,10 @@ const getStoriesWithChapterFilters = async (query, sortOptions, page, limit, inc
  * @param {Object} filters - Các tham số lọc
  */
 const processChapterCountFilters = (query, filters) => {
-  console.log("processChapterCountFilters - Input filters:", filters);
 
   // Nếu có lọc theo has_chapters
   if (filters.has_chapters !== undefined && filters.has_chapters !== '') {
     const hasChaptersBool = filters.has_chapters === 'true';
-    console.log("processChapterCountFilters - Processing has_chapters:", hasChaptersBool);
 
     if (hasChaptersBool) {
       // Lọc truyện có chapter (chapter_count > 0)
@@ -599,7 +509,6 @@ const processChapterCountFilters = (query, filters) => {
     const chapterCountNum = parseInt(filters.chapter_count);
     const chapterCountOp = filters.chapter_count_op;
 
-    console.log("processChapterCountFilters - Processing chapter_count:", chapterCountNum, "with operator:", chapterCountOp);
 
     // Thêm điều kiện lọc theo số lượng chapter vào query
     switch (chapterCountOp) {
@@ -624,11 +533,9 @@ const processChapterCountFilters = (query, filters) => {
   } else if (hasChapterCount) {
     // Nếu chỉ có chapter_count mà không có operator, mặc định là bằng
     const chapterCountNum = parseInt(filters.chapter_count);
-    console.log("processChapterCountFilters - Processing chapter_count without operator:", chapterCountNum);
     query.chapter_count = chapterCountNum;
   }
 
-  console.log("processChapterCountFilters - Final query:", JSON.stringify(query));
 };
 
 /**
@@ -825,7 +732,6 @@ const incrementStoryViews = async (slug) => {
 
   // Tăng lượt view trong bảng StoryStats
   try {
-    console.log(`[API] Tăng lượt xem cho truyện ${story._id}`);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -836,11 +742,9 @@ const incrementStoryViews = async (slug) => {
     const day = today.getDate();
     const week = require('moment')(today).isoWeek();
 
-    console.log(`[API] Thông tin ngày: ${today.toISOString()}, year: ${year}, month: ${month}, day: ${day}, week: ${week}`);
 
     // Chuyển đổi story._id thành ObjectId
     const storyObjectId = new mongoose.Types.ObjectId(story._id);
-    console.log(`[API] Story ID (ObjectId): ${storyObjectId}`);
 
     // Tìm hoặc tạo bản ghi thống kê cho ngày hôm nay
     let stats = await StoryStats.findOne({
@@ -848,11 +752,9 @@ const incrementStoryViews = async (slug) => {
       date: today
     });
 
-    console.log(`[API] Kết quả tìm StoryStats: ${stats ? 'Tìm thấy' : 'Không tìm thấy'}`);
 
     if (!stats) {
       // Tạo bản ghi mới nếu chưa có
-      console.log(`[API] Tạo bản ghi StoryStats mới cho story_id: ${story._id}`);
       stats = new StoryStats({
         story_id: storyObjectId,
         date: today,
@@ -870,18 +772,14 @@ const incrementStoryViews = async (slug) => {
       });
     } else {
       // Cập nhật bản ghi hiện có
-      console.log(`[API] Cập nhật bản ghi StoryStats hiện có - views: ${stats.views}, unique_views: ${stats.unique_views}`);
       stats.views += 1;
       stats.unique_views += 1; // Đây chỉ là giá trị tạm thời, cần logic phức tạp hơn để đếm unique views
     }
 
-    console.log(`[API] Lưu StoryStats - story_id: ${story._id}, views: ${stats.views}, unique_views: ${stats.unique_views}`);
     const savedStats = await stats.save();
-    console.log(`[API] Đã lưu StoryStats - _id: ${savedStats._id}`);
 
     // Lấy tổng lượt xem từ StoryStats
     const totalViews = await storyStatsService.getTotalViews(story._id);
-    console.log(`[API] Tổng lượt xem cho truyện ${story._id}: ${totalViews}`);
 
     return { success: true, views: totalViews };
   } catch (error) {

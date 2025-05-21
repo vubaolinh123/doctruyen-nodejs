@@ -66,8 +66,6 @@ class ChapterService {
       chapterData.story_id,
       { chapter_count: currentCount + 1 }
     );
-    console.log(`[Service] Đã cập nhật chapter_count của truyện ${chapterData.story_id} từ ${currentCount} lên ${currentCount + 1}`);
-
     return savedChapter;
   }
 
@@ -126,7 +124,6 @@ class ChapterService {
             oldStoryId,
             { chapter_count: oldCount - 1 }
           );
-          console.log(`[Service] Đã giảm chapter_count của truyện cũ ${oldStoryId} từ ${oldCount} xuống ${oldCount - 1}`);
         }
       }
 
@@ -138,7 +135,6 @@ class ChapterService {
           newStoryId,
           { chapter_count: newCount + 1 }
         );
-        console.log(`[Service] Đã tăng chapter_count của truyện mới ${newStoryId} từ ${newCount} lên ${newCount + 1}`);
       }
     }
 
@@ -172,7 +168,6 @@ class ChapterService {
             storyId,
             { chapter_count: currentCount - 1 }
           );
-          console.log(`[Service] Đã cập nhật chapter_count của truyện ${storyId} từ ${currentCount} xuống ${currentCount - 1}`);
         }
       }
     }
@@ -601,8 +596,6 @@ class ChapterService {
    */
   async getNextChapterNumber(storyId) {
     try {
-      console.log(`[Service] Lấy số chương tiếp theo cho truyện ID: ${storyId}`);
-
       // Kiểm tra storyId có hợp lệ không
       if (!mongoose.Types.ObjectId.isValid(storyId)) {
         throw new Error('ID truyện không hợp lệ');
@@ -633,8 +626,6 @@ class ChapterService {
    */
   async getChaptersByStory(storyId) {
     try {
-      console.log(`[Service] Lấy danh sách chapter theo story ID: ${storyId}`);
-
       // Kiểm tra storyId có hợp lệ không
       if (!storyId || typeof storyId !== 'string') {
         console.error(`[Service] ID truyện không hợp lệ: ${storyId}`);
@@ -661,9 +652,6 @@ class ChapterService {
       const chapters = await Chapter.find({ story_id: storyObjectId })
         .sort({ chapter: 1 }) // Sắp xếp theo số chương tăng dần
         .lean();
-
-      console.log(`[Service] Tìm thấy ${chapters.length} chapter cho story ID: ${storyId}`);
-
       return {
         story,
         chapters,

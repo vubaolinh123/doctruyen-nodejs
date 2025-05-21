@@ -29,10 +29,6 @@ class StoryStatsService {
       // Kiểm tra xem có bản ghi StoryStats nào cho truyện này không
       const allStats = await StoryStats.find({ story_id: storyObjectId });
 
-      if (allStats.length > 0) {
-        console.log(`[StoryStatsService] Mẫu bản ghi đầu tiên:`, JSON.stringify(allStats[0]));
-      }
-
       const result = await StoryStats.aggregate([
         { $match: { story_id: storyObjectId } },
         { $group: { _id: null, totalViews: { $sum: '$views' } } }
