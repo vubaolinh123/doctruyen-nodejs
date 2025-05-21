@@ -96,10 +96,11 @@ exports.getSlugById = async (req, res) => {
 
 /**
  * Tìm kiếm người dùng
+ * @route GET /api/users/admin/search
  * @route GET /api/admin/users/search
  * @param {Object} req - Request object
  * @param {Object} res - Response object
- * @access Private (Admin)
+ * @access Private (Yêu cầu xác thực nhưng không yêu cầu quyền admin)
  */
 exports.searchUsers = async (req, res) => {
   try {

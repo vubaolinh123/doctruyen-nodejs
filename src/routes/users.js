@@ -18,8 +18,10 @@ router.get('/:id/coins', authenticateToken, specialController.getUserCoinsForUse
 // Route lấy danh sách quyền của người dùng (cần xác thực)
 router.get('/:id/permissions', authenticateToken, permissionController.getUserPermissions);
 
-// Routes cho admin
+// Routes cho admin - Route search chỉ yêu cầu authenticateToken, không yêu cầu isAdmin
 router.get('/admin/search', authenticateToken, specialController.searchUsers);
+
+// Routes cho admin - Các route khác yêu cầu cả authenticateToken và isAdmin
 router.get('/admin/:id/coins', authenticateToken, specialController.getUserCoins);
 
 // Routes quản lý quyền của người dùng (chỉ admin)
