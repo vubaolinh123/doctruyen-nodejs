@@ -7,20 +7,11 @@ const SeoConfig = require('../models/seoConfig');
  */
 exports.getSeoConfig = async (req, res) => {
   try {
-    console.log('[NodeJS API] Getting SEO config');
-
     // Đếm số lượng bản ghi SEO config
     const count = await SeoConfig.countDocuments();
-    console.log('[NodeJS API] Found', count, 'SEO config records');
 
     // Lấy cấu hình SEO mới nhất từ database
     let seoConfig = await SeoConfig.findOne().sort({ updatedAt: -1 });
-
-    if (seoConfig) {
-      console.log('[NodeJS API] Found SEO config with ID:', seoConfig._id);
-      console.log('[NodeJS API] SEO config title:', seoConfig.title);
-      console.log('[NodeJS API] SEO config updatedAt:', seoConfig.updatedAt);
-    }
 
     // Nếu không có cấu hình, tạo cấu hình mặc định
     if (!seoConfig) {
@@ -103,7 +94,6 @@ exports.getSeoConfig = async (req, res) => {
       data: seoConfig
     });
   } catch (err) {
-    console.error('[API] Error:', err);
     res.status(500).json({
       success: false,
       error: err.message
@@ -118,29 +108,15 @@ exports.getSeoConfig = async (req, res) => {
  */
 exports.updateSeoConfig = async (req, res) => {
   try {
-    console.log('[NodeJS API] Received SEO update request');
     const { body } = req;
-    console.log('[NodeJS API] Request body:', JSON.stringify(body).substring(0, 200) + '...');
 
     // Lấy cấu hình SEO từ database
-    console.log('[NodeJS API] SeoConfig model:', SeoConfig.modelName);
-    console.log('[NodeJS API] SeoConfig collection:', SeoConfig.collection.name);
-
     let seoConfig = await SeoConfig.findOne();
-    console.log('[NodeJS API] Existing SEO config found:', !!seoConfig);
 
     // Nếu không có cấu hình, tạo mới
     if (!seoConfig) {
       try {
-        console.log('[NodeJS API] Creating new SEO config');
         // Kiểm tra body có đầy đủ các trường bắt buộc không
-        console.log('[NodeJS API] Body has required fields:',
-          body.title ? 'title: Yes' : 'title: No',
-          body.titleTemplate ? 'titleTemplate: Yes' : 'titleTemplate: No',
-          body.defaultTitle ? 'defaultTitle: Yes' : 'defaultTitle: No',
-          body.description ? 'description: Yes' : 'description: No',
-          body.canonical ? 'canonical: Yes' : 'canonical: No'
-        );
 
         // Tạo đối tượng mới với các trường bắt buộc
         const newConfig = {
@@ -193,17 +169,13 @@ exports.updateSeoConfig = async (req, res) => {
           }
         };
 
-        console.log('[NodeJS API] Creating with data:', JSON.stringify(newConfig).substring(0, 200) + '...');
         seoConfig = await SeoConfig.create(newConfig);
-        console.log('[NodeJS API] New SEO config created with ID:', seoConfig._id);
       } catch (createError) {
-        console.error('[NodeJS API] Error creating SEO config:', createError);
         throw createError;
       }
     } else {
       // Cập nhật cấu hình
       try {
-        console.log('[NodeJS API] Updating existing SEO config with ID:', seoConfig._id);
 
         // Cập nhật từng trường một để tránh lỗi
         if (body.title) seoConfig.title = body.title;
@@ -256,9 +228,7 @@ exports.updateSeoConfig = async (req, res) => {
 
         // Lưu cấu hình
         await seoConfig.save();
-        console.log('[NodeJS API] SEO config updated successfully');
       } catch (updateError) {
-        console.error('[NodeJS API] Error updating SEO config:', updateError);
         throw updateError;
       }
     }
@@ -269,7 +239,6 @@ exports.updateSeoConfig = async (req, res) => {
       message: 'Cập nhật cấu hình SEO thành công'
     });
   } catch (err) {
-    console.error('[NodeJS API] Error updating SEO config:', err);
     res.status(500).json({
       success: false,
       error: err.message

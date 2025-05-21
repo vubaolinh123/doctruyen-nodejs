@@ -32,6 +32,7 @@
     "@babel/core": "^7.26.10",
     "@babel/node": "^7.26.0",
     "@babel/preset-env": "^7.26.9",
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.1.10",
+    "selfsigned": "^2.4.1"
   }
 }

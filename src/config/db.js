@@ -38,12 +38,8 @@ const connectDB = async () => {
       }
     });
 
-    // Log current time to verify timezone
-    const now = new Date();
-    console.log(`✅ MongoDB connected with timezone: Asia/Ho_Chi_Minh`);
-    console.log(`⏰ Current time: ${now.toISOString()} (${now.toString()})`);
+    // MongoDB connected successfully
   } catch (err) {
-    console.error('❌ MongoDB connection error:', err);
     process.exit(1);
   }
 };
