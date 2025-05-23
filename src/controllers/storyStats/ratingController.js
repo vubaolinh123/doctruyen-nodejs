@@ -182,8 +182,10 @@ exports.rateStory = async (req, res) => {
           stats.ratings_sum += rating;
         } else {
           // Nếu là cập nhật đánh giá, chỉ cập nhật tổng điểm đánh giá
-          // Trừ đi điểm cũ và cộng điểm mới
-          stats.ratings_sum = stats.ratings_sum - oldRating + rating;
+          // Tính toán tổng điểm mới bằng cách trừ đi điểm cũ và cộng điểm mới
+          // Đảm bảo ratings_sum không bao giờ âm
+          const newSum = Math.max(0, stats.ratings_sum - oldRating + rating);
+          stats.ratings_sum = newSum;
         }
       }
 

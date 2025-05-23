@@ -39,8 +39,13 @@ const connectDB = async () => {
     });
 
     // MongoDB connected successfully
+    console.log('\x1b[32m%s\x1b[0m', '✓ Kết nối MongoDB thành công!');
+    console.log('\x1b[36m%s\x1b[0m', `✓ MongoDB URL: ${process.env.MONGODB_URI}`);
+    return true;
   } catch (err) {
-    process.exit(1);
+    console.error('\x1b[31m%s\x1b[0m', '✗ Kết nối MongoDB thất bại!');
+    console.error('\x1b[31m%s\x1b[0m', `✗ Lỗi: ${err.message}`);
+    return false;
   }
 };
 

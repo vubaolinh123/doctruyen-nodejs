@@ -229,36 +229,79 @@ exports.getBySlug = async (req, res) => {
 };
 
 /**
- * Lấy slug của người dùng theo ID (API công khai)
+ * Lấy slug của người dùng theo ID hoặc Google ID (API công khai)
  * @route GET /api/public/users/slug-only/:id
  * @access Public
  */
 exports.getSlugById = async (req, res) => {
   try {
     const { id } = req.params;
-    console.log(`[Public API] Lấy slug của người dùng theo ID: ${id}`);
+    console.log(`[Public API] Lấy slug của người dùng theo ID hoặc Google ID: ${id}`);
 
-    const user = await userService.findById(id, { select: 'slug' });
+    // Kiểm tra xem id có phải là MongoDB ObjectId không
+    const isValidObjectId = id.match(/^[0-9a-fA-F]{24}$/);
+
+    // Kiểm tra xem id có phải là Google ID không (thường là chuỗi số dài)
+    const isGoogleId = id.match(/^\d{20,22}$/);
+
+    let user;
+
+    if (isValidObjectId) {
+      // Nếu là ObjectId hợp lệ, tìm theo ID
+      console.log(`[Public API] Tìm người dùng theo MongoDB ObjectId: ${id}`);
+      user = await userService.findById(id, { select: 'slug name email' });
+    } else if (isGoogleId) {
+      // Nếu là Google ID, tìm theo Google ID
+      console.log(`[Public API] Tìm người dùng theo Google ID: ${id}`);
+      user = await userService.findByGoogleId(id, { select: 'slug name email' });
+    } else if (id.includes('@')) {
+      // Nếu là email, tìm theo email
+      console.log(`[Public API] Tìm người dùng theo email: ${id}`);
+      user = await userService.findByEmail(id, { select: 'slug name email' });
+    } else {
+      // Nếu không phải các trường hợp trên, thử tìm theo slug
+      console.log(`[Public API] Tìm người dùng theo slug: ${id}`);
+      user = await userService.findBySlug(id, { select: 'slug name email' });
+
+      // Nếu vẫn không tìm thấy, thử tìm theo Google ID một lần nữa
+      // (trong trường hợp Google ID không khớp với pattern ở trên)
+      if (!user) {
+        console.log(`[Public API] Thử tìm người dùng theo Google ID (fallback): ${id}`);
+        user = await userService.findByGoogleId(id, { select: 'slug name email' });
+      }
+    }
 
     if (!user) {
-      return res.status(404).json({
+      console.log(`[Public API] Không tìm thấy người dùng với ID/Google ID/slug: ${id}`);
+      return res.status(200).json({
         success: false,
-        message: 'Không tìm thấy người dùng'
+        message: 'Không tìm thấy người dùng',
+        slug: '',
+        data: null
       });
     }
 
+    console.log(`[Public API] Đã tìm thấy người dùng: ${user.name}, slug: ${user.slug}`);
     return res.json({
       success: true,
+      message: 'Tìm thấy người dùng',
       data: {
         _id: user._id,
-        slug: user.slug
-      }
+        slug: user.slug,
+        name: user.name
+      },
+      slug: user.slug || ''
     });
   } catch (error) {
-    console.error('[Public API] Lỗi khi lấy slug của người dùng theo ID:', error);
-    return res.status(500).json({
+    console.error('[Public API] Lỗi khi lấy slug của người dùng:', error);
+
+    // Trả về status 200 với thông báo lỗi để tránh lỗi 500 ở client
+    return res.status(200).json({
       success: false,
-      message: error.message || 'Internal Server Error'
+      message: 'Lỗi khi lấy slug của người dùng',
+      error: error.message || 'Internal Server Error',
+      slug: '',
+      data: null
     });
   }
 };

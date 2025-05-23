@@ -16,6 +16,14 @@ const app = express();
 // Thiết lập timezone cho Việt Nam
 process.env.TZ = 'Asia/Ho_Chi_Minh';
 
+// Log thông tin môi trường
+console.log('\x1b[33m%s\x1b[0m', '-------------------------------------');
+console.log('\x1b[33m%s\x1b[0m', '🚀 KHỞI ĐỘNG SERVER API TRUYỆN HAY');
+console.log('\x1b[33m%s\x1b[0m', '-------------------------------------');
+console.log('\x1b[36m%s\x1b[0m', `✓ Môi trường: ${process.env.NODE_ENV || 'development'}`);
+console.log('\x1b[36m%s\x1b[0m', `✓ Timezone: ${process.env.TZ}`);
+console.log('\x1b[33m%s\x1b[0m', '-------------------------------------');
+
 app.use(express.json());
 app.use(cors({
     origin: '*', // *
@@ -54,10 +62,14 @@ app.use((err, req, res, next) => {
 
 // Bắt uncaught exceptions
 process.on('uncaughtException', (err) => {
+  console.error('\x1b[31m%s\x1b[0m', '✗ Uncaught Exception:');
+  console.error('\x1b[31m%s\x1b[0m', err.stack || err);
   process.exit(1);
 });
 
 process.on('unhandledRejection', (err) => {
+  console.error('\x1b[31m%s\x1b[0m', '✗ Unhandled Promise Rejection:');
+  console.error('\x1b[31m%s\x1b[0m', err.stack || err);
   process.exit(1);
 });
 
@@ -65,16 +77,31 @@ const PORT = process.env.PORT || 8000;
 
 // Kết nối MongoDB và khởi động server
 connectDB()
-  .then(() => {
-    // Khởi động server sau khi kết nối MongoDB thành công
-    app.listen(PORT, () => {
-      // Khởi động cron job cho điểm danh
-      setupAttendanceCron();
+  .then((connected) => {
+    if (connected) {
+      // Khởi động server sau khi kết nối MongoDB thành công
+      const server = app.listen(PORT, () => {
+        const serverAddress = server.address();
+        const serverUrl = `http://localhost:${serverAddress.port}`;
 
-      // Khởi động cron job cho xếp hạng
-      cron.startAllCrons();
-    });
+        console.log('\x1b[32m%s\x1b[0m', '✓ Server đang chạy!');
+        console.log('\x1b[36m%s\x1b[0m', `✓ Server URL: ${serverUrl}`);
+        console.log('\x1b[36m%s\x1b[0m', `✓ API Docs: ${serverUrl}/api-docs`);
+        console.log('\x1b[36m%s\x1b[0m', `✓ Port: ${PORT}`);
+        console.log('\x1b[33m%s\x1b[0m', '-------------------------------------');
+
+        // Khởi động cron job cho điểm danh
+        setupAttendanceCron();
+
+        // Khởi động cron job cho xếp hạng
+        cron.startAllCrons();
+      });
+    } else {
+      console.error('\x1b[31m%s\x1b[0m', '✗ Không thể khởi động server do lỗi kết nối MongoDB');
+      process.exit(1);
+    }
   })
   .catch((error) => {
+    console.error('\x1b[31m%s\x1b[0m', `✗ Lỗi không xác định: ${error.message}`);
     process.exit(1);
   });

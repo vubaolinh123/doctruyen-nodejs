@@ -70,6 +70,107 @@ class UserService {
   }
 
   /**
+   * Tìm người dùng theo ID với các tùy chọn
+   * @param {string} id - ID người dùng
+   * @param {Object} options - Các tùy chọn (select, populate)
+   * @returns {Object} Thông tin người dùng
+   */
+  async findById(id, options = {}) {
+    try {
+      let query = User.findById(id);
+
+      if (options.select) {
+        query = query.select(options.select);
+      }
+
+      if (options.populate) {
+        query = query.populate(options.populate);
+      }
+
+      return await query;
+    } catch (error) {
+      console.error('Error finding user by ID:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Tìm người dùng theo email
+   * @param {string} email - Email người dùng
+   * @param {Object} options - Các tùy chọn (select, populate)
+   * @returns {Object} Thông tin người dùng
+   */
+  async findByEmail(email, options = {}) {
+    try {
+      let query = User.findOne({ email });
+
+      if (options.select) {
+        query = query.select(options.select);
+      }
+
+      if (options.populate) {
+        query = query.populate(options.populate);
+      }
+
+      return await query;
+    } catch (error) {
+      console.error('Error finding user by email:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Tìm người dùng theo Google ID (thực tế là tìm bằng email)
+   * @param {string} googleId - Google ID hoặc email người dùng
+   * @param {Object} options - Các tùy chọn (select, populate)
+   * @returns {Object} Thông tin người dùng
+   */
+  async findByGoogleId(googleId, options = {}) {
+    try {
+      console.log(`[userService] Finding user with Google account: ${googleId}`);
+
+      // Kiểm tra xem googleId có phải là email không
+      if (googleId && googleId.includes('@')) {
+        // Nếu là email, tìm người dùng bằng email
+        console.log(`[userService] Input is an email, searching by email: ${googleId}`);
+        return await this.findByEmail(googleId, options);
+      }
+
+      // Nếu không phải email và không có thông tin khác, trả về null
+      console.log(`[userService] Input is not an email and we don't store Google IDs, returning null`);
+      return null;
+    } catch (error) {
+      console.error('[userService] Error finding user by Google ID:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Tìm người dùng theo slug
+   * @param {string} slug - Slug người dùng
+   * @param {Object} options - Các tùy chọn (select, populate)
+   * @returns {Object} Thông tin người dùng
+   */
+  async findBySlug(slug, options = {}) {
+    try {
+      let query = User.findOne({ slug });
+
+      if (options.select) {
+        query = query.select(options.select);
+      }
+
+      if (options.populate) {
+        query = query.populate(options.populate);
+      }
+
+      return await query;
+    } catch (error) {
+      console.error('Error finding user by slug:', error);
+      return null;
+    }
+  }
+
+  /**
    * Tạo người dùng mới
    * @param {Object} userData - Dữ liệu người dùng
    * @returns {Object} Người dùng đã tạo
@@ -161,8 +262,21 @@ class UserService {
       avatar: user.avatar,
       banner: user.banner,
       role: user.role,
+      accountType: user.accountType,
+      gender: user.gender,
+      diem_danh: user.diem_danh || 0,
+      bio: user.bio || '',
+      facebook: user.facebook,
+      twitter: user.twitter,
+      instagram: user.instagram,
+      youtube: user.youtube,
+      website: user.website,
+      coin: user.coin || 0,
+      coin_total: user.coin_total || 0,
+      coin_spent: user.coin_spent || 0,
       permissions: publicPermissions,
-      created_at: user.createdAt
+      created_at: user.createdAt,
+      isActive: user.isActive
     };
   }
 
@@ -192,9 +306,19 @@ class UserService {
       coin: user.coin,
       coin_total: user.coin_total,
       coin_spent: user.coin_spent,
+      diem_danh: user.diem_danh || 0,
+      bio: user.bio || '',
+      facebook: user.facebook,
+      twitter: user.twitter,
+      instagram: user.instagram,
+      youtube: user.youtube,
+      website: user.website,
       permissions: activePermissions,
       attendance_summary: user.attendance_summary,
-      created_at: user.createdAt
+      created_at: user.createdAt,
+      isActive: user.isActive,
+      email_verified_at: user.email_verified_at,
+      status: user.status
     };
   }
 

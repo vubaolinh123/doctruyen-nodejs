@@ -4,6 +4,8 @@ const { Schema } = mongoose;
 /**
  * Schema cho cấu hình cache
  * Lưu thông tin cấu hình cache cho toàn bộ website
+ *
+ * Collection name: cacheconfigs
  */
 const cacheConfigSchema = new Schema({
   // Cấu hình cache API
@@ -15,13 +17,13 @@ const cacheConfigSchema = new Schema({
       min: 0,
       max: 86400 // 1 ngày
     },
-    
+
     // Có bật cache cho API không
     enabled: {
       type: Boolean,
       default: true
     },
-    
+
     // Cấu hình chi tiết cho từng loại API
     stories: {
       ttl: {
@@ -35,7 +37,7 @@ const cacheConfigSchema = new Schema({
         default: true
       }
     },
-    
+
     chapters: {
       ttl: {
         type: Number,
@@ -48,7 +50,7 @@ const cacheConfigSchema = new Schema({
         default: true
       }
     },
-    
+
     categories: {
       ttl: {
         type: Number,
@@ -61,7 +63,7 @@ const cacheConfigSchema = new Schema({
         default: true
       }
     },
-    
+
     search: {
       ttl: {
         type: Number,
@@ -74,7 +76,7 @@ const cacheConfigSchema = new Schema({
         default: true
       }
     },
-    
+
     seo: {
       ttl: {
         type: Number,
@@ -88,7 +90,7 @@ const cacheConfigSchema = new Schema({
       }
     }
   },
-  
+
   // Cấu hình cache trang
   pages: {
     // Thời gian cache cho trang (giây)
@@ -98,13 +100,13 @@ const cacheConfigSchema = new Schema({
       min: 0,
       max: 86400
     },
-    
+
     // Có bật cache cho trang không
     enabled: {
       type: Boolean,
       default: true
     },
-    
+
     // Cấu hình chi tiết cho từng loại trang
     home: {
       ttl: {
@@ -118,7 +120,7 @@ const cacheConfigSchema = new Schema({
         default: true
       }
     },
-    
+
     story: {
       ttl: {
         type: Number,
@@ -131,7 +133,7 @@ const cacheConfigSchema = new Schema({
         default: true
       }
     },
-    
+
     chapter: {
       ttl: {
         type: Number,
@@ -144,7 +146,7 @@ const cacheConfigSchema = new Schema({
         default: true
       }
     },
-    
+
     category: {
       ttl: {
         type: Number,
@@ -158,7 +160,7 @@ const cacheConfigSchema = new Schema({
       }
     }
   },
-  
+
   // Cấu hình cache hình ảnh
   images: {
     // Thời gian cache cho hình ảnh (giây)
@@ -168,14 +170,14 @@ const cacheConfigSchema = new Schema({
       min: 0,
       max: 2592000 // 30 ngày
     },
-    
+
     // Có bật cache cho hình ảnh không
     enabled: {
       type: Boolean,
       default: true
     }
   },
-  
+
   // Thời gian cập nhật cuối cùng
   lastUpdated: {
     type: Date,

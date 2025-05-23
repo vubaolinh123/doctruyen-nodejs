@@ -5,10 +5,10 @@ const { TokenBlacklist } = require('../../models/tokenBlacklist');
 const { RefreshToken } = require('../../models/refreshToken');
 const crypto = require('crypto');
 
-// Thời gian hết hạn của access token (15 phút)
+// Thời gian hết hạn của access token (15 ngày)
 const ACCESS_TOKEN_EXPIRY = '15d';
-// Thời gian hết hạn của refresh token (30 ngày)
-const REFRESH_TOKEN_EXPIRY = 30 * 24 * 60 * 60; // 30 days in seconds
+// Thời gian hết hạn của refresh token (15 ngày)
+const REFRESH_TOKEN_EXPIRY = 15 * 24 * 60 * 60; // 15 days in seconds
 
 /**
  * Tạo access token mới
@@ -21,6 +21,8 @@ const generateAccessToken = (user) => {
       id: user._id || user.id,
       email: user.email,
       role: user.role,
+      // Thêm slug vào payload để client có thể sử dụng
+      slug: user.slug || '',
       // Thêm jti (JWT ID) để có thể vô hiệu hóa token cụ thể
       jti: crypto.randomBytes(16).toString('hex')
     },
@@ -37,6 +39,7 @@ const generateAccessToken = (user) => {
 const getUserResponse = (user) => {
   return {
     id: user._id.toString(),
+    mongoId: user._id.toString(), // Thêm MongoDB ObjectId để client có thể sử dụng
     name: user.name || "",
     email: user.email || "",
     role: user.role || 'user',
@@ -180,14 +183,16 @@ const login = async (credentials, clientInfo) => {
  * @returns {Promise<Object>} - Kết quả đăng nhập
  */
 const oauthLogin = async (oauthData, clientInfo) => {
-  const { email, name, avatar, accountType, token: oauthToken, preserve_db_data } = oauthData;
+  const { email, name, avatar, accountType, token: oauthToken, preserve_db_data, googleId } = oauthData;
   const { userAgent, ipAddress } = clientInfo;
 
   if (!email) {
     throw new Error('MISSING_EMAIL');
   }
 
+  // Luôn tìm kiếm người dùng bằng email, không sử dụng Google ID
   let user = await User.findOne({ email });
+
   if (!user) {
     // Tạo user mới nếu chưa tồn tại
     user = new User({
@@ -197,6 +202,17 @@ const oauthLogin = async (oauthData, clientInfo) => {
       accountType: accountType || 'google',
       isActive: true
     });
+
+    // Tạo slug cho tài khoản mới
+    if (name) {
+      user.slug = await User.generateUniqueSlug(name);
+    }
+
+    // Lưu thông tin Google ID vào metadata nếu cần theo dõi (không sử dụng để tìm kiếm)
+    if (googleId) {
+      user.metadata = user.metadata || {};
+      user.metadata.googleId = googleId;
+    }
   } else {
     // Cập nhật thông tin cho tài khoản hiện có
     if (preserve_db_data !== 'true') {
@@ -206,6 +222,17 @@ const oauthLogin = async (oauthData, clientInfo) => {
     }
     // Cập nhật loại tài khoản
     user.accountType = accountType || user.accountType || 'google';
+
+    // Tạo slug nếu chưa có
+    if (!user.slug && user.name) {
+      user.slug = await User.generateUniqueSlug(user.name);
+    }
+
+    // Cập nhật thông tin Google ID trong metadata nếu cần
+    if (googleId) {
+      user.metadata = user.metadata || {};
+      user.metadata.googleId = googleId;
+    }
   }
 
   // Lưu hoặc cập nhật
