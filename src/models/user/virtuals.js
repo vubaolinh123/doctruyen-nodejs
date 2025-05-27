@@ -34,6 +34,12 @@ const setupVirtuals = (schema) => {
     foreignField: 'user_id'
   });
 
+  schema.virtual('permissions', {
+    ref: 'UserPermission',
+    localField: '_id',
+    foreignField: 'user_id'
+  });
+
   schema.virtual('comments', {
     ref: 'Comment',
     localField: '_id',
@@ -47,4 +53,4 @@ const setupVirtuals = (schema) => {
   });
 };
 
-module.exports = setupVirtuals; 
+module.exports = setupVirtuals;

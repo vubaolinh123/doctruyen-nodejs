@@ -25,31 +25,17 @@ const setupHooks = (schema) => {
     try {
       // Lấy model User
       const User = this.model('User');
-      
+
       // Tìm người dùng
       const user = await User.findById(doc.user_id);
-      
-      if (user && user.attendance_summary) {
-        // Cập nhật thông tin điểm danh trong User model
-        if (doc.status === 'attended') {
-          // Tăng tổng số ngày điểm danh
-          user.attendance_summary.total_days += 1;
-          
-          // Cập nhật ngày điểm danh gần nhất
-          user.attendance_summary.last_attendance = doc.date;
-          
-          // Cập nhật streak nếu cần
-          if (doc.streak_count > user.attendance_summary.current_streak) {
-            user.attendance_summary.current_streak = doc.streak_count;
-            
-            // Cập nhật longest streak nếu cần
-            if (doc.streak_count > user.attendance_summary.longest_streak) {
-              user.attendance_summary.longest_streak = doc.streak_count;
-            }
-          }
-          
-          await user.save();
-        }
+
+      // REMOVED: Duplicate logic đã được xử lý trong user.updateAttendance()
+      // Không cần cập nhật attendance_summary ở đây vì đã được xử lý trong service
+      // Logic này gây ra duplicate tăng total_days và các thống kê khác
+
+      // Chỉ log để debug nếu cần
+      if (user && user.attendance_summary && doc.status === 'attended') {
+        console.log(`[AttendanceHook] Attendance record created for user ${doc.user_id} on ${doc.date}`);
       }
     } catch (error) {
       console.error('Lỗi khi cập nhật thông tin điểm danh trong User model:', error);

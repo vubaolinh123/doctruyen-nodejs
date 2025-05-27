@@ -32,5 +32,6 @@ router.use('/comments', require('./commentRoutes'));
 // Admin routes
 router.use('/admin/coins', auth, require('./coins'));
 router.use('/admin/users', auth, require('./admin/users'));
+router.use('/admin/permission-templates', require('./admin/permissionTemplates'));
 
 module.exports = router;

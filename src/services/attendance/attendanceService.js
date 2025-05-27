@@ -101,15 +101,40 @@ class AttendanceService {
       }
     }
 
-    // Kiểm tra xem ngày hôm qua có điểm danh không để xác định số ngày liên tiếp
+    // Tính toán số ngày điểm danh liên tiếp hiện tại
+    // Sử dụng trực tiếp current_streak từ user model vì nó đã được tính toán chính xác
     let consecutiveDays = user.attendance_summary.current_streak || 0;
-    if (user.attendance_summary.last_attendance) {
+
+    // Nếu user chưa từng điểm danh, consecutiveDays = 0
+    if (!user.attendance_summary.last_attendance) {
+      consecutiveDays = 0;
+    } else {
+      // Kiểm tra xem chuỗi điểm danh có bị gián đoạn không dựa trên thời gian thực
       const lastDate = new Date(user.attendance_summary.last_attendance);
+      lastDate.setHours(0, 0, 0, 0);
 
-      const yesterday = this._getYesterdayDate(timezone, timezoneOffset);
+      // Lấy ngày hôm nay thực tế (không phải ngày được query)
+      const realToday = new Date();
+      realToday.setHours(0, 0, 0, 0);
 
-      if (lastDate.getTime() !== yesterday.getTime()) {
-        consecutiveDays = 0;
+      const realYesterday = new Date(realToday);
+      realYesterday.setDate(realYesterday.getDate() - 1);
+
+      // Nếu đang query tháng/năm hiện tại
+      const isCurrentMonth = (yearNum === realToday.getFullYear() && monthNum === realToday.getMonth());
+
+      if (isCurrentMonth) {
+        // Nếu đang xem tháng hiện tại, kiểm tra streak dựa trên ngày thực
+        if (lastDate.getTime() === realToday.getTime() || lastDate.getTime() === realYesterday.getTime()) {
+          consecutiveDays = user.attendance_summary.current_streak || 0;
+        } else {
+          // Chuỗi điểm danh đã bị gián đoạn
+          consecutiveDays = 0;
+        }
+      } else {
+        // Nếu đang xem tháng trong quá khứ, sử dụng current_streak trực tiếp
+        // vì đó là streak tại thời điểm đó
+        consecutiveDays = user.attendance_summary.current_streak || 0;
       }
     }
 
@@ -285,12 +310,11 @@ class AttendanceService {
   }
 
   /**
-   * Cập nhật các ngày bỏ lỡ điểm danh
+   * Cập nhật các ngày bỏ lỡ điểm danh với batch processing
    */
   async updateMissedDays() {
     try {
-      // Lấy tất cả người dùng
-      const users = await User.find({ status: 'active' });
+      const BATCH_SIZE = 500; // Xử lý 500 user một lần
 
       // Lấy ngày hiện tại theo múi giờ Việt Nam
       const vietnamToday = new Date();
@@ -300,43 +324,74 @@ class AttendanceService {
       const yesterday = new Date(vietnamToday);
       yesterday.setDate(yesterday.getDate() - 1);
 
-      console.log(`Cập nhật điểm danh bỏ lỡ cho ngày ${yesterday.toISOString().split('T')[0]}`);
+      console.log(`[AttendanceCron] Bắt đầu cập nhật điểm danh bỏ lỡ cho ngày ${yesterday.toISOString().split('T')[0]}`);
+
+      // Đếm tổng số user cần xử lý
+      const totalUsers = await User.countDocuments({ status: 'active' });
+      console.log(`[AttendanceCron] Tổng số user cần xử lý: ${totalUsers}`);
 
       let updatedCount = 0;
+      let processedCount = 0;
+      let skip = 0;
 
-      // Kiểm tra từng người dùng
-      for (const user of users) {
-        // Kiểm tra xem người dùng đã điểm danh hôm qua chưa
-        const yesterdayAttendance = await Attendance.findOne({
-          user_id: user._id,
-          year: yesterday.getFullYear(),
-          month: yesterday.getMonth(),
-          day: yesterday.getDate()
-        });
+      // Xử lý theo batch
+      while (processedCount < totalUsers) {
+        console.log(`[AttendanceCron] Đang xử lý batch ${Math.floor(skip / BATCH_SIZE) + 1}, từ user ${skip + 1} đến ${Math.min(skip + BATCH_SIZE, totalUsers)}`);
 
-        // Nếu chưa điểm danh, tạo bản ghi missed
-        if (!yesterdayAttendance) {
-          await Attendance.createMissedAttendance(user._id, yesterday);
+        // Lấy batch user hiện tại
+        const users = await User.find({ status: 'active' })
+          .skip(skip)
+          .limit(BATCH_SIZE)
+          .select('_id attendance_summary');
 
-          // Reset streak nếu người dùng có streak > 0
-          if (user.attendance_summary && user.attendance_summary.current_streak > 0) {
-            user.attendance_summary.current_streak = 0;
-            await user.save();
+        // Xử lý từng user trong batch
+        for (const user of users) {
+          try {
+            // Kiểm tra xem người dùng đã điểm danh hôm qua chưa
+            const yesterdayAttendance = await Attendance.findOne({
+              user_id: user._id,
+              year: yesterday.getFullYear(),
+              month: yesterday.getMonth(),
+              day: yesterday.getDate()
+            });
+
+            // Nếu chưa điểm danh, tạo bản ghi missed và reset streak
+            if (!yesterdayAttendance) {
+              // Tạo bản ghi missed (nếu có method này)
+              if (Attendance.createMissedAttendance) {
+                await Attendance.createMissedAttendance(user._id, yesterday);
+              }
+
+              // Reset streak nếu người dùng có streak > 0
+              if (user.attendance_summary && user.attendance_summary.current_streak > 0) {
+                user.attendance_summary.current_streak = 0;
+                await user.save();
+              }
+
+              updatedCount++;
+            }
+          } catch (userError) {
+            console.error(`[AttendanceCron] Lỗi khi xử lý user ${user._id}:`, userError);
           }
-
-          updatedCount++;
         }
+
+        processedCount += users.length;
+        skip += BATCH_SIZE;
+
+        // Nghỉ 100ms giữa các batch để tránh quá tải database
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
 
-      console.log(`Đã cập nhật ${updatedCount} người dùng bỏ lỡ điểm danh`);
+      console.log(`[AttendanceCron] Hoàn thành! Đã xử lý ${processedCount} user, cập nhật ${updatedCount} user bỏ lỡ điểm danh`);
 
       return {
         status: 'success',
         message: `Đã cập nhật ${updatedCount} người dùng bỏ lỡ điểm danh`,
-        updatedCount
+        updatedCount,
+        totalProcessed: processedCount
       };
     } catch (error) {
-      console.error('Lỗi khi cập nhật điểm danh bỏ lỡ:', error);
+      console.error('[AttendanceCron] Lỗi khi cập nhật điểm danh bỏ lỡ:', error);
       throw error;
     }
   }

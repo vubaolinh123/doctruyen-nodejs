@@ -82,7 +82,7 @@ module.exports = function vietnamTimezonePlugin(schema) {
 /**
  * Hàm chuyển đổi thời gian từ UTC sang múi giờ Việt Nam (UTC+7)
  * @param {Date} date - Đối tượng Date cần chuyển đổi
- * @returns {Date} - Đối tượng Date đã được chuyển đổi sang múi giờ Việt Nam
+ * @returns {string} - Chuỗi thời gian theo múi giờ Việt Nam (ISO string không có Z)
  */
 function convertToVietnamTime(date) {
   if (!date) return date;
@@ -97,5 +97,6 @@ function convertToVietnamTime(date) {
   // Thêm 7 giờ (7 * 60 * 60 * 1000 milliseconds)
   const vietnamTime = new Date(utcTime + (7 * 60 * 60 * 1000));
 
-  return vietnamTime;
+  // Trả về ISO string nhưng loại bỏ chữ Z ở cuối để hiển thị là giờ Việt Nam
+  return vietnamTime.toISOString().replace('Z', '');
 }

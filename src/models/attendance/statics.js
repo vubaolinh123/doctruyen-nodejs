@@ -77,6 +77,35 @@ const setupStatics = (schema) => {
   };
 
   /**
+   * Tạo bản ghi điểm danh bỏ lỡ
+   * @param {String} userId - ID của người dùng
+   * @param {Date} date - Ngày bỏ lỡ điểm danh
+   * @returns {Promise<Object>} - Bản ghi điểm danh bỏ lỡ
+   */
+  schema.statics.createMissedAttendance = async function(userId, date) {
+    const day = date.getDate();
+    const month = date.getMonth();
+    const year = date.getFullYear();
+
+    // Tạo bản ghi missed với thời gian hiện tại theo múi giờ Việt Nam
+    const now = new Date(); // Sử dụng múi giờ đã thiết lập (Asia/Ho_Chi_Minh)
+
+    return this.create({
+      user_id: userId,
+      date,
+      status: 'missed',
+      reward: 0,
+      day,
+      month,
+      year,
+      streak_count: 0,
+      bonus_reward: 0,
+      notes: 'Bỏ lỡ điểm danh',
+      attendance_time: now
+    });
+  };
+
+  /**
    * Tạo bản ghi missed
    * @param {String} userId - ID của người dùng
    * @param {Date} date - Ngày bỏ lỡ
@@ -129,7 +158,7 @@ const setupStatics = (schema) => {
     // Lấy ngày hiện tại theo múi giờ Việt Nam
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
+
     const attendance = await this.findOne({
       user_id: userId,
       date: {
@@ -137,7 +166,7 @@ const setupStatics = (schema) => {
         $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000)
       }
     });
-    
+
     return !!attendance;
   };
 };

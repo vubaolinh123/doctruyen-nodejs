@@ -6,114 +6,68 @@ const setupMethods = (schema) => {
   /**
    * Kiểm tra xem người dùng có quyền cụ thể không
    * @param {string} permissionName - Tên quyền cần kiểm tra
-   * @returns {boolean} - true nếu có quyền, false nếu không
+   * @returns {Promise<boolean>} - true nếu có quyền, false nếu không
    */
-  schema.methods.hasPermission = function(permissionName) {
-    if (!this.permissions || !this.permissions.length) {
-      return false;
-    }
-
-    const now = new Date();
-
-    // Tìm quyền trong danh sách quyền của người dùng
-    const permission = this.permissions.find(p =>
-      p.name === permissionName &&
-      p.active === true &&
-      (!p.expires_at || p.expires_at > now)
-    );
-
-    return !!permission;
+  schema.methods.hasPermission = async function(permissionName) {
+    const UserPermission = require('../userPermission');
+    return await UserPermission.hasPermission(this._id, permissionName);
   };
 
   /**
    * Thêm quyền cho người dùng
    * @param {Object} permissionData - Thông tin quyền cần thêm
-   * @returns {Promise<Object>} - Người dùng đã cập nhật
+   * @returns {Promise<Object>} - UserPermission đã tạo/cập nhật
    */
   schema.methods.addPermission = async function(permissionData) {
-    // Kiểm tra xem quyền đã tồn tại chưa
-    const existingPermissionIndex = this.permissions.findIndex(p => p.name === permissionData.name);
-
-    if (existingPermissionIndex >= 0) {
-      // Nếu quyền đã tồn tại, cập nhật nó
-      this.permissions[existingPermissionIndex] = {
-        ...this.permissions[existingPermissionIndex].toObject(),
-        ...permissionData,
-        granted_at: new Date()
-      };
-    } else {
-      // Nếu quyền chưa tồn tại, thêm mới
-      this.permissions.push({
-        ...permissionData,
-        granted_at: new Date()
-      });
-    }
-
-    return this.save();
+    const UserPermission = require('../userPermission');
+    return await UserPermission.addOrUpdatePermission(this._id, permissionData);
   };
 
   /**
    * Xóa quyền của người dùng
    * @param {string} permissionName - Tên quyền cần xóa
-   * @returns {Promise<Object>} - Người dùng đã cập nhật
+   * @returns {Promise<Object>} - Kết quả xóa
    */
   schema.methods.removePermission = async function(permissionName) {
-    // Lọc ra các quyền khác với quyền cần xóa
-    this.permissions = this.permissions.filter(p => p.name !== permissionName);
-
-    return this.save();
+    const UserPermission = require('../userPermission');
+    return await UserPermission.removePermission(this._id, permissionName);
   };
 
   /**
    * Vô hiệu hóa quyền của người dùng
    * @param {string} permissionName - Tên quyền cần vô hiệu hóa
-   * @returns {Promise<Object>} - Người dùng đã cập nhật
+   * @returns {Promise<Object>} - UserPermission đã cập nhật
    */
   schema.methods.deactivatePermission = async function(permissionName) {
-    // Tìm quyền cần vô hiệu hóa
-    const permissionIndex = this.permissions.findIndex(p => p.name === permissionName);
-
-    if (permissionIndex >= 0) {
-      // Vô hiệu hóa quyền
-      this.permissions[permissionIndex].active = false;
+    const UserPermission = require('../userPermission');
+    const permission = await UserPermission.findUserPermission(this._id, permissionName);
+    if (permission) {
+      return await permission.deactivate();
     }
-
-    return this.save();
+    return null;
   };
 
   /**
    * Kích hoạt quyền của người dùng
    * @param {string} permissionName - Tên quyền cần kích hoạt
-   * @returns {Promise<Object>} - Người dùng đã cập nhật
+   * @returns {Promise<Object>} - UserPermission đã cập nhật
    */
   schema.methods.activatePermission = async function(permissionName) {
-    // Tìm quyền cần kích hoạt
-    const permissionIndex = this.permissions.findIndex(p => p.name === permissionName);
-
-    if (permissionIndex >= 0) {
-      // Kích hoạt quyền
-      this.permissions[permissionIndex].active = true;
+    const UserPermission = require('../userPermission');
+    const permission = await UserPermission.findUserPermission(this._id, permissionName);
+    if (permission) {
+      return await permission.activate();
     }
-
-    return this.save();
+    return null;
   };
 
   /**
    * Lấy danh sách quyền đang hoạt động của người dùng
-   * @returns {Array} - Danh sách quyền đang hoạt động
+   * @returns {Promise<Array>} - Danh sách quyền đang hoạt động
    */
-  schema.methods.getActivePermissions = function() {
-    if (!this.permissions || !this.permissions.length) {
-      return [];
-    }
-
-    const now = new Date();
-
-    // Lọc ra các quyền đang hoạt động
-    return this.permissions.filter(p =>
-      p.active === true &&
-      (!p.expires_at || p.expires_at > now)
-    );
+  schema.methods.getActivePermissions = async function() {
+    const UserPermission = require('../userPermission');
+    return await UserPermission.getActivePermissions(this._id);
   };
   /**
    * Kiểm tra xem người dùng có phải là admin hay không
@@ -147,7 +101,15 @@ const setupMethods = (schema) => {
     // Kiểm tra xem ngày cuối cùng điểm danh có phải là ngày hôm qua không
     const yesterday = new Date(date);
     yesterday.setDate(yesterday.getDate() - 1);
-    const isConsecutive = lastDate && lastDate.toDateString() === yesterday.toDateString();
+    yesterday.setHours(0, 0, 0, 0);
+
+    // Chuẩn hóa lastDate để so sánh
+    let isConsecutive = false;
+    if (lastDate) {
+      const normalizedLastDate = new Date(lastDate);
+      normalizedLastDate.setHours(0, 0, 0, 0);
+      isConsecutive = normalizedLastDate.getTime() === yesterday.getTime();
+    }
 
     // Cập nhật thông tin điểm danh
     this.attendance_summary.last_attendance = date;
@@ -157,7 +119,7 @@ const setupMethods = (schema) => {
       // Nếu ngày liên tiếp, tăng số ngày liên tiếp lên 1
       this.attendance_summary.current_streak += 1;
     } else {
-      // Nếu không liên tiếp, reset về 1
+      // Nếu không liên tiếp hoặc lần đầu điểm danh, set về 1
       this.attendance_summary.current_streak = 1;
     }
 

@@ -81,8 +81,7 @@ connectDB()
     if (connected) {
       // Khởi động server sau khi kết nối MongoDB thành công
       const server = app.listen(PORT, () => {
-        const serverAddress = server.address();
-        const serverUrl = `http://localhost:${serverAddress.port}`;
+        const serverUrl = `http://localhost:${PORT}`;
 
         console.log('\x1b[32m%s\x1b[0m', '✓ Server đang chạy!');
         console.log('\x1b[36m%s\x1b[0m', `✓ Server URL: ${serverUrl}`);
