@@ -254,7 +254,7 @@ class UserService {
       (p.metadata && p.metadata.public === true)
     );
 
-    // Chỉ trả về các thông tin công khai
+    // Chỉ trả về các thông tin công khai với nested social object
     return {
       id: user._id,
       name: user.name,
@@ -265,18 +265,33 @@ class UserService {
       accountType: user.accountType,
       gender: user.gender,
       diem_danh: user.diem_danh || 0,
-      bio: user.bio || '',
-      facebook: user.facebook,
-      twitter: user.twitter,
-      instagram: user.instagram,
-      youtube: user.youtube,
-      website: user.website,
+      // Nested social object structure
+      social: {
+        bio: user.social?.bio || '',
+        facebook: user.social?.facebook || '',
+        twitter: user.social?.twitter || '',
+        instagram: user.social?.instagram || '',
+        youtube: user.social?.youtube || '',
+        website: user.social?.website || ''
+      },
       coin: user.coin || 0,
       coin_total: user.coin_total || 0,
       coin_spent: user.coin_spent || 0,
       permissions: publicPermissions,
       created_at: user.createdAt,
-      isActive: user.isActive
+      isActive: user.isActive,
+      // Attendance summary
+      attendance_summary: user.attendance_summary || {
+        total_days: user.diem_danh || 0,
+        current_streak: 0,
+        longest_streak: 0,
+        last_attendance: null
+      },
+      // Metadata
+      metadata: user.metadata || {
+        comment_count: 0,
+        liked_comments_count: 0
+      }
     };
   }
 
@@ -291,7 +306,7 @@ class UserService {
     // Lấy danh sách quyền đang hoạt động
     const activePermissions = user.getActivePermissions ? user.getActivePermissions() : [];
 
-    // Trả về thông tin đầy đủ hơn cho chủ tài khoản
+    // Trả về thông tin đầy đủ hơn cho chủ tài khoản với nested social object
     return {
       id: user._id,
       name: user.name,
@@ -307,18 +322,31 @@ class UserService {
       coin_total: user.coin_total,
       coin_spent: user.coin_spent,
       diem_danh: user.diem_danh || 0,
-      bio: user.bio || '',
-      facebook: user.facebook,
-      twitter: user.twitter,
-      instagram: user.instagram,
-      youtube: user.youtube,
-      website: user.website,
+      // Nested social object structure
+      social: {
+        bio: user.social?.bio || '',
+        facebook: user.social?.facebook || '',
+        twitter: user.social?.twitter || '',
+        instagram: user.social?.instagram || '',
+        youtube: user.social?.youtube || '',
+        website: user.social?.website || ''
+      },
       permissions: activePermissions,
-      attendance_summary: user.attendance_summary,
+      attendance_summary: user.attendance_summary || {
+        total_days: user.diem_danh || 0,
+        current_streak: 0,
+        longest_streak: 0,
+        last_attendance: null
+      },
       created_at: user.createdAt,
       isActive: user.isActive,
       email_verified_at: user.email_verified_at,
-      status: user.status
+      status: user.status,
+      // Metadata
+      metadata: user.metadata || {
+        comment_count: 0,
+        liked_comments_count: 0
+      }
     };
   }
 

@@ -9,7 +9,7 @@ const jwt = require('jsonwebtoken');
 exports.refreshToken = async (req, res) => {
   try {
     const { refreshToken } = req.body;
-    
+
     // Thông tin client cho auth service
     const clientInfo = {
       userAgent: req.headers['user-agent'] || '',
@@ -18,7 +18,7 @@ exports.refreshToken = async (req, res) => {
 
     // Sử dụng authService để xử lý logic làm mới token
     const result = await authService.refreshUserToken(refreshToken, clientInfo);
-    
+
     res.json(result);
   } catch (err) {
     console.error('❌ Refresh token error:', err);
@@ -69,7 +69,7 @@ exports.getMe = async (req, res) => {
 
     // Sử dụng authService để lấy thông tin người dùng
     const result = await authService.getCurrentUser(userId);
-    
+
     res.json(result);
   } catch (err) {
     console.error('❌ Get profile error:', err);
@@ -99,7 +99,7 @@ exports.updateProfile = async (req, res) => {
 
     // Sử dụng authService để cập nhật thông tin
     const result = await authService.updateUserProfile(userId, req.body);
-    
+
     res.json(result);
   } catch (err) {
     console.error('❌ Update profile error:', err);
@@ -119,6 +119,11 @@ exports.updateProfile = async (req, res) => {
       return res.status(400).json({
         code: 'WEAK_PASSWORD',
         message: 'Mật khẩu mới phải có ít nhất 8 ký tự'
+      });
+    } else if (err.message === 'GOOGLE_ACCOUNT') {
+      return res.status(400).json({
+        code: 'GOOGLE_ACCOUNT',
+        message: 'Tài khoản Google không thể đổi mật khẩu. Vui lòng sử dụng cài đặt bảo mật Google.'
       });
     }
 
@@ -144,7 +149,7 @@ exports.logout = async (req, res) => {
 
     // Sử dụng authService để xử lý đăng xuất
     const result = await authService.logout(accessToken, refreshToken);
-    
+
     res.json(result);
   } catch (err) {
     console.error('❌ Logout error:', err);
@@ -170,24 +175,24 @@ exports.logout = async (req, res) => {
 exports.generateAdminToken = async (req, res) => {
   try {
     const { email } = req.body;
-    
+
     if (!email) {
       return res.status(400).json({
         success: false,
         message: 'Email không được để trống'
       });
     }
-    
+
     // Tìm user với email và role là admin
     const admin = await User.findOne({ email, role: 'admin' });
-    
+
     if (!admin) {
       return res.status(404).json({
         success: false,
         message: 'Không tìm thấy tài khoản admin với email này'
       });
     }
-    
+
     // Tạo token mới cho admin
     const payload = {
       id: admin._id,
@@ -195,13 +200,13 @@ exports.generateAdminToken = async (req, res) => {
       name: admin.name,
       role: admin.role
     };
-    
+
     const accessToken = jwt.sign(
       payload,
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
-    
+
     return res.json({
       success: true,
       accessToken
@@ -213,4 +218,4 @@ exports.generateAdminToken = async (req, res) => {
       message: 'Lỗi máy chủ nội bộ'
     });
   }
-}; 
+};

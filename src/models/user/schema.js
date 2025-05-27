@@ -43,6 +43,41 @@ const userSchema = new Schema({
     default: null
   },
 
+  // Thông tin mạng xã hội và giới thiệu
+  social: {
+    bio: {
+      type: String,
+      default: '',
+      maxlength: 200,
+      trim: true
+    },
+    facebook: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    twitter: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    instagram: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    youtube: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    website: {
+      type: String,
+      default: '',
+      trim: true
+    }
+  },
+
   // Thông tin tài khoản
   status: {
     type: String,

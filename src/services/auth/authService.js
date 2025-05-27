@@ -44,6 +44,7 @@ const getUserResponse = (user) => {
     email: user.email || "",
     role: user.role || 'user',
     avatar: user.avatar || "https://scontent.fhan14-1.fna.fbcdn.net/v/t1.30497-1/453178253_471506465671661_2781666950760530985_n.png?stp=dst-png_s200x200&_nc_cat=1&ccb=1-7&_nc_sid=136b72&_nc_eui2=AeEVh0QX00TsNbI_haYB6RkWWt9TLzuBU1Ba31MvO4FTUF6Wlqf82r4BlCRAvh76aT3XsemaZbZv1fSB6o0CuFyz&_nc_ohc=Py8_nbWK5EEQ7kNvwGsqdUg&_nc_oc=AdnI1l-iLBtmCS_HEGsSqRjBSwsEa7c2UqgE5xPauCK2NBbd3kafOH_SABtbbISIdl6NeB79axebfe0e8MZgqmPe&_nc_zt=24&_nc_ht=scontent.fhan14-1.fna&oh=00_AfEDQng6NcDapZJFJ_Rjx-l97NT-NKumwkUgVLnP-cH5Fg&oe=683150FA",
+    banner: user.banner || null,
     accountType: user.accountType || 'email',
     gender: user.gender || '',
     birthday: user.birthday || null,
@@ -54,7 +55,25 @@ const getUserResponse = (user) => {
     coin_spent: user.coin_spent || 0,
     created_at: user.createdAt || null,
     isActive: user.isActive || false,
-    email_verified_at: user.email_verified_at || null
+    email_verified_at: user.email_verified_at || null,
+    // Social media information - only nested object, no flat fields
+    social: {
+      bio: user.social?.bio || '',
+      facebook: user.social?.facebook || '',
+      twitter: user.social?.twitter || '',
+      instagram: user.social?.instagram || '',
+      youtube: user.social?.youtube || '',
+      website: user.social?.website || ''
+    },
+    // Attendance summary
+    attendance_summary: user.attendance_summary || {
+      total_days: 0,
+      current_streak: 0,
+      longest_streak: 0,
+      last_attendance: null
+    },
+    // Metadata
+    metadata: user.metadata || {}
   };
 };
 
@@ -404,9 +423,153 @@ const updateUserProfile = async (userId, updateData) => {
   if (updateData.banner !== undefined) user.banner = updateData.banner;
   if (updateData.gender !== undefined) user.gender = updateData.gender;
   if (updateData.birthday !== undefined) user.birthday = updateData.birthday;
+
+  // Khởi tạo social object nếu chưa có, preserving existing data
+  if (!user.social) {
+    user.social = {
+      bio: '',
+      facebook: '',
+      twitter: '',
+      instagram: '',
+      youtube: '',
+      website: ''
+    };
+  }
+
+  // Cập nhật thông tin mạng xã hội và bio với validation - PRESERVE EXISTING DATA
+  if (updateData.social !== undefined ||
+      updateData.bio !== undefined ||
+      updateData.facebook !== undefined ||
+      updateData.twitter !== undefined ||
+      updateData.instagram !== undefined ||
+      updateData.youtube !== undefined ||
+      updateData.website !== undefined) {
+
+    // Validation cho URLs mạng xã hội
+    const validateUrl = (url, platform) => {
+      if (!url) return true; // Empty URL is valid
+
+      try {
+        const urlObj = new URL(url);
+
+        // Kiểm tra protocol
+        if (!['http:', 'https:'].includes(urlObj.protocol)) {
+          throw new Error(`INVALID_${platform.toUpperCase()}_URL`);
+        }
+
+        // Kiểm tra domain cho từng platform
+        switch (platform) {
+          case 'facebook':
+            if (!urlObj.hostname.includes('facebook.com') && !urlObj.hostname.includes('fb.com')) {
+              throw new Error('INVALID_FACEBOOK_URL');
+            }
+            break;
+          case 'twitter':
+            if (!urlObj.hostname.includes('twitter.com') && !urlObj.hostname.includes('x.com')) {
+              throw new Error('INVALID_TWITTER_URL');
+            }
+            break;
+          case 'instagram':
+            if (!urlObj.hostname.includes('instagram.com')) {
+              throw new Error('INVALID_INSTAGRAM_URL');
+            }
+            break;
+          case 'youtube':
+            if (!urlObj.hostname.includes('youtube.com') && !urlObj.hostname.includes('youtu.be')) {
+              throw new Error('INVALID_YOUTUBE_URL');
+            }
+            break;
+        }
+
+        return true;
+      } catch (error) {
+        if (error.message.startsWith('INVALID_')) {
+          throw error;
+        }
+        throw new Error(`INVALID_${platform.toUpperCase()}_URL`);
+      }
+    };
+
+    // Xử lý cập nhật từ nested social object - PRESERVE EXISTING DATA
+    if (updateData.social) {
+      if (updateData.social.bio !== undefined) {
+        if (updateData.social.bio.length > 200) {
+          throw new Error('BIO_TOO_LONG');
+        }
+        user.social.bio = updateData.social.bio;
+      }
+
+      if (updateData.social.facebook !== undefined) {
+        validateUrl(updateData.social.facebook, 'facebook');
+        user.social.facebook = updateData.social.facebook;
+      }
+      if (updateData.social.twitter !== undefined) {
+        validateUrl(updateData.social.twitter, 'twitter');
+        user.social.twitter = updateData.social.twitter;
+      }
+      if (updateData.social.instagram !== undefined) {
+        validateUrl(updateData.social.instagram, 'instagram');
+        user.social.instagram = updateData.social.instagram;
+      }
+      if (updateData.social.youtube !== undefined) {
+        validateUrl(updateData.social.youtube, 'youtube');
+        user.social.youtube = updateData.social.youtube;
+      }
+      if (updateData.social.website !== undefined) {
+        if (updateData.social.website && updateData.social.website.trim()) {
+          try {
+            new URL(updateData.social.website);
+          } catch (error) {
+            throw new Error('INVALID_WEBSITE_URL');
+          }
+        }
+        user.social.website = updateData.social.website;
+      }
+    }
+
+    // Xử lý cập nhật từ flat fields (backward compatibility) - PRESERVE EXISTING DATA
+    if (updateData.bio !== undefined) {
+      if (updateData.bio.length > 200) {
+        throw new Error('BIO_TOO_LONG');
+      }
+      user.social.bio = updateData.bio;
+    }
+    if (updateData.facebook !== undefined) {
+      validateUrl(updateData.facebook, 'facebook');
+      user.social.facebook = updateData.facebook;
+    }
+    if (updateData.twitter !== undefined) {
+      validateUrl(updateData.twitter, 'twitter');
+      user.social.twitter = updateData.twitter;
+    }
+    if (updateData.instagram !== undefined) {
+      validateUrl(updateData.instagram, 'instagram');
+      user.social.instagram = updateData.instagram;
+    }
+    if (updateData.youtube !== undefined) {
+      validateUrl(updateData.youtube, 'youtube');
+      user.social.youtube = updateData.youtube;
+    }
+    if (updateData.website !== undefined) {
+      if (updateData.website && updateData.website.trim()) {
+        try {
+          new URL(updateData.website);
+        } catch (error) {
+          throw new Error('INVALID_WEBSITE_URL');
+        }
+      }
+      user.social.website = updateData.website;
+    }
+  }
   if (updateData.password !== undefined && updateData.currentPassword !== undefined) {
+    // Kiểm tra nếu là tài khoản Google
+    if (user.accountType === 'google') {
+      throw new Error('GOOGLE_ACCOUNT');
+    }
+
     // Kiểm tra mật khẩu hiện tại trước khi đổi
     const isValidPassword = await bcrypt.compare(updateData.currentPassword, user.password);
+
     if (!isValidPassword) {
       throw new Error('INVALID_CURRENT_PASSWORD');
     }
@@ -417,9 +580,9 @@ const updateUserProfile = async (userId, updateData) => {
     }
 
     // Hash mật khẩu mới
-    user.password = await bcrypt.hash(updateData.password, 12);
+    const newHashedPassword = await bcrypt.hash(updateData.password, 12);
+    user.password = newHashedPassword;
   }
-
   await user.save();
 
   return {
