@@ -97,9 +97,6 @@ module.exports = (req, res, next) => {
 const optionalAuth = (req, res, next) => {
   const authHeader = req.headers.authorization;
 
-  // Debug logging
-  console.log('[Optional Auth] Authorization header:', authHeader ? 'Present' : 'Missing');
-
   // Nếu không có header hoặc token, vẫn cho phép tiếp tục nhưng không set req.user
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     console.log('[Optional Auth] No valid auth header, continuing without user');
@@ -115,13 +112,7 @@ const optionalAuth = (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded; // Lưu thông tin người dùng vào req.user nếu token hợp lệ
-    console.log('[Optional Auth] Token decoded successfully:', {
-      id: decoded.id,
-      email: decoded.email,
-      role: decoded.role,
-      hasId: !!decoded.id,
-      decodedKeys: Object.keys(decoded)
-    });
+    console.log('[Optional Auth] Token decoded successfully');
   } catch (err) {
     // Nếu token không hợp lệ, vẫn cho phép tiếp tục nhưng không set req.user
     console.log('[Optional Auth] Token invalid:', err.message);
