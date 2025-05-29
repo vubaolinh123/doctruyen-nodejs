@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const express = require('express');
 const connectDB = require('./config/db');
 const routes = require('./routes');
@@ -88,6 +88,12 @@ connectDB()
         console.log('\x1b[36m%s\x1b[0m', `✓ API Docs: ${serverUrl}/api-docs`);
         console.log('\x1b[36m%s\x1b[0m', `✓ Port: ${PORT}`);
         console.log('\x1b[33m%s\x1b[0m', '-------------------------------------');
+
+        // Khởi tạo system settings
+        const SystemSettings = require('./models/systemSettings');
+        SystemSettings.initializeDefaults().catch(err => {
+          console.error('Error initializing system settings:', err);
+        });
 
         // Khởi động cron job cho điểm danh
         setupAttendanceCron();

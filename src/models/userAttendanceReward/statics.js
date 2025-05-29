@@ -13,13 +13,27 @@ module.exports = function(schema) {
    */
   schema.statics.createClaim = async function(userId, rewardId, rewardData, userStats) {
     const now = new Date();
-    
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    // Kiểm tra duplicate claim
+    const existingClaim = await this.findOne({
+      user_id: userId,
+      reward_id: rewardId,
+      month: currentMonth,
+      year: currentYear
+    });
+
+    if (existingClaim) {
+      throw new Error('Bạn đã nhận thưởng này trong tháng này rồi');
+    }
+
     const claimData = {
       user_id: userId,
       reward_id: rewardId,
       claimed_at: now,
-      month: now.getMonth(),
-      year: now.getFullYear(),
+      month: currentMonth,
+      year: currentYear,
       consecutive_days_at_claim: userStats.consecutiveDays || 0,
       total_days_at_claim: userStats.totalDays || 0,
       reward_type: rewardData.reward_type,
@@ -28,7 +42,9 @@ module.exports = function(schema) {
       notes: `Nhận thưởng ${rewardData.title}`
     };
 
-    return this.create(claimData);
+    // ✅ Use new + save() to ensure hooks are triggered
+    const claim = new this(claimData);
+    return claim.save();
   };
 
   /**
@@ -92,27 +108,28 @@ module.exports = function(schema) {
    * @returns {Promise<Object>} - Thống kê
    */
   schema.statics.getUserRewardStats = async function(userId) {
+    const mongoose = require('mongoose');
     const pipeline = [
-      { $match: { user_id: mongoose.Types.ObjectId(userId) } },
+      { $match: { user_id: new mongoose.Types.ObjectId(userId) } },
       {
         $group: {
           _id: null,
           totalClaims: { $sum: 1 },
-          totalCoins: { 
-            $sum: { 
-              $cond: [{ $eq: ['$reward_type', 'coin'] }, '$reward_value', 0] 
-            } 
+          totalCoins: {
+            $sum: {
+              $cond: [{ $eq: ['$reward_type', 'coin'] }, '$reward_value', 0]
+            }
           },
-          totalPermissions: { 
-            $sum: { 
-              $cond: [{ $eq: ['$reward_type', 'permission'] }, 1, 0] 
-            } 
+          totalPermissions: {
+            $sum: {
+              $cond: [{ $eq: ['$reward_type', 'permission'] }, 1, 0]
+            }
           },
           consecutiveClaims: {
             $sum: {
               $cond: [
-                { $eq: ['$reward_type', 'consecutive'] }, 
-                1, 
+                { $eq: ['$reward_type', 'consecutive'] },
+                1,
                 0
               ]
             }
@@ -120,8 +137,8 @@ module.exports = function(schema) {
           totalClaims: {
             $sum: {
               $cond: [
-                { $eq: ['$reward_type', 'total'] }, 
-                1, 
+                { $eq: ['$reward_type', 'total'] },
+                1,
                 0
               ]
             }
@@ -132,7 +149,7 @@ module.exports = function(schema) {
     ];
 
     const result = await this.aggregate(pipeline);
-    
+
     if (result.length === 0) {
       return {
         totalClaims: 0,

@@ -34,6 +34,23 @@ exports.getAll = async (req, res) => {
 
     console.log(`[API] Lấy danh sách truyện - page: ${page}, limit: ${limit}, search: ${search}, categories: ${categories}`);
 
+    // Kiểm tra quyền admin nếu có token
+    const isAdmin = req.user && req.user.role === 'admin';
+    console.log(`[API] User info:`, {
+      hasUser: !!req.user,
+      userRole: req.user?.role,
+      isAdmin
+    });
+
+    // Nếu có token nhưng không phải admin, trả về lỗi
+    if (req.user && !isAdmin) {
+      console.log(`[API] Access denied - User role: ${req.user.role}, required: admin`);
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden - Not admin role'
+      });
+    }
+
     // Xây dựng options
     const options = {
       page,
@@ -54,7 +71,9 @@ exports.getAll = async (req, res) => {
       sort_order,
       hot_day,
       hot_month,
-      hot_all_time
+      hot_all_time,
+      // Thêm flag để biết đây là request từ admin
+      isAdminRequest: isAdmin
     };
 
     // Log để debug

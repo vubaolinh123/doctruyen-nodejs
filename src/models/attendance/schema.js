@@ -20,10 +20,10 @@ const attendanceSchema = new Schema({
     required: true
   },
 
-  // Trạng thái điểm danh: 'attended' - đã điểm danh, 'missed' - bỏ lỡ
+  // Trạng thái điểm danh: 'attended' - đã điểm danh, 'missed' - bỏ lỡ, 'purchased' - mua bù
   status: {
     type: String,
-    enum: ['attended', 'missed'],
+    enum: ['attended', 'missed', 'purchased'],
     default: 'attended',
     index: true
   },

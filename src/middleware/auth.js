@@ -3,6 +3,10 @@ const jwt = require('jsonwebtoken');
 // Middleware để xác thực token
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
+
+  // Debug logging
+  console.log('[Auth Middleware] Authorization header:', authHeader ? 'Present' : 'Missing');
+
   if (!authHeader) {
     return res.status(401).json({
       success: false,
@@ -11,6 +15,9 @@ const authenticateToken = (req, res, next) => {
   }
 
   const token = authHeader.split(' ')[1];
+  console.log('[Auth Middleware] Token extracted:', token ? 'Yes' : 'No');
+  console.log('[Auth Middleware] Token length:', token ? token.length : 0);
+
   if (!token) {
     return res.status(401).json({
       success: false,
@@ -20,9 +27,19 @@ const authenticateToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log('[Auth Middleware] Token decoded successfully:', {
+      id: decoded.id,
+      email: decoded.email,
+      role: decoded.role,
+      hasId: !!decoded.id,
+      decodedKeys: Object.keys(decoded)
+    });
+
     req.user = decoded; // Lưu thông tin người dùng vào req.user
     next();
   } catch (err) {
+    console.error('[Auth Middleware] Token verification failed:', err.message);
+
     // Kiểm tra lỗi cụ thể
     if (err.name === 'TokenExpiredError') {
       return res.status(401).json({
@@ -80,22 +97,34 @@ module.exports = (req, res, next) => {
 const optionalAuth = (req, res, next) => {
   const authHeader = req.headers.authorization;
 
+  // Debug logging
+  console.log('[Optional Auth] Authorization header:', authHeader ? 'Present' : 'Missing');
+
   // Nếu không có header hoặc token, vẫn cho phép tiếp tục nhưng không set req.user
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.log('[Optional Auth] No valid auth header, continuing without user');
     return next();
   }
 
   const token = authHeader.split(' ')[1];
   if (!token) {
+    console.log('[Optional Auth] No token found, continuing without user');
     return next();
   }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded; // Lưu thông tin người dùng vào req.user nếu token hợp lệ
+    console.log('[Optional Auth] Token decoded successfully:', {
+      id: decoded.id,
+      email: decoded.email,
+      role: decoded.role,
+      hasId: !!decoded.id,
+      decodedKeys: Object.keys(decoded)
+    });
   } catch (err) {
     // Nếu token không hợp lệ, vẫn cho phép tiếp tục nhưng không set req.user
-    console.log('Optional auth token invalid:', err.message);
+    console.log('[Optional Auth] Token invalid:', err.message);
   }
 
   next();
@@ -105,4 +134,5 @@ const optionalAuth = (req, res, next) => {
 module.exports.authenticateToken = authenticateToken;
 module.exports.isAuthenticated = isAuthenticated;
 module.exports.isAdmin = isAdmin;
+module.exports.requireAdmin = isAdmin; // Alias cho isAdmin
 module.exports.optional = optionalAuth;

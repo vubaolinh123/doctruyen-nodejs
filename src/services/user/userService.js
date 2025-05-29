@@ -245,13 +245,21 @@ class UserService {
   filterPublicUserData(user) {
     if (!user) return null;
 
-    // Lấy danh sách quyền đang hoạt động
-    const activePermissions = user.getActivePermissions ? user.getActivePermissions() : [];
+    // Lấy danh sách quyền đang hoạt động với kiểm tra an toàn
+    let activePermissions = [];
+    try {
+      if (user.getActivePermissions && typeof user.getActivePermissions === 'function') {
+        const permissions = user.getActivePermissions();
+        activePermissions = Array.isArray(permissions) ? permissions : [];
+      }
+    } catch (error) {
+      console.warn('Error getting active permissions:', error);
+      activePermissions = [];
+    }
 
     // Lọc ra các quyền công khai (có thể hiển thị cho người khác)
     const publicPermissions = activePermissions.filter(p =>
-      p.type === 'appearance' ||
-      (p.metadata && p.metadata.public === true)
+      p && (p.type === 'appearance' || (p.metadata && p.metadata.public === true))
     );
 
     // Chỉ trả về các thông tin công khai với nested social object
@@ -303,8 +311,17 @@ class UserService {
   filterPrivateUserData(user) {
     if (!user) return null;
 
-    // Lấy danh sách quyền đang hoạt động
-    const activePermissions = user.getActivePermissions ? user.getActivePermissions() : [];
+    // Lấy danh sách quyền đang hoạt động với kiểm tra an toàn
+    let activePermissions = [];
+    try {
+      if (user.getActivePermissions && typeof user.getActivePermissions === 'function') {
+        const permissions = user.getActivePermissions();
+        activePermissions = Array.isArray(permissions) ? permissions : [];
+      }
+    } catch (error) {
+      console.warn('Error getting active permissions:', error);
+      activePermissions = [];
+    }
 
     // Trả về thông tin đầy đủ hơn cho chủ tài khoản với nested social object
     return {

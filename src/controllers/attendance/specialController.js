@@ -1,3 +1,4 @@
+// ✅ Use the new refactored service that handles purchased days correctly
 const attendanceService = require('../../services/attendance/attendanceService');
 
 /**
@@ -12,7 +13,7 @@ exports.getAttendanceHistory = async (req, res) => {
     const userId = req.user.id;
 
     const result = await attendanceService.getAttendanceHistory(
-      userId, 
+      userId,
       { month, year, timezone, timezoneOffset }
     );
 
@@ -22,7 +23,7 @@ exports.getAttendanceHistory = async (req, res) => {
     });
   } catch (error) {
     console.error('Lỗi khi lấy lịch sử điểm danh:', error);
-    
+
     // Xử lý lỗi validation
     if (error.message === 'Tháng và năm là bắt buộc') {
       return res.status(400).json({
@@ -45,7 +46,7 @@ exports.getAttendanceHistory = async (req, res) => {
         message: 'Không thể xem điểm danh của tháng trong tương lai'
       });
     }
-    
+
     return res.status(500).json({
       success: false,
       message: 'Lỗi máy chủ nội bộ'
@@ -65,7 +66,7 @@ exports.checkIn = async (req, res) => {
     const { date, timezone, timezoneOffset } = req.body;
 
     const result = await attendanceService.checkIn(
-      userId, 
+      userId,
       { date, timezone, timezoneOffset }
     );
 
@@ -76,7 +77,7 @@ exports.checkIn = async (req, res) => {
     });
   } catch (error) {
     console.error('Lỗi khi điểm danh:', error);
-    
+
     // Xử lý lỗi validation
     if (error.message === 'Không tìm thấy người dùng') {
       return res.status(404).json({
@@ -94,7 +95,7 @@ exports.checkIn = async (req, res) => {
         message: 'Định dạng ngày không hợp lệ'
       });
     }
-    
+
     return res.status(500).json({
       success: false,
       message: 'Lỗi máy chủ nội bộ'
@@ -115,4 +116,4 @@ exports.updateMissedDays = async () => {
     console.error('Lỗi khi cập nhật trạng thái missed:', error);
     return false;
   }
-}; 
+};

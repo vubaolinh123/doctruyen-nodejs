@@ -3,13 +3,14 @@ const router = express.Router();
 const controller = require('../controllers/story');
 const specialController = require('../controllers/story/specialController');
 const auth = require('../middleware/auth');
+const { optional } = require('../middleware/auth');
 
 // ============================================
 // CÁC ROUTE CÔNG KHAI (PUBLIC)
 // ============================================
 
-// Danh sách truyện
-router.get('/', controller.getAll);
+// Danh sách truyện - sử dụng optional auth để hỗ trợ cả public và admin
+router.get('/', optional, controller.getAll);
 router.get('/hot', controller.getHotStories);
 router.get('/top-rated', controller.getTopRatedStories);
 router.get('/recent', controller.getRecentStories);

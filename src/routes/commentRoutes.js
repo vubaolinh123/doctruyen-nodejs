@@ -1,43 +1,123 @@
 const express = require('express');
 const router = express.Router();
 const commentController = require('../controllers/comment');
-const { authenticateToken } = require('../middleware/auth');
-const { body } = require('express-validator');
+const { authenticateToken, optional } = require('../middleware/auth');
 
-// Validation middleware
-const commentValidation = [
-  body('content')
-    .trim()
-    .notEmpty()
-    .withMessage('Nội dung bình luận không được để trống')
-    .isLength({ max: 1000 })
-    .withMessage('Nội dung bình luận không được quá 1000 ký tự'),
-  body('story_id')
-    .notEmpty()
-    .withMessage('ID truyện là bắt buộc')
-    .isMongoId()
-    .withMessage('ID truyện không hợp lệ'),
-  body('chapter_id')
-    .optional()
-    .isMongoId()
-    .withMessage('ID chương không hợp lệ'),
-  body('parent_id')
-    .optional()
-    .isMongoId()
-    .withMessage('ID bình luận cha không hợp lệ'),
-  body('position')
-    .optional()
-    .isInt({ min: 0 })
-    .withMessage('Vị trí không hợp lệ')
-];
+// Import middleware
+const {
+  commentRateLimit,
+  createCommentRateLimit,
+  likeRateLimit,
+  flagRateLimit,
+  spamDetection,
+  contentValidation,
+  ipSuspiciousActivityDetection,
+  checkCommentPermission
+} = require('../middleware/commentRateLimit');
 
-// Public routes
-router.get('/', commentController.getComments);
+const {
+  validateCreateComment,
+  validateUpdateComment,
+  validateDeleteComment,
+  validateLikeComment,
+  validateFlagComment,
+  validateGetComments,
+  validateSearchComments,
+  handleValidationErrors,
+  validateTargetExists,
+  validateParentComment
+} = require('../middleware/commentValidation');
 
-// Protected routes
-router.post('/', authenticateToken, commentValidation, commentController.createComment);
-router.put('/:id', authenticateToken, commentController.updateComment);
-router.delete('/:id', authenticateToken, commentController.deleteComment);
-router.post('/:id/like', authenticateToken, commentController.toggleLike);
+// === PUBLIC ROUTES ===
 
-module.exports = router; 
+// Get comments (with optional auth for user interaction info)
+router.get('/',
+  optional,
+  commentRateLimit,
+  validateGetComments,
+  handleValidationErrors,
+  commentController.getComments
+);
+
+// Search comments
+router.get('/search',
+  commentRateLimit,
+  validateSearchComments,
+  handleValidationErrors,
+  commentController.searchComments
+);
+
+// Get comment thread
+router.get('/:id/thread',
+  optional,
+  commentRateLimit,
+  commentController.getCommentThread
+);
+
+// Get comment stats
+router.get('/stats',
+  commentRateLimit,
+  commentController.getCommentStats
+);
+
+// Get hot comments
+router.get('/hot',
+  commentRateLimit,
+  commentController.getHotComments
+);
+
+// === PROTECTED ROUTES ===
+
+// Create comment
+router.post('/',
+  authenticateToken,
+  checkCommentPermission,
+  createCommentRateLimit,
+  spamDetection,
+  ipSuspiciousActivityDetection,
+  contentValidation,
+  validateCreateComment,
+  handleValidationErrors,
+  validateTargetExists,
+  validateParentComment,
+  commentController.createComment
+);
+
+// Update comment
+router.put('/:id',
+  authenticateToken,
+  commentRateLimit,
+  contentValidation,
+  validateUpdateComment,
+  handleValidationErrors,
+  commentController.updateComment
+);
+
+// Delete comment
+router.delete('/:id',
+  authenticateToken,
+  commentRateLimit,
+  validateDeleteComment,
+  handleValidationErrors,
+  commentController.deleteComment
+);
+
+// Like/Dislike/Remove reaction
+router.post('/:id/reaction',
+  authenticateToken,
+  likeRateLimit,
+  validateLikeComment,
+  handleValidationErrors,
+  commentController.toggleReaction
+);
+
+// Flag comment
+router.post('/:id/flag',
+  authenticateToken,
+  flagRateLimit,
+  validateFlagComment,
+  handleValidationErrors,
+  commentController.flagComment
+);
+
+module.exports = router;

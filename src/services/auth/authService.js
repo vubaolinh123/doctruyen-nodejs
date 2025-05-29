@@ -4,6 +4,7 @@ const bcrypt = require('bcrypt');
 const { TokenBlacklist } = require('../../models/tokenBlacklist');
 const { RefreshToken } = require('../../models/refreshToken');
 const crypto = require('crypto');
+const { DEFAULT_EMAIL_AVATAR, getAvatarUrl } = require('../../constants/avatars');
 
 // Thời gian hết hạn của access token (15 ngày)
 const ACCESS_TOKEN_EXPIRY = '15d';
@@ -43,7 +44,7 @@ const getUserResponse = (user) => {
     name: user.name || "",
     email: user.email || "",
     role: user.role || 'user',
-    avatar: user.avatar || "https://scontent.fhan14-1.fna.fbcdn.net/v/t1.30497-1/453178253_471506465671661_2781666950760530985_n.png?stp=dst-png_s200x200&_nc_cat=1&ccb=1-7&_nc_sid=136b72&_nc_eui2=AeEVh0QX00TsNbI_haYB6RkWWt9TLzuBU1Ba31MvO4FTUF6Wlqf82r4BlCRAvh76aT3XsemaZbZv1fSB6o0CuFyz&_nc_ohc=Py8_nbWK5EEQ7kNvwGsqdUg&_nc_oc=AdnI1l-iLBtmCS_HEGsSqRjBSwsEa7c2UqgE5xPauCK2NBbd3kafOH_SABtbbISIdl6NeB79axebfe0e8MZgqmPe&_nc_zt=24&_nc_ht=scontent.fhan14-1.fna&oh=00_AfEDQng6NcDapZJFJ_Rjx-l97NT-NKumwkUgVLnP-cH5Fg&oe=683150FA",
+    avatar: getAvatarUrl(user.avatar, user.accountType),
     banner: user.banner || null,
     accountType: user.accountType || 'email',
     gender: user.gender || '',
@@ -122,7 +123,8 @@ const register = async (userData) => {
     name: name || email.split('@')[0],
     role: 'user',
     accountType: 'email',
-    isActive: true
+    isActive: true,
+    avatar: DEFAULT_EMAIL_AVATAR
   });
 
   await user.save();

@@ -33,5 +33,7 @@ router.use('/comments', require('./commentRoutes'));
 router.use('/admin/coins', auth, require('./coins'));
 router.use('/admin/users', auth, require('./admin/users'));
 router.use('/admin/permission-templates', require('./admin/permissionTemplates'));
+router.use('/admin/attendance-rewards', require('./admin/attendanceRewards'));
+router.use('/admin/comments', require('./admin/commentModeration'));
 
 module.exports = router;

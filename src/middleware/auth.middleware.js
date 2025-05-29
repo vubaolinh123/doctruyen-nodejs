@@ -37,13 +37,7 @@ exports.authenticateToken = async (req, res, next) => {
       });
     }
 
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (jwtError) {
-      console.error('JWT verification error:', jwtError.name, jwtError.message);
-      throw jwtError;
-    }
-
+    // ✅ Fix: Only verify JWT once
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     // Kiểm tra user có tồn tại không

@@ -84,6 +84,9 @@ class AttendanceService {
     attendanceRecords.forEach(record => {
       if (record.status === 'attended') {
         attendanceData[record.day] = 'attended';
+      } else if (record.status === 'purchased') {
+        // Ngày đã mua bù cũng được coi là đã điểm danh
+        attendanceData[record.day] = 'attended';
       }
     });
 
@@ -124,11 +127,21 @@ class AttendanceService {
       const isCurrentMonth = (yearNum === realToday.getFullYear() && monthNum === realToday.getMonth());
 
       if (isCurrentMonth) {
-        // Nếu đang xem tháng hiện tại, kiểm tra streak dựa trên ngày thực
-        if (lastDate.getTime() === realToday.getTime() || lastDate.getTime() === realYesterday.getTime()) {
+        // ✅ Check if all attendance records are purchased (special handling)
+        const attendances = await Attendance.find({
+          user_id: user._id,
+          status: { $in: ['attended', 'purchased'] }
+        });
+        const allPurchased = attendances.length > 0 && attendances.every(att => att.status === 'purchased');
+
+        if (allPurchased) {
+          // ✅ For all purchased days: use current_streak directly (no gap penalty)
+          consecutiveDays = user.attendance_summary.current_streak || 0;
+          console.log(`[AttendanceService] All purchased days - using current_streak: ${consecutiveDays}`);
+        } else if (lastDate.getTime() === realToday.getTime() || lastDate.getTime() === realYesterday.getTime()) {
           consecutiveDays = user.attendance_summary.current_streak || 0;
         } else {
-          // Chuỗi điểm danh đã bị gián đoạn
+          // Chuỗi điểm danh đã bị gián đoạn (only for non-purchased)
           consecutiveDays = 0;
         }
       } else {
@@ -392,6 +405,95 @@ class AttendanceService {
       };
     } catch (error) {
       console.error('[AttendanceCron] Lỗi khi cập nhật điểm danh bỏ lỡ:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Reset consecutive days về 0 vào đầu tháng mới (cho consecutive rewards)
+   */
+  async resetMonthlyConsecutiveDays() {
+    try {
+      const BATCH_SIZE = 500; // Xử lý 500 user một lần
+
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+
+      // Chỉ chạy vào ngày đầu tháng
+      if (now.getDate() !== 1) {
+        console.log('[AttendanceCron] Không phải ngày đầu tháng, bỏ qua reset consecutive days');
+        return {
+          status: 'skipped',
+          message: 'Không phải ngày đầu tháng'
+        };
+      }
+
+      console.log(`[AttendanceCron] Bắt đầu reset consecutive days cho tháng ${currentMonth + 1}/${currentYear}`);
+
+      // Đếm tổng số user cần xử lý
+      const totalUsers = await User.countDocuments({
+        status: 'active',
+        'attendance_summary.current_streak': { $gt: 0 }
+      });
+      console.log(`[AttendanceCron] Tổng số user cần reset: ${totalUsers}`);
+
+      let resetCount = 0;
+      let processedCount = 0;
+      let skip = 0;
+
+      // Xử lý theo batch
+      while (processedCount < totalUsers) {
+        console.log(`[AttendanceCron] Đang reset batch ${Math.floor(skip / BATCH_SIZE) + 1}, từ user ${skip + 1} đến ${Math.min(skip + BATCH_SIZE, totalUsers)}`);
+
+        // Lấy batch user hiện tại
+        const users = await User.find({
+          status: 'active',
+          'attendance_summary.current_streak': { $gt: 0 }
+        })
+          .skip(skip)
+          .limit(BATCH_SIZE)
+          .select('_id attendance_summary');
+
+        // Reset consecutive days cho từng user trong batch
+        for (const user of users) {
+          try {
+            // Kiểm tra xem user có điểm danh hôm nay chưa
+            const todayAttendance = await Attendance.findOne({
+              user_id: user._id,
+              year: currentYear,
+              month: currentMonth,
+              day: 1 // Ngày đầu tháng
+            });
+
+            // Nếu chưa điểm danh hôm nay thì reset consecutive days
+            if (!todayAttendance) {
+              user.attendance_summary.current_streak = 0;
+              await user.save();
+              resetCount++;
+            }
+          } catch (userError) {
+            console.error(`[AttendanceCron] Lỗi khi reset user ${user._id}:`, userError);
+          }
+        }
+
+        processedCount += users.length;
+        skip += BATCH_SIZE;
+
+        // Nghỉ 100ms giữa các batch để tránh quá tải database
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      console.log(`[AttendanceCron] Hoàn thành reset! Đã xử lý ${processedCount} user, reset ${resetCount} user`);
+
+      return {
+        status: 'success',
+        message: `Đã reset consecutive days cho ${resetCount} người dùng`,
+        resetCount,
+        totalProcessed: processedCount
+      };
+    } catch (error) {
+      console.error('[AttendanceCron] Lỗi khi reset consecutive days:', error);
       throw error;
     }
   }
