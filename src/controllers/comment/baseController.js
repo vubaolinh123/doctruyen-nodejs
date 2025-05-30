@@ -33,14 +33,6 @@ class BaseCommentController {
         user_id: req.user?._id || req.user?.id
       };
 
-      // Debug logging for user authentication
-      console.log('[Comment Controller] getComments Debug:', {
-        hasUser: !!req.user,
-        userId: options.user_id,
-        userKeys: req.user ? Object.keys(req.user) : [],
-        willUseCache: !options.user_id
-      });
-
       // Check cache first (only for non-authenticated requests to avoid userReaction issues)
       const cachedResult = !options.user_id ? cacheService.getCachedComments(options) : null;
       if (cachedResult) {
@@ -79,14 +71,6 @@ class BaseCommentController {
    */
   async createComment(req, res) {
     try {
-      // Debug logging
-      console.log('[Comment Controller] Request user:', {
-        hasUser: !!req.user,
-        userId: req.user?._id,
-        userKeys: req.user ? Object.keys(req.user) : [],
-        userObject: req.user
-      });
-
       let userId = req.user._id || req.user.id;
 
       // Alternative approach: If middleware failed to extract user_id, try to get from session/token manually
@@ -101,7 +85,6 @@ class BaseCommentController {
             const jwt = require('jsonwebtoken');
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             userId = decoded.id || decoded._id;
-            console.log('[Comment Controller] Extracted user ID from token manually:', userId);
           } catch (tokenError) {
             console.error('[Comment Controller] Manual token decode failed:', tokenError.message);
           }

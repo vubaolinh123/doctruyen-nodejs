@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
-// Set default timezone for the entire application before connecting to MongoDB
-process.env.TZ = 'Asia/Ho_Chi_Minh';
+// Remove process.env.TZ setting as it conflicts with moment-timezone
+// We'll use moment-timezone for all timezone handling instead
 
 // Override default mongoose toJSON method to convert Date fields to Vietnam timezone
 mongoose.set('toJSON', {

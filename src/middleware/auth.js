@@ -27,14 +27,6 @@ const authenticateToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    console.log('[Auth Middleware] Token decoded successfully:', {
-      id: decoded.id,
-      email: decoded.email,
-      role: decoded.role,
-      hasId: !!decoded.id,
-      decodedKeys: Object.keys(decoded)
-    });
-
     req.user = decoded; // Lưu thông tin người dùng vào req.user
     next();
   } catch (err) {
