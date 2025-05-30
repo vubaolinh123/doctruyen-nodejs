@@ -54,7 +54,36 @@ const commentSchema = new Schema({
       },
       username: String,
       position: Number
-    }]
+    }],
+    // Quote support for Level 3 -> Level 2 conversion
+    quote: {
+      // ID of the comment being quoted
+      quoted_comment_id: {
+        type: Schema.Types.ObjectId,
+        ref: 'Comment'
+      },
+      // Username of the quoted comment author
+      quoted_username: {
+        type: String,
+        trim: true
+      },
+      // Truncated text being quoted (max 50 chars)
+      quoted_text: {
+        type: String,
+        trim: true,
+        maxlength: 53 // 50 chars + "..."
+      },
+      // Full original text for reference
+      quoted_full_text: {
+        type: String,
+        trim: true
+      },
+      // Indicates this comment was created from Level 3 -> Level 2 conversion
+      is_level_conversion: {
+        type: Boolean,
+        default: false
+      }
+    }
   },
 
   // === HIERARCHICAL STRUCTURE (Materialized Path) ===

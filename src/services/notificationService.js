@@ -215,6 +215,40 @@ class NotificationService {
   }
 
   /**
+   * Create quoted reply notification
+   */
+  async createQuotedReplyNotification(quotedReplyData) {
+    try {
+      const { quotedComment, newComment, quotedBy } = quotedReplyData;
+
+      // Don't notify if quoting own comment
+      if (quotedComment.user_id.toString() === quotedBy._id.toString()) {
+        return { success: true, message: 'No notification needed for self-quote' };
+      }
+
+      const notificationData = {
+        recipient_id: quotedComment.user_id,
+        type: 'comment_mention',
+        title: 'Ai đó đã trích dẫn bình luận của bạn',
+        message: `${quotedBy.name || 'Ai đó'} đã trích dẫn bình luận của bạn trong phản hồi`,
+        data: {
+          comment_id: newComment._id,
+          quoted_comment_id: quotedComment._id,
+          story_id: newComment.target.story_id,
+          chapter_id: newComment.target.chapter_id,
+          sender_id: quotedBy._id,
+          quoted_text: newComment.content?.quote?.quoted_text || ''
+        },
+        priority: 'normal'
+      };
+
+      return await this.createNotification(notificationData);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * Create comment like notification
    */
   async createCommentLikeNotification(likeData) {

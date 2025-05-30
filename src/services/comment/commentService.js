@@ -1,6 +1,7 @@
 const Comment = require('../../models/comment');
 const User = require('../../models/user');
 const crypto = require('crypto');
+const commentQuoteUtils = require('../../utils/commentQuoteUtils');
 
 /**
  * Service xử lý business logic cho comment system
@@ -73,7 +74,7 @@ class CommentService {
   }
 
   /**
-   * Tạo comment mới
+   * Tạo comment mới với smart quote support
    * @param {ObjectId} userId - ID của user
    * @param {Object} commentData - Dữ liệu comment
    * @param {Object} metadata - Metadata (IP, user agent, etc.)
@@ -91,6 +92,51 @@ class CommentService {
         metadata: bodyMetadata = {}
       } = commentData;
 
+      let parentComment = null;
+      let finalContent = content;
+      let quoteData = null;
+      let finalParentId = hierarchy.parent_id;
+
+      // Handle parent comment and quote logic
+      if (hierarchy.parent_id) {
+        parentComment = await Comment.findById(hierarchy.parent_id)
+          .populate('user_id', 'name username slug');
+
+        if (!parentComment) {
+          throw new Error('Bình luận cha không tồn tại');
+        }
+
+        // Calculate target level
+        const targetLevel = (parentComment.hierarchy?.level || 0) + 1;
+
+        // Check if we need to convert Level 3 to Level 2 with quote
+        if (commentQuoteUtils.shouldConvertToQuotedReply(targetLevel, parentComment)) {
+          console.log('[Comment Service] Converting Level 3+ to Level 2 with quote');
+
+          // Generate quote data
+          quoteData = commentQuoteUtils.generateQuoteData(parentComment, parentComment.user_id);
+
+          // Format content with quote
+          finalContent = commentQuoteUtils.formatQuotedComment(
+            quoteData.quoted_username,
+            quoteData.quoted_text,
+            content
+          );
+
+          // Get appropriate parent (Level 1 comment)
+          const quotedReplyParent = await commentQuoteUtils.getQuotedReplyParent(parentComment, Comment);
+          finalParentId = quotedReplyParent._id;
+
+          console.log('[Comment Service] Quote conversion:', {
+            originalParent: parentComment._id,
+            originalLevel: parentComment.hierarchy?.level,
+            newParent: finalParentId,
+            quotedUsername: quoteData.quoted_username,
+            quotedText: quoteData.quoted_text
+          });
+        }
+      }
+
       // Prepare comment data
       const newCommentData = {
         user_id: userId,
@@ -100,12 +146,13 @@ class CommentService {
           type: target.type
         },
         content: {
-          original: content,
+          original: finalContent,
           sanitized: '', // Will be set in pre-save hook
-          mentions: []
+          mentions: [],
+          quote: quoteData || undefined // Add quote data if exists
         },
         hierarchy: {
-          parent_id: hierarchy.parent_id || null,
+          parent_id: finalParentId,
           level: 0, // Will be calculated in pre-save hook
           path: '', // Will be calculated in pre-save hook
           root_id: null // Will be calculated in pre-save hook
@@ -123,7 +170,9 @@ class CommentService {
         hasUserId: !!newCommentData.user_id,
         userIdType: typeof newCommentData.user_id,
         target: newCommentData.target,
-        content: newCommentData.content.original
+        content: newCommentData.content.original.substring(0, 100) + '...',
+        hasQuote: !!quoteData,
+        finalParentId: finalParentId
       });
 
       // Create comment
@@ -136,8 +185,15 @@ class CommentService {
 
       return {
         success: true,
-        message: 'Bình luận đã được tạo thành công',
-        data: comment
+        message: quoteData ?
+          'Bình luận với trích dẫn đã được tạo thành công' :
+          'Bình luận đã được tạo thành công',
+        data: comment,
+        quote_info: quoteData ? {
+          is_quoted_reply: true,
+          quoted_comment_id: quoteData.quoted_comment_id,
+          quoted_username: quoteData.quoted_username
+        } : null
       };
     } catch (error) {
       throw error;
@@ -455,6 +511,62 @@ class CommentService {
           await this.addUserInteractionInfoToThread(reply, userId);
         }
       }
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Lấy thông tin parent comment cho persistent reply form
+   * @param {ObjectId} commentId - ID của comment (Level 1 comment)
+   * @returns {Promise<Object>} - Parent comment info
+   */
+  async getParentCommentInfo(commentId) {
+    try {
+      // Find the comment
+      const comment = await Comment.findById(commentId)
+        .populate('user_id', 'name avatar slug')
+        .lean();
+
+      if (!comment) {
+        throw new Error('Bình luận không tồn tại');
+      }
+
+      // Only allow Level 1 comments as parents for persistent reply form
+      if (comment.hierarchy.level !== 1) {
+        throw new Error('Chỉ có thể reply vào bình luận cấp 1');
+      }
+
+      if (comment.moderation.status !== 'active') {
+        throw new Error('Không thể reply vào bình luận đã bị xóa hoặc ẩn');
+      }
+
+      // Get reply count
+      const replyCount = await Comment.countDocuments({
+        'hierarchy.parent_id': commentId,
+        'moderation.status': 'active'
+      });
+
+      // Prepare parent info for persistent reply form
+      const parentInfo = {
+        _id: comment._id,
+        author: {
+          name: comment.user_id.name,
+          avatar: comment.user_id.avatar,
+          slug: comment.user_id.slug
+        },
+        content_snippet: comment.content.original.length > 100
+          ? comment.content.original.substring(0, 100) + '...'
+          : comment.content.original,
+        reply_count: replyCount,
+        created_at: comment.createdAt,
+        target: comment.target
+      };
+
+      return {
+        success: true,
+        data: parentInfo
+      };
     } catch (error) {
       throw error;
     }

@@ -13,6 +13,7 @@ module.exports = {
   searchComments: baseController.searchComments,
   getCommentStats: baseController.getCommentStats,
   getHotComments: baseController.getHotComments,
+  getParentCommentInfo: baseController.getParentCommentInfo,
 
   // Moderation operations
   getModerationQueue: moderationController.getModerationQueue,

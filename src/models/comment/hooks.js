@@ -215,6 +215,30 @@ const setupHooks = (schema) => {
           repliedBy: repliedBy
         });
       }
+
+      // Handle quoted reply notifications
+      if (doc.content?.quote?.quoted_comment_id && doc.content?.quote?.is_level_conversion) {
+        try {
+          const quotedComment = await doc.constructor.findById(doc.content.quote.quoted_comment_id)
+            .populate('user_id', 'name');
+
+          if (quotedComment &&
+              quotedComment.user_id._id.toString() !== doc.user_id.toString()) {
+
+            const notificationService = require('../../services/notificationService');
+            const User = require('../user');
+            const quotedBy = await User.findById(doc.user_id, 'name avatar slug');
+
+            await notificationService.createQuotedReplyNotification({
+              quotedComment: quotedComment,
+              newComment: doc,
+              quotedBy: quotedBy
+            });
+          }
+        } catch (error) {
+          console.error('Error triggering quoted reply notification:', error);
+        }
+      }
     } catch (error) {
       console.error('Error triggering reply notification:', error);
     }

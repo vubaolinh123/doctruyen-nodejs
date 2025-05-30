@@ -66,6 +66,12 @@ router.get('/hot',
   commentController.getHotComments
 );
 
+// Get parent comment info for persistent reply form
+router.get('/:commentId/parent-info',
+  commentRateLimit,
+  commentController.getParentCommentInfo
+);
+
 // === PROTECTED ROUTES ===
 
 // Create comment

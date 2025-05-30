@@ -472,6 +472,25 @@ class BaseCommentController {
       });
     }
   }
+
+  /**
+   * Lấy thông tin parent comment cho persistent reply form
+   * @route GET /api/comments/:commentId/parent-info
+   */
+  async getParentCommentInfo(req, res) {
+    try {
+      const { commentId } = req.params;
+      const result = await commentService.getParentCommentInfo(commentId);
+
+      res.json(result);
+    } catch (error) {
+      console.error('Error getting parent comment info:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Có lỗi xảy ra khi lấy thông tin parent comment'
+      });
+    }
+  }
 }
 
 module.exports = new BaseCommentController();
