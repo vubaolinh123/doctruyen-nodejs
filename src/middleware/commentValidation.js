@@ -189,6 +189,11 @@ const validateGetComments = [
     .isInt({ min: 1, max: 100 })
     .withMessage('Limit phải từ 1-100'),
 
+  query('page')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Page phải là số nguyên dương'),
+
   query('cursor')
     .optional()
     .isLength({ min: 1 })
@@ -196,8 +201,8 @@ const validateGetComments = [
 
   query('sort')
     .optional()
-    .isIn(['newest', 'oldest', 'popular'])
-    .withMessage('Sort phải là newest, oldest hoặc popular'),
+    .isIn(['newest', 'oldest', 'popular', 'most_liked'])
+    .withMessage('Sort phải là newest, oldest, popular hoặc most_liked'),
 
   query('include_replies')
     .optional()

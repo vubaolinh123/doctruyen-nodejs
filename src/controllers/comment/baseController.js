@@ -16,17 +16,17 @@ class BaseCommentController {
         story_id,
         chapter_id,
         parent_id,
-        cursor,
-        limit = 20,
+        page = 1,
+        limit = 10,
         sort = 'newest',
-        include_replies = false
+        include_replies = true
       } = req.query;
 
       const options = {
         story_id,
         chapter_id,
         parent_id,
-        cursor,
+        page: parseInt(page),
         limit: parseInt(limit),
         sort,
         include_replies: include_replies === 'true',

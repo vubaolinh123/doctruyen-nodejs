@@ -5,92 +5,129 @@
 const setupStatics = (schema) => {
 
   /**
-   * Lấy comments của story với pagination tối ưu (cursor-based)
+   * Lấy comments của story với pagination tối ưu (page-based)
    * @param {Object} options - Query options
    * @returns {Promise<Object>} - Comments và pagination info
    */
   schema.statics.getStoryComments = async function(options) {
     const {
       story_id,
-      cursor = null,
-      limit = 20,
-      sort = 'newest', // newest, oldest, popular
-      include_replies = false
+      page = 1,
+      limit = 10, // Changed to 10 root comments per page
+      sort = 'newest', // newest, oldest, hot, most_liked
+      include_replies = true // Always include replies for proper tree structure
     } = options;
 
     try {
-      // Build base query
       const query = {
         'target.story_id': story_id,
         'target.type': 'story',
         'moderation.status': 'active'
       };
 
-      // Only root comments unless include_replies is true
-      if (!include_replies) {
-        query['hierarchy.level'] = 0;
-      }
-
-      // Cursor-based pagination
-      if (cursor) {
-        if (sort === 'newest') {
-          query.createdAt = { $lt: new Date(cursor) };
-        } else if (sort === 'oldest') {
-          query.createdAt = { $gt: new Date(cursor) };
-        } else if (sort === 'popular') {
-          query['engagement.score'] = { $lt: parseFloat(cursor) };
-        }
-      }
-
-      // Build sort criteria
+      // Build sort criteria with support for all filter types
       let sortCriteria = {};
       if (sort === 'newest') {
         sortCriteria = { createdAt: -1 };
       } else if (sort === 'oldest') {
         sortCriteria = { createdAt: 1 };
-      } else if (sort === 'popular') {
+      } else if (sort === 'hot' || sort === 'popular') {
         sortCriteria = { 'engagement.score': -1, createdAt: -1 };
+      } else if (sort === 'most_liked') {
+        sortCriteria = { 'engagement.likes.count': -1, createdAt: -1 };
       }
 
-      const comments = await this.find(query)
-        .sort(sortCriteria)
-        .limit(parseInt(limit) + 1) // +1 để check hasMore
-        .populate('user_id', 'name avatar slug')
-        .populate('content.mentions.user_id', 'name slug')
-        .lean();
+      if (include_replies) {
+        // Get all comments (root + replies) for tree structure
+        const allComments = await this.find(query)
+          .sort(sortCriteria)
+          .populate('user_id', 'name avatar slug level role')
+          .populate('content.mentions.user_id', 'name slug')
+          .lean();
 
-      // Check if has more
-      const hasMore = comments.length > limit;
-      if (hasMore) {
-        comments.pop(); // Remove extra item
+        // Get root comments for pagination
+        const rootQuery = {
+          ...query,
+          'hierarchy.level': 0
+        };
+
+        const totalRootComments = await this.countDocuments(rootQuery);
+        const totalPages = Math.ceil(totalRootComments / limit);
+        const skip = (page - 1) * limit;
+
+        const rootComments = await this.find(rootQuery)
+          .sort(sortCriteria)
+          .skip(skip)
+          .limit(parseInt(limit))
+          .select('_id')
+          .lean();
+
+        const rootCommentIds = rootComments.map(c => c._id.toString());
+
+        // Filter all comments to only include those in current page + their replies
+        const pageComments = allComments.filter(comment => {
+          if (comment.hierarchy.level === 0) {
+            return rootCommentIds.includes(comment._id.toString());
+          } else {
+            // Include replies if their root comment is in current page
+            return rootCommentIds.includes(comment.hierarchy.root_id?.toString());
+          }
+        });
+
+        // Calculate total comments including replies
+        const totalAllComments = allComments.length;
+
+        return {
+          comments: pageComments,
+          pagination: {
+            total: totalAllComments, // Total all comments (root + replies)
+            totalRootComments: totalRootComments, // Total root comments only
+            totalPages,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            hasMore: page < totalPages,
+            hasPrev: page > 1
+          }
+        };
+      } else {
+        // Only root comments
+        const rootQuery = {
+          ...query,
+          'hierarchy.level': 0
+        };
+
+        const total = await this.countDocuments(rootQuery);
+        const totalPages = Math.ceil(total / limit);
+        const skip = (page - 1) * limit;
+
+        const comments = await this.find(rootQuery)
+          .sort(sortCriteria)
+          .skip(skip)
+          .limit(parseInt(limit))
+          .populate('user_id', 'name avatar slug level role')
+          .populate('content.mentions.user_id', 'name slug')
+          .lean();
+
+        return {
+          comments,
+          pagination: {
+            total,
+            totalRootComments: total,
+            totalPages,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            hasMore: page < totalPages,
+            hasPrev: page > 1
+          }
+        };
       }
-
-      // Generate next cursor
-      let nextCursor = null;
-      if (hasMore && comments.length > 0) {
-        const lastComment = comments[comments.length - 1];
-        if (sort === 'newest' || sort === 'oldest') {
-          nextCursor = lastComment.createdAt.toISOString();
-        } else if (sort === 'popular') {
-          nextCursor = lastComment.engagement.score.toString();
-        }
-      }
-
-      return {
-        comments,
-        pagination: {
-          hasMore,
-          nextCursor,
-          limit: parseInt(limit)
-        }
-      };
     } catch (error) {
       throw error;
     }
   };
 
   /**
-   * Lấy comments của chapter với pagination tối ưu
+   * Lấy comments của chapter với pagination tối ưu (page-based)
    * @param {Object} options - Query options
    * @returns {Promise<Object>} - Comments và pagination info
    */
@@ -98,10 +135,10 @@ const setupStatics = (schema) => {
     const {
       story_id,
       chapter_id,
-      cursor = null,
-      limit = 20,
+      page = 1,
+      limit = 10,
       sort = 'newest',
-      include_replies = false
+      include_replies = true
     } = options;
 
     try {
@@ -112,60 +149,102 @@ const setupStatics = (schema) => {
         'moderation.status': 'active'
       };
 
-      if (!include_replies) {
-        query['hierarchy.level'] = 0;
-      }
-
-      // Cursor pagination logic (same as story comments)
-      if (cursor) {
-        if (sort === 'newest') {
-          query.createdAt = { $lt: new Date(cursor) };
-        } else if (sort === 'oldest') {
-          query.createdAt = { $gt: new Date(cursor) };
-        } else if (sort === 'popular') {
-          query['engagement.score'] = { $lt: parseFloat(cursor) };
-        }
-      }
-
+      // Build sort criteria with support for all filter types
       let sortCriteria = {};
       if (sort === 'newest') {
         sortCriteria = { createdAt: -1 };
       } else if (sort === 'oldest') {
         sortCriteria = { createdAt: 1 };
-      } else if (sort === 'popular') {
+      } else if (sort === 'hot' || sort === 'popular') {
         sortCriteria = { 'engagement.score': -1, createdAt: -1 };
+      } else if (sort === 'most_liked') {
+        sortCriteria = { 'engagement.likes.count': -1, createdAt: -1 };
       }
 
-      const comments = await this.find(query)
-        .sort(sortCriteria)
-        .limit(parseInt(limit) + 1)
-        .populate('user_id', 'name avatar slug')
-        .populate('content.mentions.user_id', 'name slug')
-        .lean();
+      if (include_replies) {
+        // Get all comments (root + replies) for tree structure
+        const allComments = await this.find(query)
+          .sort(sortCriteria)
+          .populate('user_id', 'name avatar slug level role')
+          .populate('content.mentions.user_id', 'name slug')
+          .lean();
 
-      const hasMore = comments.length > limit;
-      if (hasMore) {
-        comments.pop();
+        // Get root comments for pagination
+        const rootQuery = {
+          ...query,
+          'hierarchy.level': 0
+        };
+
+        const totalRootComments = await this.countDocuments(rootQuery);
+        const totalPages = Math.ceil(totalRootComments / limit);
+        const skip = (page - 1) * limit;
+
+        const rootComments = await this.find(rootQuery)
+          .sort(sortCriteria)
+          .skip(skip)
+          .limit(parseInt(limit))
+          .select('_id')
+          .lean();
+
+        const rootCommentIds = rootComments.map(c => c._id.toString());
+
+        // Filter all comments to only include those in current page + their replies
+        const pageComments = allComments.filter(comment => {
+          if (comment.hierarchy.level === 0) {
+            return rootCommentIds.includes(comment._id.toString());
+          } else {
+            // Include replies if their root comment is in current page
+            return rootCommentIds.includes(comment.hierarchy.root_id?.toString());
+          }
+        });
+
+        // Calculate total comments including replies
+        const totalAllComments = allComments.length;
+
+        return {
+          comments: pageComments,
+          pagination: {
+            total: totalAllComments, // Total all comments (root + replies)
+            totalRootComments: totalRootComments, // Total root comments only
+            totalPages,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            hasMore: page < totalPages,
+            hasPrev: page > 1
+          }
+        };
+      } else {
+        // Only root comments
+        const rootQuery = {
+          ...query,
+          'hierarchy.level': 0
+        };
+
+        const total = await this.countDocuments(rootQuery);
+        const totalPages = Math.ceil(total / limit);
+        const skip = (page - 1) * limit;
+
+        const comments = await this.find(rootQuery)
+          .sort(sortCriteria)
+          .skip(skip)
+          .limit(parseInt(limit))
+          .populate('user_id', 'name avatar slug level role')
+          .populate('content.mentions.user_id', 'name slug')
+          .lean();
+
+        return {
+          comments,
+          pagination: {
+            total,
+            totalRootComments: total,
+            totalPages,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            hasMore: page < totalPages,
+            hasPrev: page > 1
+          }
+        };
       }
-
-      let nextCursor = null;
-      if (hasMore && comments.length > 0) {
-        const lastComment = comments[comments.length - 1];
-        if (sort === 'newest' || sort === 'oldest') {
-          nextCursor = lastComment.createdAt.toISOString();
-        } else if (sort === 'popular') {
-          nextCursor = lastComment.engagement.score.toString();
-        }
-      }
-
-      return {
-        comments,
-        pagination: {
-          hasMore,
-          nextCursor,
-          limit: parseInt(limit)
-        }
-      };
     } catch (error) {
       throw error;
     }
@@ -248,7 +327,7 @@ const setupStatics = (schema) => {
 
       descendants.forEach(comment => {
         commentMap.set(comment._id.toString(), { ...comment, replies: [] });
-        
+
         if (comment.hierarchy.parent_id) {
           const parent = commentMap.get(comment.hierarchy.parent_id.toString());
           if (parent) {
@@ -370,7 +449,7 @@ const setupStatics = (schema) => {
       // Calculate date range
       const now = new Date();
       let startDate;
-      
+
       switch (timeRange) {
         case '1d':
           startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);

@@ -20,10 +20,10 @@ class CommentService {
         story_id,
         chapter_id,
         parent_id,
-        cursor,
-        limit = 20,
+        page = 1,
+        limit = 10,
         sort = 'newest',
-        include_replies = false,
+        include_replies = true,
         user_id = null,
         user_role = null
       } = options;
@@ -34,7 +34,7 @@ class CommentService {
         // Get story comments
         result = await Comment.getStoryComments({
           story_id,
-          cursor,
+          page,
           limit,
           sort,
           include_replies
@@ -44,7 +44,7 @@ class CommentService {
         result = await Comment.getChapterComments({
           story_id,
           chapter_id,
-          cursor,
+          page,
           limit,
           sort,
           include_replies
@@ -55,9 +55,12 @@ class CommentService {
         result = {
           comments: replies,
           pagination: {
+            total: replies.length,
+            totalPages: 1,
+            page: 1,
+            limit: parseInt(limit),
             hasMore: false,
-            nextCursor: null,
-            limit: parseInt(limit)
+            hasPrev: false
           }
         };
       } else {
@@ -481,6 +484,122 @@ class CommentService {
   }
 
   /**
+   * Thêm reply counts chính xác cho danh sách comments
+   * @param {Array} comments - Danh sách comments
+   * @returns {Promise<Array>} - Comments với reply counts chính xác
+   */
+  async addReplyCountsToComments(comments) {
+    try {
+      if (!comments || comments.length === 0) {
+        return comments;
+      }
+
+      // Get all comment IDs
+      const commentIds = comments.map(comment => {
+        const commentObj = comment.toObject ? comment.toObject() : comment;
+        return commentObj._id;
+      });
+
+      // Aggregate reply counts for all comments in one query
+      // Fixed: Only count actual replies (level > 0) and exclude self-references
+      const replyCountsAggregation = await Comment.aggregate([
+        {
+          $match: {
+            $and: [
+              // Only count replies (level > 0), not root comments
+              { 'hierarchy.level': { $gt: 0 } },
+              // Match replies that belong to our target comments
+              {
+                $or: [
+                  { 'hierarchy.parent_id': { $in: commentIds } },
+                  { 'hierarchy.root_id': { $in: commentIds } }
+                ]
+              },
+              // Only count active replies
+              { 'moderation.status': 'active' },
+              // Exclude self-references (comment cannot be reply to itself)
+              { '_id': { $nin: commentIds } }
+            ]
+          }
+        },
+        {
+          $group: {
+            _id: {
+              $cond: [
+                { $eq: ['$hierarchy.level', 1] },
+                '$hierarchy.parent_id',
+                '$hierarchy.root_id'
+              ]
+            },
+            replyCount: { $sum: 1 }
+          }
+        }
+      ]);
+
+      // Create a map of comment ID to reply count
+      const replyCountMap = new Map();
+      replyCountsAggregation.forEach(item => {
+        if (item._id) {
+          replyCountMap.set(item._id.toString(), item.replyCount);
+        }
+      });
+
+      // Enhanced debug logging for reply count calculation
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[CommentService] Reply Count Aggregation Debug (FIXED):', {
+          inputCommentIds: commentIds.map(id => id.toString()),
+          aggregationQuery: {
+            match: {
+              'hierarchy.level': { $gt: 0 },
+              'moderation.status': 'active',
+              '_id': { $nin: commentIds.map(id => id.toString()) }
+            }
+          },
+          aggregationResults: replyCountsAggregation,
+          replyCountMap: Object.fromEntries(replyCountMap),
+          totalRepliesFound: replyCountsAggregation.length
+        });
+      }
+
+      // Add reply counts to comments
+      return comments.map(comment => {
+        const commentObj = comment.toObject ? comment.toObject() : comment;
+        const commentIdStr = commentObj._id.toString();
+
+        // Get accurate reply count from aggregation
+        const actualReplyCount = replyCountMap.get(commentIdStr) || 0;
+
+        // Update the engagement.replies.count with accurate count
+        if (!commentObj.engagement) {
+          commentObj.engagement = {};
+        }
+        if (!commentObj.engagement.replies) {
+          commentObj.engagement.replies = {};
+        }
+        commentObj.engagement.replies.count = actualReplyCount;
+
+        // Enhanced debug logging for individual comment reply count
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[CommentService] Setting reply count for comment ${commentIdStr} (FIXED):`, {
+            commentId: commentIdStr,
+            hierarchyLevel: commentObj.hierarchy?.level,
+            actualReplyCount,
+            previousCount: commentObj.engagement?.replies?.count,
+            finalCount: commentObj.engagement.replies.count,
+            shouldHaveReplies: actualReplyCount > 0,
+            isRootComment: commentObj.hierarchy?.level === 0
+          });
+        }
+
+        return commentObj;
+      });
+    } catch (error) {
+      console.error('Error adding reply counts to comments:', error);
+      return comments; // Return original comments if error occurs
+    }
+  }
+
+  /**
    * Thêm thông tin tương tác của user vào comments
    * @param {Array} comments - Danh sách comments
    * @param {ObjectId} userId - ID của user
@@ -489,27 +608,33 @@ class CommentService {
    */
   async addUserInteractionInfo(comments, userId, userRole = null) {
     try {
-      return comments.map(comment => {
+      // First, calculate reply counts for all comments
+      const commentsWithReplyCounts = await this.addReplyCountsToComments(comments);
+
+      return commentsWithReplyCounts.map(comment => {
         const commentObj = comment.toObject ? comment.toObject() : comment;
 
         // Check if user liked/disliked
         commentObj.userReaction = null;
-        const userIdStr = userId.toString();
-        const likesUsers = commentObj.engagement.likes.users || [];
-        const dislikesUsers = commentObj.engagement.dislikes.users || [];
+        if (userId) {
+          const userIdStr = userId.toString();
+          const likesUsers = commentObj.engagement.likes.users || [];
+          const dislikesUsers = commentObj.engagement.dislikes.users || [];
 
-        // Convert ObjectIds to strings for comparison
-        const likesUsersStr = likesUsers.map(id => id.toString());
-        const dislikesUsersStr = dislikesUsers.map(id => id.toString());
+          // Convert ObjectIds to strings for comparison
+          const likesUsersStr = likesUsers.map(id => id.toString());
+          const dislikesUsersStr = dislikesUsers.map(id => id.toString());
 
-        if (likesUsersStr.includes(userIdStr)) {
-          commentObj.userReaction = 'like';
-        } else if (dislikesUsersStr.includes(userIdStr)) {
-          commentObj.userReaction = 'dislike';
+          if (likesUsersStr.includes(userIdStr)) {
+            commentObj.userReaction = 'like';
+          } else if (dislikesUsersStr.includes(userIdStr)) {
+            commentObj.userReaction = 'dislike';
+          }
         }
 
         // Debug logging for userReaction
-        if (process.env.NODE_ENV === 'development') {
+        if (process.env.NODE_ENV === 'development' && userId) {
+          const userIdStr = userId.toString();
           console.log('[CommentService] UserReaction Debug:', {
             commentId: commentObj._id,
             userId: userIdStr,
@@ -525,13 +650,20 @@ class CommentService {
           });
         }
 
-        // Check if user can edit
-        commentObj.canEdit = comment.canEdit ? comment.canEdit(userId) : false;
+        // Check permissions for authenticated users only
+        if (userId) {
+          // Check if user can edit
+          commentObj.canEdit = comment.canEdit ? comment.canEdit(userId) : false;
 
-        // Check if user can delete - Admin can delete any comment
-        const isOwner = commentObj.user_id.toString() === userId.toString();
-        const isAdmin = userRole === 'admin';
-        commentObj.canDelete = (isOwner || isAdmin) && commentObj.moderation.status === 'active';
+          // Check if user can delete - Admin can delete any comment
+          const isOwner = commentObj.user_id.toString() === userId.toString();
+          const isAdmin = userRole === 'admin';
+          commentObj.canDelete = (isOwner || isAdmin) && commentObj.moderation.status === 'active';
+        } else {
+          // For non-authenticated users
+          commentObj.canEdit = false;
+          commentObj.canDelete = false;
+        }
 
         // Add isEdited field from virtual or calculate it
         commentObj.isEdited = comment.isEdited ||
