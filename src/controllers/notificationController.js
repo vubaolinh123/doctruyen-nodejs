@@ -1,5 +1,5 @@
 const notificationService = require('../services/notificationService');
-const { authUtils } = require('../utils');
+const authUtils = require('../utils/authUtils');
 
 /**
  * Notification Controller

@@ -44,11 +44,11 @@ const setupHooks = (schema) => {
     try {
       // Only trigger for new notifications
       if (doc.wasNew || this.isNew) {
-        // Trigger real-time notification (WebSocket)
-        await triggerRealTimeNotification(doc);
+        // Trigger real-time notification (WebSocket) - Future implementation
+        // await triggerRealTimeNotification(doc);
 
-        // Queue email/push notifications if enabled
-        await queueExternalNotifications(doc);
+        // Queue email/push notifications if enabled - Future implementation
+        // await queueExternalNotifications(doc);
 
         // Update user notification stats
         await updateUserNotificationStats(doc.recipient_id);
@@ -151,10 +151,6 @@ async function triggerRealTimeNotification(notification) {
   try {
     // TODO: Implement WebSocket notification
     // This would integrate with Socket.IO or similar
-    console.log(`[Notification] Real-time notification triggered for user ${notification.recipient_id}`);
-    
-    // For now, just log the notification
-    // In future implementation:
     // const io = require('../../services/socketService');
     // io.to(`user_${notification.recipient_id}`).emit('notification', notification.toClientFormat());
   } catch (error) {
@@ -168,7 +164,6 @@ async function queueExternalNotifications(notification) {
     // Queue email notification if enabled
     if (notification.delivery.email.enabled) {
       // TODO: Implement email queue
-      console.log(`[Notification] Email notification queued for user ${notification.recipient_id}`);
       // const emailQueue = require('../../services/emailQueue');
       // await emailQueue.add('notification', { notificationId: notification._id });
     }
@@ -176,7 +171,6 @@ async function queueExternalNotifications(notification) {
     // Queue push notification if enabled
     if (notification.delivery.push.enabled) {
       // TODO: Implement push notification queue
-      console.log(`[Notification] Push notification queued for user ${notification.recipient_id}`);
       // const pushQueue = require('../../services/pushQueue');
       // await pushQueue.add('notification', { notificationId: notification._id });
     }
@@ -192,7 +186,7 @@ async function updateUserNotificationStats(userId) {
     const Notification = require('./index');
 
     const unreadCount = await Notification.getUnreadCount(userId);
-    
+
     await User.findByIdAndUpdate(userId, {
       $set: {
         'notification_stats.unread_count': unreadCount,

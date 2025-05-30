@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const notificationController = require('../controllers/notificationController');
-const { authMiddleware } = require('../middleware');
+const { authenticateToken, requireAdmin } = require('../middleware/auth');
 
 /**
  * Notification Routes
@@ -9,7 +9,7 @@ const { authMiddleware } = require('../middleware');
  */
 
 // Apply authentication middleware to all routes
-router.use(authMiddleware.authenticate);
+router.use(authenticateToken);
 
 /**
  * @route   GET /api/notifications
@@ -91,13 +91,13 @@ router.delete('/:id', notificationController.deleteNotification);
  * @body    {string|string[]} targetUsers - Target users ('all' or array of user IDs)
  * @body    {string} priority - Priority level (low, normal, high, urgent)
  */
-router.post('/announcement', notificationController.createAnnouncement);
+router.post('/announcement', requireAdmin, notificationController.createAnnouncement);
 
 /**
  * @route   POST /api/notifications/cleanup
  * @desc    Cleanup expired notifications (Admin only)
  * @access  Private (Admin)
  */
-router.post('/cleanup', notificationController.cleanupExpired);
+router.post('/cleanup', requireAdmin, notificationController.cleanupExpired);
 
 module.exports = router;
