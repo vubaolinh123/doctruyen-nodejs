@@ -2,6 +2,7 @@ const Comment = require('../../models/comment');
 const User = require('../../models/user');
 const crypto = require('crypto');
 const commentQuoteUtils = require('../../utils/commentQuoteUtils');
+const adminNotificationService = require('../notification/adminNotificationService');
 
 /**
  * Service xử lý business logic cho comment system
@@ -23,7 +24,8 @@ class CommentService {
         limit = 20,
         sort = 'newest',
         include_replies = false,
-        user_id = null
+        user_id = null,
+        user_role = null
       } = options;
 
       let result;
@@ -64,7 +66,7 @@ class CommentService {
 
       // Add user interaction info if user is logged in
       if (user_id && result.comments.length > 0) {
-        result.comments = await this.addUserInteractionInfo(result.comments, user_id);
+        result.comments = await this.addUserInteractionInfo(result.comments, user_id, user_role);
       }
 
       return result;
@@ -245,7 +247,7 @@ class CommentService {
    * @param {String} reason - Lý do xóa
    * @returns {Promise<Object>} - Kết quả xóa
    */
-  async deleteComment(commentId, userId, reason = 'User deleted') {
+  async deleteComment(commentId, userId, reason = 'User deleted', userRole = null) {
     try {
       // Find comment
       const comment = await Comment.findById(commentId);
@@ -253,8 +255,11 @@ class CommentService {
         throw new Error('Bình luận không tồn tại');
       }
 
-      // Check permissions
-      if (comment.user_id.toString() !== userId.toString()) {
+      // Check permissions - Admin can delete any comment
+      const isOwner = comment.user_id.toString() === userId.toString();
+      const isAdmin = userRole === 'admin';
+
+      if (!isOwner && !isAdmin) {
         throw new Error('Bạn không có quyền xóa bình luận này');
       }
 
@@ -262,12 +267,50 @@ class CommentService {
         throw new Error('Bình luận đã bị xóa hoặc ẩn');
       }
 
+      // Set appropriate reason for admin deletion
+      const deleteReason = isAdmin && !isOwner ? `Admin deleted: ${reason}` : reason;
+
       // Soft delete
-      await comment.softDelete(reason);
+      await comment.softDelete(deleteReason);
+
+      // Handle admin deletion notifications and logging
+      if (isAdmin && !isOwner) {
+        try {
+          // Send notification to comment owner
+          await adminNotificationService.sendCommentDeletionNotification({
+            adminId: userId,
+            targetUserId: comment.user_id,
+            commentId: commentId,
+            reason: reason,
+            storyId: comment.target.story_id,
+            chapterId: comment.target.chapter_id
+          });
+
+          // Log admin action for audit
+          await adminNotificationService.logAdminAction({
+            adminId: userId,
+            action: 'delete_comment',
+            targetType: 'comment',
+            targetId: commentId,
+            reason: reason,
+            metadata: {
+              comment_owner: comment.user_id,
+              story_id: comment.target.story_id,
+              chapter_id: comment.target.chapter_id
+            }
+          });
+
+        } catch (notificationError) {
+          console.error('[CommentService] Error sending admin deletion notification:', notificationError);
+          // Don't fail the deletion if notification fails
+        }
+      }
 
       return {
         success: true,
-        message: 'Bình luận đã được xóa thành công'
+        message: isAdmin && !isOwner ?
+          'Bình luận đã được xóa thành công. Người dùng đã được thông báo.' :
+          'Bình luận đã được xóa thành công'
       };
     } catch (error) {
       throw error;
@@ -370,9 +413,10 @@ class CommentService {
    * Lấy comment thread (root + all nested replies)
    * @param {ObjectId} rootId - ID của root comment
    * @param {ObjectId} userId - ID của user (optional)
+   * @param {String} userRole - Role của user (optional)
    * @returns {Promise<Object>} - Comment thread
    */
-  async getCommentThread(rootId, userId = null) {
+  async getCommentThread(rootId, userId = null, userRole = null) {
     try {
       const thread = await Comment.getCommentThread(rootId);
 
@@ -382,7 +426,7 @@ class CommentService {
 
       // Add user interaction info if user is logged in
       if (userId) {
-        await this.addUserInteractionInfoToThread(thread, userId);
+        await this.addUserInteractionInfoToThread(thread, userId, userRole);
       }
 
       return {
@@ -405,7 +449,7 @@ class CommentService {
 
       // Add user interaction info if user is logged in
       if (searchOptions.current_user_id && result.comments.length > 0) {
-        result.comments = await this.addUserInteractionInfo(result.comments, searchOptions.current_user_id);
+        result.comments = await this.addUserInteractionInfo(result.comments, searchOptions.current_user_id, searchOptions.current_user_role);
       }
 
       return {
@@ -440,9 +484,10 @@ class CommentService {
    * Thêm thông tin tương tác của user vào comments
    * @param {Array} comments - Danh sách comments
    * @param {ObjectId} userId - ID của user
+   * @param {String} userRole - Role của user
    * @returns {Promise<Array>} - Comments với thông tin tương tác
    */
-  async addUserInteractionInfo(comments, userId) {
+  async addUserInteractionInfo(comments, userId, userRole = null) {
     try {
       return comments.map(comment => {
         const commentObj = comment.toObject ? comment.toObject() : comment;
@@ -483,9 +528,14 @@ class CommentService {
         // Check if user can edit
         commentObj.canEdit = comment.canEdit ? comment.canEdit(userId) : false;
 
-        // Check if user can delete
-        commentObj.canDelete = commentObj.user_id.toString() === userId.toString() &&
-                              commentObj.moderation.status === 'active';
+        // Check if user can delete - Admin can delete any comment
+        const isOwner = commentObj.user_id.toString() === userId.toString();
+        const isAdmin = userRole === 'admin';
+        commentObj.canDelete = (isOwner || isAdmin) && commentObj.moderation.status === 'active';
+
+        // Add isEdited field from virtual or calculate it
+        commentObj.isEdited = comment.isEdited ||
+                             (commentObj.metadata.edit_history && commentObj.metadata.edit_history.length > 0);
 
         return commentObj;
       });
@@ -498,17 +548,18 @@ class CommentService {
    * Thêm thông tin tương tác của user vào comment thread
    * @param {Object} thread - Comment thread
    * @param {ObjectId} userId - ID của user
+   * @param {String} userRole - Role của user
    */
-  async addUserInteractionInfoToThread(thread, userId) {
+  async addUserInteractionInfoToThread(thread, userId, userRole = null) {
     try {
       // Add interaction info to root comment
-      const rootWithInteraction = await this.addUserInteractionInfo([thread], userId);
+      const rootWithInteraction = await this.addUserInteractionInfo([thread], userId, userRole);
       Object.assign(thread, rootWithInteraction[0]);
 
       // Recursively add interaction info to replies
       if (thread.replies && thread.replies.length > 0) {
         for (const reply of thread.replies) {
-          await this.addUserInteractionInfoToThread(reply, userId);
+          await this.addUserInteractionInfoToThread(reply, userId, userRole);
         }
       }
     } catch (error) {

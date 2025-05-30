@@ -3,7 +3,7 @@
  * Các phương thức được gọi trên instance của comment
  */
 const setupMethods = (schema) => {
-  
+
   /**
    * Thêm like cho comment
    * @param {ObjectId} userId - ID của user
@@ -31,8 +31,8 @@ const setupMethods = (schema) => {
       this.updateEngagementScore();
 
       await this.save();
-      return { 
-        success: true, 
+      return {
+        success: true,
         message: 'Đã thích comment',
         likes: this.engagement.likes.count,
         dislikes: this.engagement.dislikes.count
@@ -69,8 +69,8 @@ const setupMethods = (schema) => {
       this.updateEngagementScore();
 
       await this.save();
-      return { 
-        success: true, 
+      return {
+        success: true,
         message: 'Đã không thích comment',
         likes: this.engagement.likes.count,
         dislikes: this.engagement.dislikes.count
@@ -111,8 +111,8 @@ const setupMethods = (schema) => {
       if (removed) {
         this.updateEngagementScore();
         await this.save();
-        return { 
-          success: true, 
+        return {
+          success: true,
           message: `Đã bỏ ${action === 'like' ? 'thích' : 'không thích'}`,
           likes: this.engagement.likes.count,
           dislikes: this.engagement.dislikes.count
@@ -133,11 +133,11 @@ const setupMethods = (schema) => {
     const likes = this.engagement.likes.count || 0;
     const dislikes = this.engagement.dislikes.count || 0;
     const replies = this.engagement.replies.count || 0;
-    
+
     // Time decay factor (newer comments get higher score)
     const ageInHours = (Date.now() - this.createdAt.getTime()) / (1000 * 60 * 60);
     const timeDecay = Math.max(0, 1 - (ageInHours / 168)); // Decay over 1 week
-    
+
     this.engagement.score = (likes - dislikes) + (replies * 0.5) + (timeDecay * 2);
   };
 
@@ -176,8 +176,8 @@ const setupMethods = (schema) => {
       }
 
       await this.save();
-      return { 
-        success: true, 
+      return {
+        success: true,
         message: 'Đã báo cáo comment',
         flags: this.moderation.flags.count
       };
@@ -204,13 +204,25 @@ const setupMethods = (schema) => {
    * @returns {Boolean}
    */
   schema.methods.canEdit = function(userId) {
-    // Chỉ cho phép edit trong 15 phút đầu
-    const editTimeLimit = 15 * 60 * 1000; // 15 minutes
-    const timeSinceCreated = Date.now() - this.createdAt.getTime();
-    
-    return this.user_id.toString() === userId.toString() && 
-           timeSinceCreated <= editTimeLimit &&
-           this.moderation.status === 'active';
+    const isOwner = this.user_id.toString() === userId.toString();
+    const isActive = this.moderation.status === 'active';
+
+    // Debug logging
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Comment.canEdit] Debug:', {
+        commentId: this._id,
+        userId: userId.toString(),
+        commentUserId: this.user_id.toString(),
+        isOwner,
+        moderationStatus: this.moderation.status,
+        isActive,
+        canEdit: isOwner && isActive
+      });
+    }
+
+    // Allow users to edit their own comments indefinitely (no time limit)
+    // Only check ownership and comment status
+    return isOwner && isActive;
   };
 
   /**
@@ -230,7 +242,7 @@ const setupMethods = (schema) => {
     // Update content
     this.content.original = newContent;
     this.content.sanitized = this.sanitizeContent(newContent);
-    
+
     await this.save();
   };
 
@@ -252,7 +264,7 @@ const setupMethods = (schema) => {
     const mentionRegex = /@(\w+)/g;
     const mentions = [];
     let match;
-    
+
     while ((match = mentionRegex.exec(content)) !== null) {
       mentions.push({
         username: match[1],

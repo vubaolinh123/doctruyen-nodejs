@@ -21,6 +21,10 @@ const commentRateLimit = rateLimit({
     // Handle both _id and id fields with proper null checks
     const userId = req.user ? (req.user._id || req.user.id) : null;
     return userId ? `${req.ip}-${userId.toString()}` : req.ip;
+  },
+  skip: (req) => {
+    // Skip rate limiting for admins
+    return req.user && req.user.role === 'admin';
   }
 });
 
@@ -71,6 +75,10 @@ const likeRateLimit = rateLimit({
       // Fallback to IP if user data is corrupted
       return req.ip;
     }
+  },
+  skip: (req) => {
+    // Skip rate limiting for admins
+    return req.user && req.user.role === 'admin';
   }
 });
 
@@ -86,6 +94,10 @@ const flagRateLimit = rateLimit({
     // Handle both _id and id fields with proper null checks
     const userId = req.user ? (req.user._id || req.user.id) : null;
     return userId ? userId.toString() : req.ip;
+  },
+  skip: (req) => {
+    // Skip rate limiting for admins
+    return req.user && req.user.role === 'admin';
   }
 });
 
@@ -95,6 +107,12 @@ const flagRateLimit = rateLimit({
 const spamDetection = async (req, res, next) => {
   try {
     if (!req.user) {
+      return next();
+    }
+
+    // Skip spam detection for admins
+    if (req.user.role === 'admin') {
+      console.log('[Spam Detection] Bypassing spam detection for admin user:', req.user._id || req.user.id);
       return next();
     }
 
@@ -188,6 +206,12 @@ const contentValidation = (req, res, next) => {
  */
 const ipSuspiciousActivityDetection = async (req, res, next) => {
   try {
+    // Skip IP detection for admins
+    if (req.user && req.user.role === 'admin') {
+      console.log('[IP Detection] Bypassing IP detection for admin user:', req.user._id || req.user.id);
+      return next();
+    }
+
     const ip = req.ip;
     const now = new Date();
     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);

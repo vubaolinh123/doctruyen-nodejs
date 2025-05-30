@@ -30,7 +30,8 @@ class BaseCommentController {
         limit: parseInt(limit),
         sort,
         include_replies: include_replies === 'true',
-        user_id: req.user?._id || req.user?.id
+        user_id: req.user?._id || req.user?.id,
+        user_role: req.user?.role
       };
 
       // Check cache first (only for non-authenticated requests to avoid userReaction issues)
@@ -172,9 +173,10 @@ class BaseCommentController {
     try {
       const { id } = req.params;
       const userId = req.user._id || req.user.id;
-      const { reason } = req.body;
+      const userRole = req.user.role;
+      const { reason } = req.body || {}; // Make reason optional
 
-      const result = await commentService.deleteComment(id, userId, reason);
+      const result = await commentService.deleteComment(id, userId, reason, userRole);
 
       // Invalidate cache
       cacheService.invalidateStoryCache(req.body.story_id);
@@ -285,6 +287,7 @@ class BaseCommentController {
     try {
       const { id } = req.params;
       const userId = req.user?._id || req.user?.id;
+      const userRole = req.user?.role;
 
       // Check cache first (only for non-authenticated requests to avoid userReaction issues)
       const cachedThread = !userId ? cacheService.getCachedThread(id) : null;
@@ -296,7 +299,7 @@ class BaseCommentController {
         });
       }
 
-      const result = await commentService.getCommentThread(id, userId);
+      const result = await commentService.getCommentThread(id, userId, userRole);
 
       // Cache thread
       cacheService.cacheThread(id, result.data, 600); // 10 minutes
@@ -344,7 +347,8 @@ class BaseCommentController {
         user_id,
         limit: parseInt(limit),
         skip: parseInt(skip),
-        current_user_id: req.user?._id || req.user?.id
+        current_user_id: req.user?._id || req.user?.id,
+        current_user_role: req.user?.role
       };
 
       const result = await commentService.searchComments(searchOptions);
