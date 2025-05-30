@@ -8,13 +8,15 @@ const apiLogger = (req, res, next) => {
   // Lưu thời gian bắt đầu
   const start = Date.now();
 
-  // Lưu các hàm gốc của response
-  const originalJson = res.json;
-  const originalSend = res.send;
-  const originalEnd = res.end;
+  // Flag để đảm bảo chỉ log 1 lần cho mỗi request
+  let hasLogged = false;
 
-  // Hàm để log response
+  // Hàm để log response - chỉ chạy 1 lần
   const logResponse = (body = null) => {
+    // Nếu đã log rồi thì không log nữa
+    if (hasLogged) return;
+    hasLogged = true;
+
     // Tính thời gian xử lý
     const duration = Date.now() - start;
 
@@ -59,23 +61,11 @@ const apiLogger = (req, res, next) => {
     }
   };
 
-  // Ghi đè hàm res.json
-  res.json = function (body) {
-    logResponse(body);
-    return originalJson.call(this, body);
-  };
-
-  // Ghi đè hàm res.send
-  res.send = function (body) {
-    logResponse(body);
-    return originalSend.call(this, body);
-  };
-
-  // Ghi đè hàm res.end
-  res.end = function (chunk, encoding) {
-    logResponse(chunk);
-    return originalEnd.call(this, chunk, encoding);
-  };
+  // Sử dụng event 'finish' để log khi response hoàn thành
+  // Cách này hiệu quả hơn và tránh override multiple methods
+  res.on('finish', () => {
+    logResponse();
+  });
 
   next();
 };
