@@ -203,20 +203,16 @@ const setupHooks = (schema) => {
       if (parentComment &&
           parentComment.user_id._id.toString() !== doc.user_id.toString()) {
 
-        const Notification = require('../notification');
-        await Notification.create({
-          user_id: parentComment.user_id._id,
-          type: 'comment_reply',
-          title: 'Có phản hồi mới cho bình luận của bạn',
-          message: `${doc.user?.name || 'Ai đó'} đã phản hồi bình luận của bạn`,
-          data: {
-            comment_id: doc._id,
-            parent_comment_id: doc.hierarchy.parent_id,
-            story_id: doc.target.story_id,
-            chapter_id: doc.target.chapter_id,
-            replied_by: doc.user_id
-          },
-          url: doc.url
+        const notificationService = require('../../services/notificationService');
+
+        // Get user data for the reply
+        const User = require('../user');
+        const repliedBy = await User.findById(doc.user_id, 'name avatar slug');
+
+        await notificationService.createCommentReplyNotification({
+          parentComment: parentComment,
+          replyComment: doc,
+          repliedBy: repliedBy
         });
       }
     } catch (error) {

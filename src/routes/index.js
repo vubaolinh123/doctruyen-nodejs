@@ -29,6 +29,8 @@ router.use('/bookmarks', auth, require('./bookmarks'));
 router.use('/attendance', require('./attendance'));
 // Route comments
 router.use('/comments', require('./commentRoutes'));
+// Route notifications
+router.use('/notifications', require('./notificationRoutes'));
 // Admin routes
 router.use('/admin/coins', auth, require('./coins'));
 router.use('/admin/users', auth, require('./admin/users'));
