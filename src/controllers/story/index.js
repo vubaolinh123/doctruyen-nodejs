@@ -12,6 +12,7 @@ module.exports = {
   incrementViews: baseController.incrementViews,
 
   // Controllers đặc biệt
+  getPopularStories: specialController.getPopularStories,
   getHotStories: specialController.getHotStories,
   getTopRatedStories: specialController.getTopRatedStories,
   getRecentStories: specialController.getRecentStories,

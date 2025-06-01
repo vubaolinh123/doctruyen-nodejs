@@ -7,6 +7,34 @@ const Chapter = require('../../models/chapter');
 const mongoose = require('mongoose');
 
 /**
+ * Lấy danh sách truyện phổ biến (sắp xếp theo views)
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+exports.getPopularStories = async (req, res) => {
+  try {
+    const { limit = 500, page = 1 } = req.query;
+    console.log(`[API] Getting popular stories - limit: ${limit}, page: ${page}`);
+
+    const stories = await specialStoryService.getPopularStories(parseInt(limit), parseInt(page));
+
+    res.json({
+      success: true,
+      stories: stories.stories || stories,
+      total: stories.total || stories.length,
+      page: parseInt(page),
+      limit: parseInt(limit)
+    });
+  } catch (err) {
+    console.error('[API] Error getting popular stories:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+};
+
+/**
  * Lấy danh sách truyện hot
  * @param {Object} req - Request object
  * @param {Object} res - Response object

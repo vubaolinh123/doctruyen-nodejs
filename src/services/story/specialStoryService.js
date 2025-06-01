@@ -68,6 +68,42 @@ const addStatsToStory = async (story) => {
 };
 
 /**
+ * Lấy danh sách truyện phổ biến (sắp xếp theo views) cho static generation
+ * @param {number} limit - Số lượng truyện cần lấy
+ * @param {number} page - Trang hiện tại
+ * @returns {Promise<Array>} - Danh sách truyện phổ biến
+ */
+const getPopularStories = async (limit = 500, page = 1) => {
+  try {
+    console.log(`[Service] Getting popular stories - limit: ${limit}, page: ${page}`);
+
+    // Tính toán skip cho pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Lấy truyện sắp xếp theo views (phổ biến nhất)
+    const stories = await Story.find({
+      status: true // Chỉ lấy truyện đang hoạt động
+    })
+      .sort({ views: -1 }) // Sắp xếp theo views giảm dần
+      .skip(skip)
+      .limit(parseInt(limit))
+      .populate('author_id', 'name slug')
+      .populate('categories', 'name slug')
+      .select('name slug image desc views ratings_count ratings_sum is_full is_hot is_new createdAt updatedAt');
+
+    console.log(`[Service] Found ${stories.length} popular stories`);
+
+    // Thêm thông tin stats vào mỗi truyện (tối ưu cho static generation)
+    const storiesWithStats = await addStatsToStories(stories);
+
+    return storiesWithStats;
+  } catch (error) {
+    console.error('[Service] Error getting popular stories:', error);
+    throw error;
+  }
+};
+
+/**
  * Lấy danh sách truyện hot
  * @param {number} limit - Số lượng truyện cần lấy
  * @returns {Promise<Array>} - Danh sách truyện hot
@@ -480,6 +516,7 @@ const getSuggestedStories = async (options = {}) => {
 };
 
 module.exports = {
+  getPopularStories,
   getHotStories,
   getTopRatedStories,
   getRecentStories,

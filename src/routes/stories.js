@@ -11,6 +11,7 @@ const { optional } = require('../middleware/auth');
 
 // Danh sách truyện - sử dụng optional auth để hỗ trợ cả public và admin
 router.get('/', optional, controller.getAll);
+router.get('/popular', controller.getPopularStories);
 router.get('/hot', controller.getHotStories);
 router.get('/top-rated', controller.getTopRatedStories);
 router.get('/recent', controller.getRecentStories);
