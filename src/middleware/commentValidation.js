@@ -56,9 +56,16 @@ const validateCreateComment = [
     }),
 
   body('metadata.chapter_position')
-    .optional()
-    .isInt({ min: 0 })
-    .withMessage('Vị trí trong chương phải là số nguyên không âm'),
+    .optional({ nullable: true })
+    .custom((value) => {
+      if (value === null || value === undefined) {
+        return true;
+      }
+      if (!Number.isInteger(value) || value < 0) {
+        throw new Error('Vị trí trong chương phải là số nguyên không âm');
+      }
+      return true;
+    }),
 
   // Custom validation để check consistency
   body().custom((body) => {
@@ -330,7 +337,7 @@ const validateTargetExists = async (req, res, next) => {
         });
       }
 
-      if (chapter.story_id.toString() !== story_id) {
+      if (!chapter.story_id || chapter.story_id.toString() !== story_id) {
         return res.status(400).json({
           success: false,
           message: 'Chương không thuộc về truyện này'

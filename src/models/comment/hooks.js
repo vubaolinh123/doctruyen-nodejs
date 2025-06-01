@@ -65,6 +65,16 @@ const setupHooks = (schema) => {
    * Pre-save hook: Setup hierarchy cho comment mới
    */
   schema.methods.setupHierarchy = async function() {
+    // Ensure _id exists before using it
+    if (!this._id) {
+      this._id = new this.constructor.base.Types.ObjectId();
+    }
+
+    // Ensure _id is valid before calling toString()
+    if (!this._id || typeof this._id.toString !== 'function') {
+      throw new Error('Invalid comment ID');
+    }
+
     if (this.hierarchy.parent_id) {
       // Đây là reply comment
       const parentComment = await this.constructor.findById(this.hierarchy.parent_id);

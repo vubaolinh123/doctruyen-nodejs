@@ -90,6 +90,23 @@ class CommentService {
       console.log('[Comment Service] Creating comment with userId:', userId);
       console.log('[Comment Service] Comment data:', commentData);
 
+      // Validate and convert userId to ObjectId if needed
+      const mongoose = require('mongoose');
+      let validUserId;
+
+      if (typeof userId === 'string') {
+        if (!mongoose.Types.ObjectId.isValid(userId)) {
+          throw new Error('Invalid user ID format');
+        }
+        validUserId = new mongoose.Types.ObjectId(userId);
+      } else if (userId instanceof mongoose.Types.ObjectId) {
+        validUserId = userId;
+      } else {
+        throw new Error('User ID must be a string or ObjectId');
+      }
+
+      console.log('[Comment Service] Validated userId:', validUserId);
+
       const {
         content,
         target,
@@ -142,12 +159,59 @@ class CommentService {
         }
       }
 
+      // Validate target data
+      if (!target || !target.story_id) {
+        throw new Error('Target story_id is required');
+      }
+
+      // Validate and convert target IDs to ObjectId if needed
+      let validStoryId;
+      if (typeof target.story_id === 'string') {
+        if (!mongoose.Types.ObjectId.isValid(target.story_id)) {
+          throw new Error('Invalid story ID format');
+        }
+        validStoryId = new mongoose.Types.ObjectId(target.story_id);
+      } else if (target.story_id instanceof mongoose.Types.ObjectId) {
+        validStoryId = target.story_id;
+      } else {
+        throw new Error('Story ID must be a string or ObjectId');
+      }
+
+      let validChapterId = null;
+      if (target.chapter_id) {
+        if (typeof target.chapter_id === 'string') {
+          if (!mongoose.Types.ObjectId.isValid(target.chapter_id)) {
+            throw new Error('Invalid chapter ID format');
+          }
+          validChapterId = new mongoose.Types.ObjectId(target.chapter_id);
+        } else if (target.chapter_id instanceof mongoose.Types.ObjectId) {
+          validChapterId = target.chapter_id;
+        } else {
+          throw new Error('Chapter ID must be a string or ObjectId');
+        }
+      }
+
+      // Validate and convert parent_id if exists
+      let validParentId = null;
+      if (finalParentId) {
+        if (typeof finalParentId === 'string') {
+          if (!mongoose.Types.ObjectId.isValid(finalParentId)) {
+            throw new Error('Invalid parent comment ID format');
+          }
+          validParentId = new mongoose.Types.ObjectId(finalParentId);
+        } else if (finalParentId instanceof mongoose.Types.ObjectId) {
+          validParentId = finalParentId;
+        } else {
+          throw new Error('Parent comment ID must be a string or ObjectId');
+        }
+      }
+
       // Prepare comment data
       const newCommentData = {
-        user_id: userId,
+        user_id: validUserId,
         target: {
-          story_id: target.story_id,
-          chapter_id: target.chapter_id || null,
+          story_id: validStoryId,
+          chapter_id: validChapterId,
           type: target.type
         },
         content: {
@@ -157,7 +221,7 @@ class CommentService {
           quote: quoteData || undefined // Add quote data if exists
         },
         hierarchy: {
-          parent_id: finalParentId,
+          parent_id: validParentId,
           level: 0, // Will be calculated in pre-save hook
           path: '', // Will be calculated in pre-save hook
           root_id: null // Will be calculated in pre-save hook
@@ -177,7 +241,7 @@ class CommentService {
         target: newCommentData.target,
         content: newCommentData.content.original.substring(0, 100) + '...',
         hasQuote: !!quoteData,
-        finalParentId: finalParentId
+        finalParentId: validParentId
       });
 
       // Create comment

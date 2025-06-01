@@ -4,9 +4,6 @@ const jwt = require('jsonwebtoken');
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
 
-  // Debug logging
-  console.log('[Auth Middleware] Authorization header:', authHeader ? 'Present' : 'Missing');
-
   if (!authHeader) {
     return res.status(401).json({
       success: false,

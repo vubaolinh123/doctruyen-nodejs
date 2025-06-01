@@ -100,8 +100,6 @@ class BaseCommentController {
         });
       }
 
-      console.log('[Comment Controller] Creating comment with userId:', userId);
-
       const commentData = req.body;
 
       // Get metadata from request

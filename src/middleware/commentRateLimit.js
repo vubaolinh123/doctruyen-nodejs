@@ -37,7 +37,21 @@ const createCommentRateLimit = rateLimit({
     message: 'Bạn đang bình luận quá nhanh, vui lòng chờ 1 phút'
   },
   keyGenerator: (req) => {
-    return req.user ? req.user._id.toString() : req.ip;
+    try {
+      if (!req.user) {
+        return req.ip;
+      }
+
+      const userId = req.user._id || req.user.id;
+      if (!userId) {
+        return req.ip;
+      }
+
+      return userId.toString();
+    } catch (error) {
+      console.error('[Create Comment Rate Limit] Error in keyGenerator:', error);
+      return req.ip;
+    }
   },
   skip: (req) => {
     // Skip rate limiting for admins

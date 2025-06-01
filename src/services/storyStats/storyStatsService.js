@@ -131,18 +131,21 @@ class StoryStatsService {
         throw new Error('Invalid story ID');
       }
 
-      // Tổng hợp thông tin đánh giá từ tất cả các bản ghi StoryStats
+      // Import UserRating model
+      const UserRating = require('../../models/userRating');
 
       // Chuyển đổi storyId thành ObjectId
       const storyObjectId = new mongoose.Types.ObjectId(storyId);
 
-      const result = await StoryStats.aggregate([
+      // Tính toán thống kê đánh giá chính xác từ UserRating collection
+      const result = await UserRating.aggregate([
         { $match: { story_id: storyObjectId } },
         {
           $group: {
             _id: null,
-            ratingsCount: { $sum: '$ratings_count' },
-            ratingsSum: { $sum: '$ratings_sum' }
+            ratingsCount: { $sum: 1 }, // Đếm số lượng user đã rating
+            ratingsSum: { $sum: '$rating' }, // Tổng điểm rating
+            avgRating: { $avg: '$rating' } // Trung bình rating
           }
         }
       ]);
@@ -152,8 +155,10 @@ class StoryStatsService {
         return { ratingsCount: 0, ratingsSum: 0, averageRating: 0 };
       }
 
-      const { ratingsCount, ratingsSum } = result[0];
-      const averageRating = ratingsCount > 0 ? ratingsSum / ratingsCount : 0;
+      const { ratingsCount, ratingsSum, avgRating } = result[0];
+
+      // Đảm bảo average_rating không vượt quá 10 và làm tròn
+      const averageRating = Math.min(10, Math.max(0, Math.round(avgRating * 100) / 100));
 
       return { ratingsCount, ratingsSum, averageRating };
     } catch (error) {

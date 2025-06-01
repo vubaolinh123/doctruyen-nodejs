@@ -63,9 +63,17 @@ exports.login = async (req, res) => {
 
     // Sử dụng authService để xử lý logic đăng nhập
     const result = await authService.login(req.body, clientInfo);
-    
+
     console.log('✅ Login success for:', req.body.email);
-    res.json(result);
+
+    // Đảm bảo response có format đúng cho script test
+    const response = {
+      success: true,
+      ...result,
+      token: result.accessToken, // Thêm token field để tương thích với script test
+    };
+
+    res.json(response);
   } catch (err) {
     console.error('❌ Login error:', err);
 

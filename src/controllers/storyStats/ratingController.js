@@ -26,23 +26,22 @@ exports.getUserRating = async (req, res) => {
     const storyObjectId = new mongoose.Types.ObjectId(storyId);
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
-    // Kiểm tra xem có bản ghi UserRating nào trong database không
-    const totalRatings = await UserRating.countDocuments();
-
     // Tìm đánh giá của người dùng
     const userRating = await UserRating.findOne({
       user_id: userObjectId,
       story_id: storyObjectId
     });
 
-    // Lấy thống kê đánh giá của truyện
-    const stats = await StoryStats.aggregate([
+    // Tính toán thống kê đánh giá chính xác từ UserRating collection
+    // Thay vì aggregate từ StoryStats (có thể bị duplicate)
+    const ratingStats = await UserRating.aggregate([
       { $match: { story_id: storyObjectId } },
       {
         $group: {
           _id: null,
-          ratingsCount: { $sum: '$ratings_count' },
-          ratingsSum: { $sum: '$ratings_sum' }
+          ratingsCount: { $sum: 1 }, // Đếm số lượng user đã rating
+          ratingsSum: { $sum: '$rating' }, // Tổng điểm rating
+          avgRating: { $avg: '$rating' } // Trung bình rating
         }
       }
     ]);
@@ -52,10 +51,16 @@ exports.getUserRating = async (req, res) => {
     let ratingsCount = 0;
     let ratingsSum = 0;
 
-    if (stats && stats.length > 0) {
-      ratingsCount = stats[0].ratingsCount;
-      ratingsSum = stats[0].ratingsSum;
-      averageRating = ratingsCount > 0 ? ratingsSum / ratingsCount : 0;
+    if (ratingStats && ratingStats.length > 0) {
+      ratingsCount = ratingStats[0].ratingsCount;
+      ratingsSum = ratingStats[0].ratingsSum;
+      averageRating = ratingStats[0].avgRating;
+
+      // Đảm bảo average_rating không vượt quá 10
+      averageRating = Math.min(10, Math.max(0, averageRating));
+
+      // Làm tròn đến 2 chữ số thập phân
+      averageRating = Math.round(averageRating * 100) / 100;
     }
 
     // Trả về kết quả
@@ -70,6 +75,7 @@ exports.getUserRating = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Error in getUserRating:', error);
     return res.status(500).json({
       success: false,
       message: 'Lỗi server',
@@ -141,55 +147,81 @@ exports.rateStory = async (req, res) => {
         await newRating.save();
       }
 
-      // Cập nhật StoryStats
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // Cập nhật StoryStats (chỉ để tracking, không dùng cho tính toán chính xác)
+      // Logic này sẽ được đơn giản hóa để tránh duplicate counting
+      try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
-      // Lấy thông tin ngày, tháng, năm, tuần
-      const year = today.getFullYear();
-      const month = today.getMonth();
-      const day = today.getDate();
-      const week = moment(today).isoWeek();
+        // Lấy thông tin ngày, tháng, năm, tuần
+        const year = today.getFullYear();
+        const month = today.getMonth();
+        const day = today.getDate();
+        const week = moment(today).isoWeek();
 
-      // Tìm hoặc tạo bản ghi thống kê cho ngày hôm nay
-      let stats = await StoryStats.findOne({
-        story_id: storyObjectId,
-        date: today
-      });
-
-      if (!stats) {
-        // Tạo bản ghi mới nếu chưa có
-        stats = new StoryStats({
+        // Tìm hoặc tạo bản ghi thống kê cho ngày hôm nay
+        let stats = await StoryStats.findOne({
           story_id: storyObjectId,
-          date: today,
-          views: 0,
-          unique_views: 0,
-          ratings_count: 1, // Đánh giá đầu tiên
-          ratings_sum: rating,
-          comments_count: 0,
-          bookmarks_count: 0,
-          shares_count: 0,
-          day,
-          month,
-          year,
-          week
+          date: today
         });
-      } else {
-        // Cập nhật bản ghi hiện có
-        if (isNewRating) {
-          // Nếu là đánh giá mới, tăng số lượng đánh giá và tổng điểm đánh giá
-          stats.ratings_count += 1;
-          stats.ratings_sum += rating;
-        } else {
-          // Nếu là cập nhật đánh giá, chỉ cập nhật tổng điểm đánh giá
-          // Tính toán tổng điểm mới bằng cách trừ đi điểm cũ và cộng điểm mới
-          // Đảm bảo ratings_sum không bao giờ âm
-          const newSum = Math.max(0, stats.ratings_sum - oldRating + rating);
-          stats.ratings_sum = newSum;
-        }
-      }
 
-      await stats.save();
+        if (!stats) {
+          // Tạo bản ghi mới nếu chưa có
+          // Tính toán chính xác từ UserRating collection
+          const currentRatingStats = await UserRating.aggregate([
+            { $match: { story_id: storyObjectId } },
+            {
+              $group: {
+                _id: null,
+                ratingsCount: { $sum: 1 },
+                ratingsSum: { $sum: '$rating' }
+              }
+            }
+          ]);
+
+          const currentCount = currentRatingStats.length > 0 ? currentRatingStats[0].ratingsCount : 0;
+          const currentSum = currentRatingStats.length > 0 ? currentRatingStats[0].ratingsSum : 0;
+
+          stats = new StoryStats({
+            story_id: storyObjectId,
+            date: today,
+            views: 0,
+            unique_views: 0,
+            ratings_count: currentCount,
+            ratings_sum: currentSum,
+            comments_count: 0,
+            bookmarks_count: 0,
+            shares_count: 0,
+            day,
+            month,
+            year,
+            week
+          });
+        } else {
+          // Cập nhật bản ghi hiện có với dữ liệu chính xác từ UserRating
+          const currentRatingStats = await UserRating.aggregate([
+            { $match: { story_id: storyObjectId } },
+            {
+              $group: {
+                _id: null,
+                ratingsCount: { $sum: 1 },
+                ratingsSum: { $sum: '$rating' }
+              }
+            }
+          ]);
+
+          const currentCount = currentRatingStats.length > 0 ? currentRatingStats[0].ratingsCount : 0;
+          const currentSum = currentRatingStats.length > 0 ? currentRatingStats[0].ratingsSum : 0;
+
+          stats.ratings_count = currentCount;
+          stats.ratings_sum = currentSum;
+        }
+
+        await stats.save();
+      } catch (statsError) {
+        // Log lỗi nhưng không fail toàn bộ request
+        console.error('Error updating StoryStats:', statsError);
+      }
 
       // Trả về kết quả
       return res.status(200).json({
