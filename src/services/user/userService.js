@@ -227,12 +227,16 @@ class UserService {
    */
   async getUserBySlug(slug) {
     try {
-      const user = await User.findBySlug(slug);
+      console.log(`[UserService] Looking for user with slug: ${slug}`);
+      const user = await this.findBySlug(slug);
+      console.log(`[UserService] User found: ${user ? user.name : 'null'}`);
       if (!user) {
+        console.log(`[UserService] No user found with slug: ${slug}`);
         throw new Error('Không tìm thấy người dùng');
       }
       return user;
     } catch (error) {
+      console.error(`[UserService] Error in getUserBySlug for slug '${slug}':`, error.message);
       throw error;
     }
   }
@@ -268,7 +272,9 @@ class UserService {
       name: user.name,
       slug: user.slug,
       avatar: user.avatar,
+      email: user.email,
       banner: user.banner,
+      isActive: user.isActive,
       role: user.role,
       accountType: user.accountType,
       gender: user.gender,

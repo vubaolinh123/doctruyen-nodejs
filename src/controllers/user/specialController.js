@@ -10,9 +10,12 @@ const User = require('../../models/user');
 exports.getBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
+    console.log(`[Backend Controller] Getting user by slug: ${slug}`);
+    console.log(`[Backend Controller] Auth status - hasUser: ${!!req.user}, userId: ${req.user?.id || 'anonymous'}`);
 
     // Tìm người dùng theo slug
     const user = await userService.getUserBySlug(slug);
+    console.log(`[Backend Controller] User found: ${user ? user.name : 'null'}, id: ${user ? user._id : 'null'}`);
 
     // Kiểm tra xem người dùng đang xem có phải là chính họ không
     let isOwnProfile = false;
@@ -20,6 +23,9 @@ exports.getBySlug = async (req, res) => {
     // Nếu có thông tin người dùng đã đăng nhập từ middleware auth
     if (req.user && req.user.id) {
       isOwnProfile = req.user.id.toString() === user._id.toString();
+      console.log(`[Backend Controller] isOwnProfile: ${isOwnProfile}`);
+    } else {
+      console.log(`[Backend Controller] Anonymous user accessing profile`);
     }
 
     // Trả về dữ liệu tùy theo loại người dùng
@@ -27,21 +33,25 @@ exports.getBySlug = async (req, res) => {
       ? userService.filterPrivateUserData(user)
       : userService.filterPublicUserData(user);
 
+    console.log(`[Backend Controller] Returning ${isOwnProfile ? 'private' : 'public'} user data`);
+
     res.json({
       success: true,
       isOwnProfile,
       user: userData
     });
   } catch (error) {
-    console.error('Lỗi khi lấy thông tin người dùng theo slug:', error);
+    console.error(`[Backend Controller] Error getting user by slug '${req.params.slug}':`, error);
 
     if (error.message === 'Không tìm thấy người dùng') {
+      console.log(`[Backend Controller] User not found: ${req.params.slug}`);
       return res.status(404).json({
         success: false,
         message: 'Không tìm thấy người dùng'
       });
     }
 
+    console.error(`[Backend Controller] Server error for slug '${req.params.slug}':`, error.message);
     res.status(500).json({
       success: false,
       message: 'Lỗi khi lấy thông tin người dùng',
