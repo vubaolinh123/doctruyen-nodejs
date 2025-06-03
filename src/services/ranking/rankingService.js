@@ -420,6 +420,69 @@ class RankingService {
   }
 
   /**
+   * Khởi tạo dữ liệu ranking khi server startup
+   * Kiểm tra và tạo dữ liệu ranking nếu chưa có hoặc dữ liệu cũ
+   * @returns {Promise<Object>} - Kết quả khởi tạo
+   */
+  async initializeRankingsOnStartup() {
+    try {
+      console.log('[Ranking Service] Initializing rankings on server startup...');
+
+      const today = moment().startOf('day').toDate();
+
+      // Kiểm tra xem có dữ liệu ranking cho ngày hôm nay không
+      const existingRankings = await StoryRankings.countDocuments({
+        date: {
+          $gte: moment(today).startOf('day').toDate(),
+          $lte: moment(today).endOf('day').toDate()
+        }
+      });
+
+      console.log(`[Ranking Service] Found ${existingRankings} existing rankings for today`);
+
+      // Nếu chưa có dữ liệu ranking cho ngày hôm nay, tạo mới
+      if (existingRankings === 0) {
+        console.log('[Ranking Service] No rankings found for today. Creating initial rankings...');
+
+        const dailyCount = await this.updateDailyRankings();
+        const weeklyCount = await this.updateWeeklyRankings();
+        const monthlyCount = await this.updateMonthlyRankings();
+        const allTimeCount = await this.updateAllTimeRankings();
+
+        console.log('[Ranking Service] Initial rankings created successfully');
+        console.log(`[Ranking Service] - Daily: ${dailyCount} stories`);
+        console.log(`[Ranking Service] - Weekly: ${weeklyCount} stories`);
+        console.log(`[Ranking Service] - Monthly: ${monthlyCount} stories`);
+        console.log(`[Ranking Service] - All-time: ${allTimeCount} stories`);
+
+        return {
+          success: true,
+          created: true,
+          counts: {
+            daily: dailyCount,
+            weekly: weeklyCount,
+            monthly: monthlyCount,
+            allTime: allTimeCount
+          }
+        };
+      } else {
+        console.log('[Ranking Service] Rankings already exist for today. Skipping initialization.');
+        return {
+          success: true,
+          created: false,
+          message: 'Rankings already exist for today'
+        };
+      }
+    } catch (error) {
+      console.error('[Ranking Service] Error initializing rankings on startup:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
    * Cập nhật xếp hạng toàn thời gian
    * @returns {Promise<number>} - Số lượng truyện đã cập nhật
    */

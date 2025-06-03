@@ -395,6 +395,37 @@ class RankingController {
       });
     }
   }
+
+  /**
+   * Kiểm tra trạng thái ranking
+   * @param {Object} req - Request object
+   * @param {Object} res - Response object
+   */
+  async checkRankingStatus(req, res) {
+    try {
+      const RankingInitializer = require('../../services/ranking/rankingInitializer');
+
+      const today = moment().startOf('day').toDate();
+      const stats = await RankingInitializer.checkExistingRankings(today);
+      const validation = await RankingInitializer.validateRankingAPIs();
+
+      res.json({
+        success: true,
+        message: 'Ranking status retrieved',
+        date: today,
+        stats,
+        validation,
+        ready: validation.success
+      });
+    } catch (err) {
+      console.error('Error checking ranking status:', err);
+      res.status(500).json({
+        success: false,
+        message: 'Server error',
+        error: err.message
+      });
+    }
+  }
 }
 
 module.exports = new RankingController();

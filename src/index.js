@@ -11,6 +11,7 @@ const cors = require('cors');
 const errorHandler = require('./middleware/errorHandler');
 const setupAttendanceCron = require('./cron/attendanceCron');
 const cron = require('./cron');
+const RankingInitializer = require('./services/ranking/rankingInitializer');
 const apiLogger = require('./middleware/apiLogger');
 const requestLogger = require('./middleware/requestLogger');
 const swaggerUI = require('swagger-ui-express');
@@ -99,6 +100,25 @@ connectDB()
           const errorTimestamp = getLogTimestamp();
           console.error(`\x1b[36m[${errorTimestamp}]\x1b[0m \x1b[31m[ERROR]\x1b[0m Error initializing system settings:`, err);
         });
+
+        // Khởi tạo dữ liệu ranking khi server startup
+        RankingInitializer.initializeOnStartup()
+          .then(result => {
+            const initTimestamp = getLogTimestamp();
+            if (result.success) {
+              if (result.created) {
+                console.log(`\x1b[36m[${initTimestamp}]\x1b[0m \x1b[32m[SUCCESS]\x1b[0m Ranking initialization completed`);
+              } else {
+                console.log(`\x1b[36m[${initTimestamp}]\x1b[0m \x1b[32m[INFO]\x1b[0m ${result.message}`);
+              }
+            } else {
+              console.error(`\x1b[36m[${initTimestamp}]\x1b[0m \x1b[31m[ERROR]\x1b[0m Ranking initialization failed:`, result.error);
+            }
+          })
+          .catch(err => {
+            const errorTimestamp = getLogTimestamp();
+            console.error(`\x1b[36m[${errorTimestamp}]\x1b[0m \x1b[31m[ERROR]\x1b[0m Error during ranking initialization:`, err);
+          });
 
         // Khởi động cron job cho điểm danh
         setupAttendanceCron();
