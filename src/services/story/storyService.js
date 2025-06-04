@@ -789,6 +789,168 @@ const incrementStoryViews = async (slug) => {
   }
 };
 
+/**
+ * Lấy danh sách truyện có nhiều bình luận nhất
+ * Sử dụng MongoDB aggregation để đếm comments và sắp xếp
+ */
+const getMostCommentedStories = async (params) => {
+  const {
+    limit = 10,
+    page = 1
+  } = params;
+
+  const limitNumber = parseInt(limit);
+  const pageNumber = parseInt(page);
+  const skipNumber = (pageNumber - 1) * limitNumber;
+
+  try {
+    // Sử dụng aggregation pipeline để đếm comments cho mỗi story
+    const pipeline = [
+      // Match only active stories
+      {
+        $match: {
+          status: true
+        }
+      },
+      // Lookup comments for each story
+      {
+        $lookup: {
+          from: 'comments',
+          let: { storyId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$target.story_id', '$$storyId'] },
+                    { $eq: ['$moderation.status', 'active'] }
+                  ]
+                }
+              }
+            }
+          ],
+          as: 'comments'
+        }
+      },
+      // Add comment count field
+      {
+        $addFields: {
+          commentCount: { $size: '$comments' }
+        }
+      },
+      // Sort by comment count (descending)
+      {
+        $sort: { commentCount: -1, createdAt: -1 }
+      },
+      // Skip and limit for pagination
+      {
+        $skip: skipNumber
+      },
+      {
+        $limit: limitNumber
+      },
+      // Lookup author information
+      {
+        $lookup: {
+          from: 'authors',
+          localField: 'author_id',
+          foreignField: '_id',
+          as: 'author_id'
+        }
+      },
+      // Lookup categories information
+      {
+        $lookup: {
+          from: 'categories',
+          localField: 'categories',
+          foreignField: '_id',
+          as: 'categories'
+        }
+      },
+      // Project only needed fields
+      {
+        $project: {
+          _id: 1,
+          slug: 1,
+          name: 1,
+          image: 1,
+          desc: 1,
+          author_id: { name: 1 },
+          categories: { name: 1, slug: 1 },
+          views: 1,
+          is_hot: 1,
+          is_full: 1,
+          chapter_count: 1,
+          commentCount: 1,
+          createdAt: 1,
+          updatedAt: 1
+        }
+      }
+    ];
+
+    // Execute aggregation
+    const stories = await Story.aggregate(pipeline);
+
+    // Get total count for pagination
+    const totalPipeline = [
+      {
+        $match: {
+          status: true
+        }
+      },
+      {
+        $lookup: {
+          from: 'comments',
+          let: { storyId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$target.story_id', '$$storyId'] },
+                    { $eq: ['$moderation.status', 'active'] }
+                  ]
+                }
+              }
+            }
+          ],
+          as: 'comments'
+        }
+      },
+      {
+        $addFields: {
+          commentCount: { $size: '$comments' }
+        }
+      },
+      {
+        $match: {
+          commentCount: { $gt: 0 }
+        }
+      },
+      {
+        $count: 'total'
+      }
+    ];
+
+    const totalResult = await Story.aggregate(totalPipeline);
+    const total = totalResult.length > 0 ? totalResult[0].total : 0;
+
+    return {
+      stories,
+      pagination: {
+        total,
+        totalPages: Math.ceil(total / limitNumber),
+        currentPage: pageNumber,
+        limit: limitNumber
+      }
+    };
+
+  } catch (error) {
+    console.error('Error in getMostCommentedStories:', error);
+    throw new Error('Không thể lấy danh sách truyện có nhiều bình luận nhất');
+  }
+};
+
 module.exports = {
   getAllStories,
   getStoryById,
@@ -799,5 +961,6 @@ module.exports = {
   incrementStoryViews,
   buildStoryQuery,
   processCategoryFilter,
-  processMultipleCategoriesFilter
+  processMultipleCategoriesFilter,
+  getMostCommentedStories
 };

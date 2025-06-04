@@ -17,6 +17,8 @@ router.get('/top-rated', controller.getTopRatedStories);
 router.get('/recent', controller.getRecentStories);
 router.get('/new', controller.getNewStories);
 router.get('/full', controller.getFullStories);
+router.get('/completed', controller.getFullStories); // Alias for /full - completed stories
+router.get('/most-commented', controller.getMostCommented);
 router.get('/suggest', controller.getSuggestedStories);
 router.get('/category/:categoryId', controller.getStoriesByCategory);
 router.get('/author/:authorId', controller.getStoriesByAuthor);

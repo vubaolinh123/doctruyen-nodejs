@@ -21,5 +21,6 @@ module.exports = {
   searchStories: specialController.searchStories,
   getNewStories: specialController.getNewStories,
   getFullStories: specialController.getFullStories,
-  getSuggestedStories: specialController.getSuggestedStories
+  getSuggestedStories: specialController.getSuggestedStories,
+  getMostCommented: specialController.getMostCommented
 };

@@ -406,3 +406,36 @@ exports.toggleFlag = async (req, res) => {
     });
   }
 };
+
+/**
+ * Lấy danh sách truyện có nhiều bình luận nhất
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+exports.getMostCommented = async (req, res) => {
+  try {
+    const { limit = 10, page = 1 } = req.query;
+    console.log(`[API] Getting most commented stories - limit: ${limit}, page: ${page}`);
+
+    const result = await storyService.getMostCommentedStories({
+      limit: parseInt(limit),
+      page: parseInt(page)
+    });
+
+    res.json({
+      success: true,
+      stories: result.stories,
+      pagination: result.pagination,
+      total: result.pagination.total,
+      totalPages: result.pagination.totalPages,
+      currentPage: result.pagination.currentPage,
+      limit: result.pagination.limit
+    });
+  } catch (err) {
+    console.error('[API] Error getting most commented stories:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+};
