@@ -101,6 +101,13 @@ connectDB()
           console.error(`\x1b[36m[${errorTimestamp}]\x1b[0m \x1b[31m[ERROR]\x1b[0m Error initializing system settings:`, err);
         });
 
+        // Khởi tạo temporary image system
+        const { initTempImageSystem } = require('./controllers/image/tempImageController');
+        initTempImageSystem().catch(err => {
+          const errorTimestamp = getLogTimestamp();
+          console.error(`\x1b[36m[${errorTimestamp}]\x1b[0m \x1b[31m[ERROR]\x1b[0m Error initializing temp image system:`, err);
+        });
+
         // Khởi tạo dữ liệu ranking khi server startup
         RankingInitializer.initializeOnStartup()
           .then(result => {

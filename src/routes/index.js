@@ -31,6 +31,8 @@ router.use('/attendance', require('./attendance'));
 router.use('/comments', require('./commentRoutes'));
 // Route notifications
 router.use('/notifications', require('./notificationRoutes'));
+// Image upload routes
+router.use('/images', require('./images'));
 // Admin routes
 router.use('/admin/coins', auth, require('./coins'));
 router.use('/admin/users', auth, require('./admin/users'));

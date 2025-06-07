@@ -135,6 +135,239 @@ exports.updateProfile = async (req, res) => {
 };
 
 /**
+ * Cập nhật vị trí banner
+ * @route POST /api/auth/banner-position
+ */
+exports.updateBannerPosition = async (req, res) => {
+  try {
+    // Lấy ID user từ middleware auth
+    const userId = req.user.id;
+    const { bannerUrl, position, containerHeight, tempId, enhancedPositioning } = req.body;
+
+
+
+    // Check if this is a temp-to-Google Drive upload workflow
+    if (tempId) {
+      return await handleTempToGoogleDriveUpload(req, res, userId, tempId, position, containerHeight);
+    }
+
+    // Regular position update workflow
+    // Validation
+    if (!bannerUrl) {
+      return res.status(400).json({
+        success: false,
+        error: 'Banner URL is required'
+      });
+    }
+
+    if (typeof position !== 'number' || position < 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid position value'
+      });
+    }
+
+    // Tìm user
+    const User = require('../../models/user');
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+
+
+    // Cập nhật banner position trong user document
+    // Lưu position như metadata cùng với banner URL
+    let bannerData;
+
+    if (typeof user.banner === 'object' && user.banner !== null) {
+      // Banner đã là object MongoDB, sử dụng trực tiếp
+      bannerData = { ...user.banner };
+    } else if (typeof user.banner === 'string') {
+      try {
+        // Thử parse JSON string (legacy format)
+        if (user.banner.startsWith('{')) {
+          bannerData = JSON.parse(user.banner);
+        } else {
+          // Banner là URL string đơn giản
+          bannerData = { primaryUrl: user.banner };
+        }
+      } catch (e) {
+        // Parse lỗi, treat as URL string
+        bannerData = { primaryUrl: user.banner };
+      }
+    } else {
+      // Không có banner hiện tại, sử dụng bannerUrl từ request
+      bannerData = { primaryUrl: bannerUrl };
+    }
+
+    // Đảm bảo bannerData có cấu trúc đúng
+    if (!bannerData.primaryUrl) {
+      bannerData.primaryUrl = bannerUrl;
+    }
+
+
+
+    // Cập nhật position với enhanced positioning metadata
+    if (enhancedPositioning) {
+      // Create enhanced positioning metadata
+      bannerData.positioning = {
+        position: position,
+        containerHeight: containerHeight || 450,
+        containerWidth: enhancedPositioning.containerWidth,
+        imageWidth: enhancedPositioning.imageWidth,
+        imageHeight: enhancedPositioning.imageHeight,
+        aspectRatio: enhancedPositioning.aspectRatio,
+        calculatedImageHeight: enhancedPositioning.calculatedImageHeight,
+        maxDragDistance: enhancedPositioning.maxDragDistance,
+        minOffset: enhancedPositioning.minOffset,
+        maxOffset: enhancedPositioning.maxOffset,
+        positionedAt: new Date(),
+        deviceType: enhancedPositioning.deviceType,
+        viewportWidth: enhancedPositioning.viewportWidth,
+        viewportHeight: enhancedPositioning.viewportHeight
+      };
+
+
+    }
+
+    // Update legacy fields for backward compatibility
+    bannerData.position = position;
+    bannerData.containerHeight = containerHeight || 450;
+    bannerData.lastUpdated = new Date();
+
+    // Lưu lại vào database (store as proper MongoDB object)
+    user.banner = bannerData;
+    await user.save();
+
+
+
+    res.json({
+      success: true,
+      message: 'Banner position updated successfully',
+      bannerUrl: bannerData.primaryUrl,
+      position: position
+    });
+
+  } catch (err) {
+    console.error('❌ Update banner position error:', err);
+
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to update banner position'
+    });
+  }
+};
+
+/**
+ * Handle temp-to-Google Drive upload workflow
+ */
+async function handleTempToGoogleDriveUpload(req, res, userId, tempId, position, containerHeight) {
+  try {
+
+
+    // Step 1: Get temp image path
+    const { getTempImagePath } = require('../image/tempImageController');
+    const tempImagePath = getTempImagePath(tempId);
+
+    if (!tempImagePath) {
+      return res.status(404).json({
+        success: false,
+        error: 'Temporary image not found or expired'
+      });
+    }
+
+    // Step 2: Upload to Google Drive
+    const fs = require('fs').promises;
+    const imageBuffer = await fs.readFile(tempImagePath);
+
+    // Use existing upload service
+    const { uploadSingleFile } = require('../../utils/image/googleDriveUploader');
+    const { getFolderIds } = require('../../config/googleDrive');
+
+    // Get banner folder ID
+    const folderIds = getFolderIds();
+    const bannerFolderId = folderIds.banner;
+
+    // Upload to Google Drive
+    const fileName = `banner_${userId}_${Date.now()}.jpg`;
+    const uploadResult = await uploadSingleFile(imageBuffer, fileName, 'image/jpeg', bannerFolderId);
+
+
+
+    if (!uploadResult || !uploadResult.publicUrl) {
+      throw new Error('Failed to upload to Google Drive - no URL returned');
+    }
+
+    // Step 3: Save to database
+    const User = require('../../models/user');
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    const bannerData = {
+      primaryUrl: uploadResult.publicUrl,
+      variants: [],
+      position: position || 0,
+      containerHeight: containerHeight || 450,
+      lastUpdated: new Date(),
+      googleDriveId: uploadResult.id,
+      metadata: {
+        fileName: uploadResult.name,
+        size: uploadResult.size,
+        mimeType: uploadResult.mimeType
+      }
+    };
+
+    // Store banner data as proper MongoDB object (no JSON.stringify needed)
+    user.banner = bannerData;
+    await user.save();
+
+    // Step 4: Cleanup temp image
+    const { cleanupTempImageInternal } = require('../image/tempImageController');
+    const cleanupResult = await cleanupTempImageInternal(tempId);
+
+    if (cleanupResult.success) {
+      console.log('[handleTempToGoogleDriveUpload] Temp image cleaned up successfully');
+    } else {
+      console.warn('[handleTempToGoogleDriveUpload] Failed to cleanup temp image:', cleanupResult.error);
+    }
+
+    console.log('[handleTempToGoogleDriveUpload] Workflow completed successfully:', {
+      userId,
+      googleDriveUrl: uploadResult.publicUrl,
+      position,
+      googleDriveId: uploadResult.id
+    });
+
+    res.json({
+      success: true,
+      message: 'Banner uploaded and positioned successfully',
+      bannerUrl: uploadResult.publicUrl,
+      position: position,
+      googleDriveId: uploadResult.id
+    });
+
+  } catch (error) {
+    console.error('[handleTempToGoogleDriveUpload] Error:', error);
+
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to complete temp-to-Google Drive upload'
+    });
+  }
+}
+
+/**
  * Đăng xuất
  * @route POST /api/auth/logout
  */

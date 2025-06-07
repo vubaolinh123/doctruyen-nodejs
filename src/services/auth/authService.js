@@ -4,7 +4,7 @@ const bcrypt = require('bcrypt');
 const { TokenBlacklist } = require('../../models/tokenBlacklist');
 const { RefreshToken } = require('../../models/refreshToken');
 const crypto = require('crypto');
-const { DEFAULT_EMAIL_AVATAR, getAvatarUrl } = require('../../constants/avatars');
+const { DEFAULT_EMAIL_AVATAR } = require('../../constants/avatars');
 
 // Thời gian hết hạn của access token (15 ngày)
 const ACCESS_TOKEN_EXPIRY = '15d';
@@ -44,7 +44,7 @@ const getUserResponse = (user) => {
     name: user.name || "",
     email: user.email || "",
     role: user.role || 'user',
-    avatar: getAvatarUrl(user.avatar, user.accountType),
+    avatar: user.avatar || null, // Return full avatar object instead of processed URL
     banner: user.banner || null,
     accountType: user.accountType || 'email',
     gender: user.gender || '',
@@ -116,7 +116,7 @@ const register = async (userData) => {
   // Hash mật khẩu
   const hashed = await bcrypt.hash(password, 12);
 
-  // Tạo tài khoản mới
+  // Tạo tài khoản mới với proper AvatarData object structure
   const user = new User({
     email,
     password: hashed,
@@ -124,7 +124,20 @@ const register = async (userData) => {
     role: 'user',
     accountType: 'email',
     isActive: true,
-    avatar: DEFAULT_EMAIL_AVATAR
+    avatar: {
+      primaryUrl: DEFAULT_EMAIL_AVATAR,
+      variants: [],
+      googleDriveId: '',
+      lastUpdated: new Date(),
+      metadata: {
+        originalFilename: 'default-avatar.png.webp',
+        processedVariants: 0,
+        uploadedFiles: 0,
+        fileSize: '',
+        mimeType: 'image/webp',
+        dimensions: { width: 0, height: 0 }
+      }
+    }
   });
 
   await user.save();
@@ -215,11 +228,39 @@ const oauthLogin = async (oauthData, clientInfo) => {
   let user = await User.findOne({ email });
 
   if (!user) {
-    // Tạo user mới nếu chưa tồn tại
+    // Tạo user mới nếu chưa tồn tại với proper AvatarData object
+    const avatarData = avatar ? {
+      primaryUrl: avatar,
+      variants: [],
+      googleDriveId: '',
+      lastUpdated: new Date(),
+      metadata: {
+        originalFilename: 'google-profile-picture',
+        processedVariants: 0,
+        uploadedFiles: 1,
+        fileSize: '',
+        mimeType: 'image/jpeg',
+        dimensions: { width: 0, height: 0 }
+      }
+    } : {
+      primaryUrl: DEFAULT_EMAIL_AVATAR,
+      variants: [],
+      googleDriveId: '',
+      lastUpdated: new Date(),
+      metadata: {
+        originalFilename: 'default-avatar.png.webp',
+        processedVariants: 0,
+        uploadedFiles: 0,
+        fileSize: '',
+        mimeType: 'image/webp',
+        dimensions: { width: 0, height: 0 }
+      }
+    };
+
     user = new User({
       email,
       name,
-      avatar,
+      avatar: avatarData,
       accountType: accountType || 'google',
       isActive: true
     });
@@ -239,7 +280,33 @@ const oauthLogin = async (oauthData, clientInfo) => {
     if (preserve_db_data !== 'true') {
       // Nếu không có yêu cầu giữ nguyên dữ liệu, cập nhật các thông tin
       user.name = name || user.name;
-      user.avatar = avatar || user.avatar;
+
+      // Update avatar with proper AvatarData object structure
+      if (avatar) {
+        // If user already has avatar object structure, update primaryUrl
+        if (user.avatar && typeof user.avatar === 'object' && user.avatar.primaryUrl !== undefined) {
+          user.avatar.primaryUrl = avatar;
+          user.avatar.lastUpdated = new Date();
+          user.avatar.metadata.originalFilename = 'google-profile-picture';
+          user.avatar.metadata.mimeType = 'image/jpeg';
+        } else {
+          // Convert from legacy string or create new object
+          user.avatar = {
+            primaryUrl: avatar,
+            variants: [],
+            googleDriveId: '',
+            lastUpdated: new Date(),
+            metadata: {
+              originalFilename: 'google-profile-picture',
+              processedVariants: 0,
+              uploadedFiles: 1,
+              fileSize: '',
+              mimeType: 'image/jpeg',
+              dimensions: { width: 0, height: 0 }
+            }
+          };
+        }
+      }
     }
     // Cập nhật loại tài khoản
     user.accountType = accountType || user.accountType || 'google';
@@ -421,7 +488,66 @@ const updateUserProfile = async (userId, updateData) => {
 
   // Cập nhật các trường an toàn
   if (updateData.name !== undefined) user.name = updateData.name;
-  if (updateData.avatar !== undefined) user.avatar = updateData.avatar;
+
+  // Handle avatar data - convert JSON string to object if needed
+  if (updateData.avatar !== undefined) {
+    if (typeof updateData.avatar === 'string' && updateData.avatar.startsWith('{')) {
+      try {
+        // Parse JSON string to object for new schema
+        const avatarData = JSON.parse(updateData.avatar);
+        user.avatar = {
+          primaryUrl: avatarData.primaryUrl || avatarData.avatarUrl || '',
+          variants: avatarData.variants || avatarData.sizes || [],
+          googleDriveId: avatarData.googleDriveId || '',
+          lastUpdated: new Date(),
+          metadata: {
+            originalFilename: avatarData.metadata?.originalFilename || '',
+            processedVariants: avatarData.metadata?.processedVariants || 0,
+            uploadedFiles: avatarData.metadata?.uploadedFiles || 0,
+            fileSize: avatarData.metadata?.fileSize || '',
+            mimeType: avatarData.metadata?.mimeType || '',
+            dimensions: avatarData.metadata?.dimensions || { width: 0, height: 0 }
+          }
+        };
+      } catch (e) {
+        // If parsing fails, treat as simple URL
+        user.avatar = {
+          primaryUrl: updateData.avatar,
+          variants: [],
+          googleDriveId: '',
+          lastUpdated: new Date(),
+          metadata: {
+            originalFilename: '',
+            processedVariants: 0,
+            uploadedFiles: 0,
+            fileSize: '',
+            mimeType: '',
+            dimensions: { width: 0, height: 0 }
+          }
+        };
+      }
+    } else if (typeof updateData.avatar === 'object') {
+      // Already an object, store directly
+      user.avatar = updateData.avatar;
+    } else {
+      // Simple string URL
+      user.avatar = {
+        primaryUrl: updateData.avatar,
+        variants: [],
+        googleDriveId: '',
+        lastUpdated: new Date(),
+        metadata: {
+          originalFilename: '',
+          processedVariants: 0,
+          uploadedFiles: 0,
+          fileSize: '',
+          mimeType: '',
+          dimensions: { width: 0, height: 0 }
+        }
+      };
+    }
+  }
+
   if (updateData.banner !== undefined) user.banner = updateData.banner;
   if (updateData.gender !== undefined) user.gender = updateData.gender;
   if (updateData.birthday !== undefined) user.birthday = updateData.birthday;

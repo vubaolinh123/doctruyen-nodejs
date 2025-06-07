@@ -34,6 +34,7 @@ router.post('/refresh-token', controller.refreshToken);
 // Các route cần xác thực
 router.get('/me', authenticateToken, controller.getMe);
 router.post('/update-profile', authenticateToken, controller.updateProfile);
+router.post('/banner-position', authenticateToken, controller.updateBannerPosition);
 router.post('/logout', authenticateToken, controller.logout);
 
 /**

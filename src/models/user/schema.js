@@ -35,12 +35,230 @@ const userSchema = new Schema({
   },
   birthday: Date,
   avatar: {
-    type: String,
-    default: null
+    primaryUrl: {
+      type: String,
+      required: false,
+      default: null,
+      trim: true
+    },
+    variants: [{
+      variant: {
+        type: String,
+        trim: true
+      }, // e.g., "200x200", "400x400"
+      url: {
+        type: String,
+        trim: true
+      },
+      size: {
+        type: String,
+        trim: true
+      }
+    }],
+    googleDriveId: {
+      type: String,
+      required: false,
+      trim: true
+    },
+    lastUpdated: {
+      type: Date,
+      default: Date.now
+    },
+    metadata: {
+      originalFilename: {
+        type: String,
+        trim: true
+      },
+      processedVariants: {
+        type: Number,
+        min: 0
+      },
+      uploadedFiles: {
+        type: Number,
+        min: 0
+      },
+      fileSize: {
+        type: String,
+        trim: true
+      },
+      mimeType: {
+        type: String,
+        trim: true
+      },
+      dimensions: {
+        width: {
+          type: Number,
+          min: 0
+        },
+        height: {
+          type: Number,
+          min: 0
+        }
+      }
+    }
   },
   banner: {
-    type: String,
-    default: null
+    primaryUrl: {
+      type: String,
+      required: false,
+      default: null,
+      trim: true
+    },
+    variants: [{
+      variant: {
+        type: String,
+        trim: true
+      }, // e.g., "200x200", "400x400"
+      url: {
+        type: String,
+        trim: true
+      },
+      size: {
+        type: String,
+        trim: true
+      }
+    }],
+
+    // Enhanced positioning system
+    positioning: {
+      // Normalized position (0-1) - primary positioning value
+      position: {
+        type: Number,
+        min: 0,
+        max: 1,
+        default: 0.5,
+        validate: {
+          validator: function(v) {
+            return v >= 0 && v <= 1;
+          },
+          message: 'Banner position must be between 0 and 1'
+        }
+      },
+
+      // Container context when position was set
+      containerHeight: {
+        type: Number,
+        default: 450,
+        min: 200,
+        max: 1000
+      },
+      containerWidth: {
+        type: Number,
+        min: 200,
+        max: 3000
+      },
+
+      // Image dimensions for accurate aspect ratio calculation
+      imageWidth: {
+        type: Number,
+        min: 100,
+        max: 10000
+      },
+      imageHeight: {
+        type: Number,
+        min: 100,
+        max: 10000
+      },
+      aspectRatio: {
+        type: Number,
+        min: 0.1,
+        max: 10
+      },
+
+      // Calculated positioning constraints (for verification)
+      calculatedImageHeight: {
+        type: Number,
+        min: 100,
+        max: 10000
+      },
+      maxDragDistance: {
+        type: Number,
+        min: 0,
+        max: 5000
+      },
+      minOffset: {
+        type: Number,
+        max: 0
+      },
+      maxOffset: {
+        type: Number,
+        default: 0,
+        max: 0
+      },
+
+      // Positioning context metadata
+      positionedAt: {
+        type: Date,
+        default: Date.now
+      },
+      deviceType: {
+        type: String,
+        enum: ['mobile', 'tablet', 'desktop'],
+        required: false
+      },
+      viewportWidth: {
+        type: Number,
+        min: 200,
+        max: 5000,
+        required: false
+      },
+      viewportHeight: {
+        type: Number,
+        min: 200,
+        max: 5000,
+        required: false
+      }
+    },
+
+    // Legacy fields for backward compatibility
+    position: {
+      type: Number,
+      min: 0,
+      max: 1,
+      default: 0.5,
+      validate: {
+        validator: function(v) {
+          return v >= 0 && v <= 1;
+        },
+        message: 'Banner position must be between 0 and 1'
+      }
+    },
+    containerHeight: {
+      type: Number,
+      default: 450,
+      min: 200,
+      max: 1000,
+      validate: {
+        validator: function(v) {
+          return v >= 200 && v <= 1000;
+        },
+        message: 'Container height must be between 200 and 1000 pixels'
+      }
+    },
+
+    lastUpdated: {
+      type: Date,
+      default: Date.now
+    },
+    googleDriveId: {
+      type: String,
+      required: false,
+      trim: true
+    },
+    metadata: {
+      fileName: {
+        type: String,
+        trim: true
+      },
+      size: {
+        type: String,
+        trim: true
+      },
+      mimeType: {
+        type: String,
+        trim: true
+      }
+    }
   },
 
   // Thông tin mạng xã hội và giới thiệu

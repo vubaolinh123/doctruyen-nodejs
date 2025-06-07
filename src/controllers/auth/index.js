@@ -11,6 +11,7 @@ module.exports = {
   refreshToken: specialController.refreshToken,
   getMe: specialController.getMe,
   updateProfile: specialController.updateProfile,
+  updateBannerPosition: specialController.updateBannerPosition,
   logout: specialController.logout,
   generateAdminToken: specialController.generateAdminToken
 }; 
