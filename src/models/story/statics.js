@@ -91,11 +91,20 @@ const setupStatics = (schema) => {
    * @returns {Promise<Array>} - Danh sách truyện tìm thấy
    */
   schema.statics.search = function(keyword, limit = 10) {
+    // Sử dụng $or để tìm kiếm trong cả name và slug với regex
+    // Điều này cho phép tìm kiếm linh hoạt hơn so với $text search
     return this.find({
-      $text: { $search: keyword },
-      status: true
+      $and: [
+        { status: true },
+        {
+          $or: [
+            { name: { $regex: keyword, $options: 'i' } },
+            { slug: { $regex: keyword, $options: 'i' } }
+          ]
+        }
+      ]
     })
-      .sort({ score: { $meta: 'textScore' } })
+      .sort({ updatedAt: -1 }) // Sắp xếp theo ngày cập nhật mới nhất
       .limit(limit);
   };
 

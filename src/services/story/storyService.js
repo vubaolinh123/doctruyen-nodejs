@@ -32,7 +32,11 @@ const buildStoryQuery = async (filters) => {
   if (filters.name) {
     query.name = { $regex: filters.name, $options: 'i' };
   } else if (filters.search) {
-    query.name = { $regex: filters.search, $options: 'i' };
+    // Search in both name and slug fields
+    query.$or = [
+      { name: { $regex: filters.search, $options: 'i' } },
+      { slug: { $regex: filters.search, $options: 'i' } }
+    ];
   }
 
   // Filter by slug if provided
@@ -208,9 +212,18 @@ const getAllStories = async (filters) => {
   // Kiểm tra xem có lọc theo số lượng chapter không
   const hasChapterFilter = checkHasChapterFilter(otherFilters);
   const sortByChapterCount = otherFilters.sort_by === 'chapter_count';
+  const sortByViews = otherFilters.sort_by === 'views';
+
   // Kiểm tra xem có yêu cầu thêm thông tin chapter không
   const includeChapterCount = otherFilters.include_chapter_count === 'true' || hasChapterFilter || sortByChapterCount;
   const includeLatestChapter = otherFilters.include_latest_chapter === 'true';
+
+  // Nếu sắp xếp theo views, sử dụng aggregation pipeline
+  if (sortByViews) {
+    // Truyền string sort_order thay vì số
+    return await getStoriesSortedByViews(query, otherFilters.sort_order, page, limit, includeChapterCount, includeLatestChapter);
+  }
+
   // Nếu không có lọc theo số lượng chapter và không sắp xếp theo số lượng chapter, thực hiện truy vấn bình thường
   if (!hasChapterFilter && !sortByChapterCount) {
     return await getStoriesWithoutChapterFilters(query, sortOptions, page, limit, includeChapterCount, includeLatestChapter);
@@ -277,6 +290,215 @@ const checkHasChapterFilter = (filters) => {
   // Đảm bảo rằng nếu có chapter_count thì cũng phải có chapter_count_op
   const result = (hasChapterCount && hasChapterCountOp) || hasHasChapters;
   return result;
+};
+
+/**
+ * Lấy danh sách truyện được sắp xếp theo views từ storyStats
+ * @param {Object} query - Query để tìm kiếm
+ * @param {string} sortOrder - Thứ tự sắp xếp ('asc' hoặc 'desc')
+ * @param {number} page - Trang hiện tại
+ * @param {number} limit - Số lượng kết quả trên một trang
+ * @param {boolean} includeChapterCount - Có bao gồm số lượng chapter không
+ * @param {boolean} includeLatestChapter - Có bao gồm chapter mới nhất không
+ * @returns {Promise<Object>} - Kết quả trả về
+ */
+const getStoriesSortedByViews = async (query, sortOrder, page, limit, includeChapterCount, includeLatestChapter) => {
+  try {
+    console.log(`[getStoriesSortedByViews] sortOrder received: ${sortOrder}, type: ${typeof sortOrder}`);
+
+    // Tạo aggregation pipeline để join với storyStats và sắp xếp theo views
+    const pipeline = [
+      // Match stories theo query
+      { $match: query },
+
+      // Lookup để join với storyStats
+      {
+        $lookup: {
+          from: 'storystats',
+          localField: '_id',
+          foreignField: 'story_id',
+          as: 'stats'
+        }
+      },
+
+      // Tính tổng tất cả thống kê từ storyStats
+      {
+        $addFields: {
+          totalViews: { $sum: '$stats.views' },
+          totalUniqueViews: { $sum: '$stats.unique_views' },
+          totalRatingsCount: { $sum: '$stats.ratings_count' },
+          totalRatingsSum: { $sum: '$stats.ratings_sum' },
+          totalCommentsCount: { $sum: '$stats.comments_count' },
+          totalBookmarksCount: { $sum: '$stats.bookmarks_count' },
+          totalSharesCount: { $sum: '$stats.shares_count' }
+        }
+      },
+
+      // Sắp xếp theo totalViews
+      { $sort: { totalViews: sortOrder === 'asc' ? 1 : -1 } },
+
+      // Lookup để populate authors
+      {
+        $lookup: {
+          from: 'authors',
+          localField: 'author_id',
+          foreignField: '_id',
+          as: 'authors',
+          pipeline: [
+            { $project: { name: 1, slug: 1 } }
+          ]
+        }
+      },
+
+      // Lookup để populate categories
+      {
+        $lookup: {
+          from: 'categories',
+          localField: 'categories',
+          foreignField: '_id',
+          as: 'categories',
+          pipeline: [
+            { $project: { name: 1, slug: 1 } }
+          ]
+        }
+      },
+
+      // Project để đặt giá trị mặc định cho thống kê và giữ lại các trường cần thiết
+      {
+        $project: {
+          // Thống kê từ storyStats
+          views: { $ifNull: ['$totalViews', 0] },
+          unique_views: { $ifNull: ['$totalUniqueViews', 0] },
+          ratings_count: { $ifNull: ['$totalRatingsCount', 0] },
+          ratings_sum: { $ifNull: ['$totalRatingsSum', 0] },
+          comments_count: { $ifNull: ['$totalCommentsCount', 0] },
+          bookmarks_count: { $ifNull: ['$totalBookmarksCount', 0] },
+          shares_count: { $ifNull: ['$totalSharesCount', 0] },
+          // Các trường cơ bản của story
+          _id: 1,
+          name: 1,
+          slug: 1,
+          desc: 1,
+          image: 1,
+          banner: 1,
+          status: 1,
+          author_id: 1,
+          categories: 1,
+          authors: 1,
+          is_hot: 1,
+          is_new: 1,
+          is_full: 1,
+          hot_day: 1,
+          hot_month: 1,
+          hot_all_time: 1,
+          show_ads: 1,
+          chapter_count: 1,
+          createdAt: 1,
+          updatedAt: 1
+        }
+      }
+    ];
+
+    // Đếm tổng số documents
+    const countPipeline = [...pipeline, { $count: 'total' }];
+    const countResult = await Story.aggregate(countPipeline);
+    const total = countResult.length > 0 ? countResult[0].total : 0;
+
+    // Thêm pagination
+    pipeline.push(
+      { $skip: (parseInt(page) - 1) * parseInt(limit) },
+      { $limit: parseInt(limit) }
+    );
+
+    // Debug: Log sort direction
+    const sortDirection = sortOrder === 'asc' ? 1 : -1;
+    console.log(`[getStoriesSortedByViews] Sort direction: ${sortDirection} (${sortOrder})`);
+
+    // Thực hiện aggregation
+    const items = await Story.aggregate(pipeline);
+
+    // Thêm thông tin chapter nếu cần
+    let finalItems = items;
+    if (includeChapterCount || includeLatestChapter) {
+      finalItems = await addChapterInfoToStories(items, includeChapterCount, includeLatestChapter);
+    }
+
+    return {
+      items: finalItems,
+      total,
+      totalPages: Math.ceil(total / parseInt(limit)),
+      currentPage: parseInt(page)
+    };
+  } catch (error) {
+    console.error('Error in getStoriesSortedByViews:', error);
+    // Fallback to normal query without views sorting
+    return await getStoriesWithoutChapterFilters(query, { updatedAt: -1 }, page, limit, includeChapterCount, includeLatestChapter);
+  }
+};
+
+/**
+ * Thêm thông tin chapter vào danh sách stories
+ * @param {Array} stories - Danh sách stories
+ * @param {boolean} includeChapterCount - Có bao gồm số lượng chapter không
+ * @param {boolean} includeLatestChapter - Có bao gồm chapter mới nhất không
+ * @returns {Promise<Array>} - Danh sách stories với thông tin chapter
+ */
+const addChapterInfoToStories = async (stories, includeChapterCount, includeLatestChapter) => {
+  if (!stories || stories.length === 0) {
+    return stories;
+  }
+
+  const storyIds = stories.map(story => story._id);
+  let chapterCounts = {};
+  let latestChapters = {};
+
+  if (includeChapterCount) {
+    // Lấy số lượng chapter cho tất cả truyện
+    const chapterAggregation = await Chapter.aggregate([
+      { $match: { story_id: { $in: storyIds } } },
+      { $group: { _id: "$story_id", count: { $sum: 1 } } }
+    ]);
+
+    // Chuyển đổi kết quả thành object để dễ truy cập
+    chapterCounts = chapterAggregation.reduce((acc, item) => {
+      acc[item._id.toString()] = item.count;
+      return acc;
+    }, {});
+  }
+
+  if (includeLatestChapter) {
+    // Lấy chapter mới nhất cho tất cả truyện
+    const latestChapterPromises = storyIds.map(storyId =>
+      Chapter.findOne({ story_id: storyId })
+        .sort({ chapter: -1 })
+        .select('chapter name createdAt')
+    );
+
+    const latestChapterResults = await Promise.all(latestChapterPromises);
+
+    // Chuyển đổi kết quả thành object để dễ truy cập
+    latestChapters = storyIds.reduce((acc, storyId, index) => {
+      acc[storyId.toString()] = latestChapterResults[index];
+      return acc;
+    }, {});
+  }
+
+  // Thêm thông tin chapter vào mỗi truyện
+  return stories.map(story => {
+    const storyId = story._id.toString();
+
+    // Thêm số lượng chapter
+    if (includeChapterCount) {
+      story.chapter_count = chapterCounts[storyId] || 0;
+    }
+
+    // Thêm chapter mới nhất
+    if (includeLatestChapter) {
+      story.latest_chapter = latestChapters[storyId] || null;
+    }
+
+    return story;
+  });
 };
 
 /**
@@ -357,17 +579,23 @@ const getStoriesWithoutChapterFilters = async (query, sortOptions, page, limit, 
       return storyObj;
     });
 
-    // Trả về kết quả với thông tin chapter
+    // Thêm view counts từ storyStats
+    const storiesWithViews = await addViewCountsToStories(storiesWithChapterInfo);
+
+    // Trả về kết quả với thông tin chapter và views
     return {
-      items: storiesWithChapterInfo,
+      items: storiesWithViews,
       total,
       totalPages: Math.ceil(total / parseInt(limit)),
       currentPage: parseInt(page)
     };
   } else {
-    // Trả về kết quả không có thông tin chapter
+    // Thêm view counts từ storyStats cho trường hợp không có chapter info
+    const storiesWithViews = await addViewCountsToStories(items);
+
+    // Trả về kết quả với view counts
     return {
-      items,
+      items: storiesWithViews,
       total,
       totalPages: Math.ceil(total / parseInt(limit)),
       currentPage: parseInt(page)
@@ -471,9 +699,12 @@ const getStoriesWithChapterFilters = async (query, sortOptions, page, limit, inc
     });
   }
 
+  // Thêm view counts từ storyStats
+  const storiesWithViews = await addViewCountsToStories(paginatedItems);
+
   // Trả về kết quả
   return {
-    items: paginatedItems,
+    items: storiesWithViews,
     total,
     totalPages: Math.ceil(total / parseInt(limit)),
     currentPage: parseInt(page)
@@ -541,12 +772,20 @@ const processChapterCountFilters = (query, filters) => {
 /**
  * Lấy truyện theo ID
  * @param {string} id - ID của truyện
- * @returns {Promise<Object>} - Truyện tìm thấy
+ * @returns {Promise<Object>} - Truyện tìm thấy với thống kê
  */
 const getStoryById = async (id) => {
-  return await Story.findById(id)
+  const story = await Story.findById(id)
     .populate('authors', 'name slug')
     .populate('categories', 'name slug');
+
+  if (!story) {
+    return null;
+  }
+
+  // Thêm thống kê từ storyStats
+  const storiesWithStats = await addViewCountsToStories([story]);
+  return storiesWithStats[0];
 };
 
 /**
@@ -556,7 +795,7 @@ const getStoryById = async (id) => {
  */
 const getStoryBySlug = async (slug) => {
   const item = await Story.findBySlug(slug)
-    .populate('author_id', 'name slug')
+    .populate('authors', 'name slug')
     .populate('categories', 'name slug');
 
   if (!item) return null;
@@ -574,28 +813,23 @@ const getStoryBySlug = async (slug) => {
   storyData.chapter_count = chapterCount;
   storyData.latest_chapter = latestChapter;
 
-  // Lấy tất cả thống kê từ StoryStats
+  // Thêm thống kê từ storyStats sử dụng function chung
+  const storiesWithStats = await addViewCountsToStories([storyData]);
+  const finalStoryData = storiesWithStats[0];
+
+  // Thêm thông tin thống kê chi tiết nếu cần (cho tương thích với frontend)
   try {
     const allStats = await storyStatsService.getAllStats(item._id);
-
-    // Gán lại giá trị views từ StoryStats
-    storyData.views = allStats.totalViews;
-
-    // Gán lại giá trị ratings từ StoryStats
-    storyData.ratings_count = allStats.ratings.ratingsCount;
-    storyData.ratings_sum = allStats.ratings.ratingsSum;
-
-    // Thêm thông tin thống kê chi tiết
-    storyData.stats = {
+    finalStoryData.stats = {
       views: {
-        total: allStats.totalViews,
+        total: finalStoryData.views,
         byTimeRange: allStats.viewsByTimeRange,
         daily: allStats.dailyStats.views
       },
       ratings: {
-        count: allStats.ratings.ratingsCount,
-        sum: allStats.ratings.ratingsSum,
-        average: allStats.ratings.averageRating,
+        count: finalStoryData.ratings_count,
+        sum: finalStoryData.ratings_sum,
+        average: finalStoryData.ratings_count > 0 ? finalStoryData.ratings_sum / finalStoryData.ratings_count : 0,
         daily: {
           count: allStats.dailyStats.ratings_count,
           sum: allStats.dailyStats.ratings_sum
@@ -603,18 +837,24 @@ const getStoryBySlug = async (slug) => {
       }
     };
   } catch (error) {
-    console.error(`Error getting stats for story ${item._id}:`, error);
-    // Nếu có lỗi, đặt giá trị mặc định
-    storyData.views = 0;
-    storyData.ratings_count = 0;
-    storyData.ratings_sum = 0;
-    storyData.stats = {
-      views: { total: 0, byTimeRange: { day: 0, week: 0, month: 0, year: 0, all: 0 }, daily: 0 },
-      ratings: { count: 0, sum: 0, average: 0, daily: { count: 0, sum: 0 } }
+    console.error(`Error getting detailed stats for story ${item._id}:`, error);
+    // Nếu có lỗi, tạo stats object với giá trị từ aggregation hoặc mặc định
+    finalStoryData.stats = {
+      views: {
+        total: finalStoryData.views,
+        byTimeRange: { day: 0, week: 0, month: 0, year: 0, all: finalStoryData.views },
+        daily: 0
+      },
+      ratings: {
+        count: finalStoryData.ratings_count,
+        sum: finalStoryData.ratings_sum,
+        average: finalStoryData.ratings_count > 0 ? finalStoryData.ratings_sum / finalStoryData.ratings_count : 0,
+        daily: { count: 0, sum: 0 }
+      }
     };
   }
 
-  return storyData;
+  return finalStoryData;
 };
 
 /**
@@ -638,7 +878,6 @@ const createStory = async (storyData) => {
     categories: storyData.categories || [],
     stars: storyData.stars || 0,
     count_star: storyData.count_star || 0,
-    views: storyData.views || 0,
     is_full: Boolean(storyData.is_full),
     is_hot: Boolean(storyData.is_hot),
     is_new: Boolean(storyData.is_new),
@@ -677,7 +916,7 @@ const updateStory = async (id, updateData) => {
   if (updateData.categories !== undefined) dataToUpdate.categories = updateData.categories;
   if (updateData.stars !== undefined) dataToUpdate.stars = updateData.stars;
   if (updateData.count_star !== undefined) dataToUpdate.count_star = updateData.count_star;
-  if (updateData.views !== undefined) dataToUpdate.views = updateData.views;
+  // Removed views field - now handled by storyStats collection
   if (updateData.is_full !== undefined) dataToUpdate.is_full = Boolean(updateData.is_full);
   if (updateData.is_hot !== undefined) dataToUpdate.is_hot = Boolean(updateData.is_hot);
   if (updateData.is_new !== undefined) dataToUpdate.is_new = Boolean(updateData.is_new);
@@ -726,13 +965,8 @@ const incrementStoryViews = async (slug) => {
     throw new Error('Story not found');
   }
 
-  // Tăng lượt view lên 1 trong bảng Story (để tương thích ngược)
-  story.views += 1;
-  await story.save();
-
   // Tăng lượt view trong bảng StoryStats
   try {
-
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -742,7 +976,6 @@ const incrementStoryViews = async (slug) => {
     const day = today.getDate();
     const week = require('moment')(today).isoWeek();
 
-
     // Chuyển đổi story._id thành ObjectId
     const storyObjectId = new mongoose.Types.ObjectId(story._id);
 
@@ -751,7 +984,6 @@ const incrementStoryViews = async (slug) => {
       story_id: storyObjectId,
       date: today
     });
-
 
     if (!stats) {
       // Tạo bản ghi mới nếu chưa có
@@ -778,14 +1010,26 @@ const incrementStoryViews = async (slug) => {
 
     const savedStats = await stats.save();
 
-    // Lấy tổng lượt xem từ StoryStats
-    const totalViews = await storyStatsService.getTotalViews(story._id);
+    // Lấy tổng lượt xem từ StoryStats bằng aggregation
+    const totalViewsResult = await StoryStats.aggregate([
+      {
+        $match: { story_id: storyObjectId }
+      },
+      {
+        $group: {
+          _id: null,
+          totalViews: { $sum: '$views' }
+        }
+      }
+    ]);
+
+    const totalViews = totalViewsResult.length > 0 ? totalViewsResult[0].totalViews : 1;
 
     return { success: true, views: totalViews };
   } catch (error) {
     console.error('[API] Error updating StoryStats:', error);
-    // Nếu có lỗi, trả về lượt xem từ Story
-    return { success: true, views: story.views };
+    // Nếu có lỗi, trả về giá trị mặc định
+    return { success: true, views: 1 };
   }
 };
 
@@ -951,6 +1195,101 @@ const getMostCommentedStories = async (params) => {
   }
 };
 
+/**
+ * Thêm thông tin thống kê từ storyStats vào danh sách stories
+ * @param {Array} stories - Danh sách stories
+ * @returns {Promise<Array>} - Danh sách stories với thống kê đầy đủ
+ */
+const addViewCountsToStories = async (stories) => {
+  try {
+    if (!stories || stories.length === 0) {
+      return stories;
+    }
+
+    // Lấy danh sách story IDs
+    const storyIds = stories.map(story => story._id);
+
+    // Aggregate tất cả thống kê từ StoryStats
+    const statsAggregation = await StoryStats.aggregate([
+      {
+        $match: {
+          story_id: { $in: storyIds }
+        }
+      },
+      {
+        $group: {
+          _id: '$story_id',
+          totalViews: { $sum: '$views' },
+          totalUniqueViews: { $sum: '$unique_views' },
+          totalRatingsCount: { $sum: '$ratings_count' },
+          totalRatingsSum: { $sum: '$ratings_sum' },
+          totalCommentsCount: { $sum: '$comments_count' },
+          totalBookmarksCount: { $sum: '$bookmarks_count' },
+          totalSharesCount: { $sum: '$shares_count' }
+        }
+      }
+    ]);
+
+    // Tạo map để dễ lookup
+    const statsMap = {};
+    statsAggregation.forEach(item => {
+      statsMap[item._id.toString()] = {
+        views: item.totalViews || 0,
+        unique_views: item.totalUniqueViews || 0,
+        ratings_count: item.totalRatingsCount || 0,
+        ratings_sum: item.totalRatingsSum || 0,
+        comments_count: item.totalCommentsCount || 0,
+        bookmarks_count: item.totalBookmarksCount || 0,
+        shares_count: item.totalSharesCount || 0
+      };
+    });
+
+    // Thêm thống kê vào stories
+    const storiesWithStats = stories.map(story => {
+      const storyObj = story.toObject ? story.toObject() : story;
+      const storyId = storyObj._id.toString();
+
+      // Lấy thống kê từ map hoặc sử dụng giá trị mặc định = 0
+      const stats = statsMap[storyId] || {
+        views: 0,
+        unique_views: 0,
+        ratings_count: 0,
+        ratings_sum: 0,
+        comments_count: 0,
+        bookmarks_count: 0,
+        shares_count: 0
+      };
+
+      // Gán các giá trị thống kê
+      storyObj.views = stats.views;
+      storyObj.unique_views = stats.unique_views;
+      storyObj.ratings_count = stats.ratings_count;
+      storyObj.ratings_sum = stats.ratings_sum;
+      storyObj.comments_count = stats.comments_count;
+      storyObj.bookmarks_count = stats.bookmarks_count;
+      storyObj.shares_count = stats.shares_count;
+
+      return storyObj;
+    });
+
+    return storiesWithStats;
+  } catch (error) {
+    console.error('Error adding stats to stories:', error);
+    // Nếu có lỗi, trả về stories gốc với tất cả thống kê = 0
+    return stories.map(story => {
+      const storyObj = story.toObject ? story.toObject() : story;
+      storyObj.views = 0;
+      storyObj.unique_views = 0;
+      storyObj.ratings_count = 0;
+      storyObj.ratings_sum = 0;
+      storyObj.comments_count = 0;
+      storyObj.bookmarks_count = 0;
+      storyObj.shares_count = 0;
+      return storyObj;
+    });
+  }
+};
+
 module.exports = {
   getAllStories,
   getStoryById,
@@ -962,5 +1301,6 @@ module.exports = {
   buildStoryQuery,
   processCategoryFilter,
   processMultipleCategoriesFilter,
-  getMostCommentedStories
+  getMostCommentedStories,
+  addViewCountsToStories
 };

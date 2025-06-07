@@ -47,13 +47,7 @@ const storySchema = new Schema({
     ref: 'Category'
   }],
 
-  // Thống kê lượt xem (giữ lại để tương thích ngược)
-  views: {
-    type: Number,
-    default: 0,
-    min: 0,
-    deprecated: true
-  },
+
 
   // Thông tin trạng thái
   is_full: {
@@ -120,10 +114,8 @@ const storySchema = new Schema({
 });
 
 // Tạo các index để tối ưu truy vấn
-storySchema.index({ name: 'text', desc: 'text' });
+storySchema.index({ name: 'text', desc: 'text', slug: 'text' });
 storySchema.index({ createdAt: -1 });
 storySchema.index({ updatedAt: -1 });
-// Giữ lại index cho trường views để tương thích ngược
-storySchema.index({ views: -1 });
 
 module.exports = storySchema;
