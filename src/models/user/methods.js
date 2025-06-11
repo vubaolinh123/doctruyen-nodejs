@@ -298,59 +298,68 @@ const setupMethods = (schema) => {
 
     await this.save();
 
-    // ✅ Create transaction record for coin addition
-    try {
-      const Transaction = require('../transaction');
+    // Check if we should create transaction automatically
+    // Only create transaction for attendance rewards, not for admin actions
+    const shouldCreateTransaction = typeof options === 'object' && options.createTransaction !== false;
+    const isAttendanceReward = typeof options === 'object' && options.type === 'attendance';
 
-      // Parse options để lấy description và metadata
-      let description = 'Cộng xu';
-      let metadata = {};
+    if (shouldCreateTransaction && isAttendanceReward) {
+      // ✅ Create transaction record for attendance rewards only
+      try {
+        const Transaction = require('../transaction');
 
-      if (typeof options === 'string') {
-        description = options || 'Cộng xu';
-      } else if (typeof options === 'object') {
-        description = options.description || options.reason || 'Cộng xu';
-        metadata = options.metadata || {};
-      }
+        // Parse options để lấy description và metadata
+        let description = 'Cộng xu';
+        let metadata = {};
 
-      // ✅ Generate unique transaction ID với timestamp và random
-      const timestamp = Date.now();
-      const random = Math.floor(Math.random() * 1000);
-      const transactionId = `REWARD_${this._id}_${timestamp}_${random}`;
-
-      console.log(`[User.addCoins] Creating transaction: ${transactionId}`);
-      console.log(`[User.addCoins] Description: ${description}`);
-      console.log(`[User.addCoins] Amount: +${amount} xu`);
-
-      const transactionData = {
-        user_id: this._id,
-        transaction_id: transactionId,
-        description: description,
-        coin_change: amount, // Positive for reward
-        type: 'attendance', // ✅ Use 'attendance' type for consistency
-        direction: 'in',
-        status: 'completed',
-        reference_type: 'attendance',
-        balance_after: this.coin, // ✅ Add balance_after field
-        metadata: {
-          ...metadata,
-          transaction_type: 'attendance_reward',
-          user_coin_before: this.coin - amount,
-          user_coin_after: this.coin
+        if (typeof options === 'string') {
+          description = options || 'Cộng xu';
+        } else if (typeof options === 'object') {
+          description = options.description || options.reason || 'Cộng xu';
+          metadata = options.metadata || {};
         }
-      };
 
-      console.log(`[User.addCoins] Transaction data:`, JSON.stringify(transactionData, null, 2));
+        // ✅ Generate unique transaction ID với timestamp và random
+        const timestamp = Date.now();
+        const random = Math.floor(Math.random() * 1000);
+        const transactionId = `REWARD_${this._id}_${timestamp}_${random}`;
 
-      const transaction = await Transaction.create(transactionData);
+        console.log(`[User.addCoins] Creating attendance transaction: ${transactionId}`);
+        console.log(`[User.addCoins] Description: ${description}`);
+        console.log(`[User.addCoins] Amount: +${amount} xu`);
 
-      console.log(`[User.addCoins] ✅ Created transaction record: ${transaction._id} (+${amount} xu for user ${this._id})`);
+        const transactionData = {
+          user_id: this._id,
+          transaction_id: transactionId,
+          description: description,
+          coin_change: amount, // Positive for reward
+          type: 'attendance', // ✅ Use 'attendance' type for consistency
+          direction: 'in',
+          status: 'completed',
+          reference_type: 'attendance',
+          balance_after: this.coin, // ✅ Add balance_after field
+          metadata: {
+            ...metadata,
+            transaction_type: 'attendance_reward',
+            user_coin_before: this.coin - amount,
+            user_coin_after: this.coin
+          }
+        };
 
-    } catch (transactionError) {
-      console.error(`[User.addCoins] ❌ Error creating transaction record:`, transactionError);
-      console.error(`[User.addCoins] ❌ Error details:`, transactionError.message);
-      console.error(`[User.addCoins] ❌ Error stack:`, transactionError.stack);
-      // Don't throw error to avoid breaking the main flow
+        console.log(`[User.addCoins] Transaction data:`, JSON.stringify(transactionData, null, 2));
+
+        const transaction = await Transaction.create(transactionData);
+
+        console.log(`[User.addCoins] ✅ Created attendance transaction record: ${transaction._id} (+${amount} xu for user ${this._id})`);
+
+      } catch (transactionError) {
+        console.error(`[User.addCoins] ❌ Error creating transaction record:`, transactionError);
+        console.error(`[User.addCoins] ❌ Error details:`, transactionError.message);
+        console.error(`[User.addCoins] ❌ Error stack:`, transactionError.stack);
+        // Don't throw error to avoid breaking the main flow
+      }
+    } else {
+      console.log(`[User.addCoins] ✅ Added ${amount} xu to user ${this._id} without creating transaction (will be handled externally)`);
     }
 
     return this.coin;
@@ -359,10 +368,10 @@ const setupMethods = (schema) => {
   /**
    * Trừ xu của người dùng
    * @param {number} amount - Số lượng xu
-   * @param {string} reason - Lý do trừ xu
+   * @param {string|Object} options - Lý do trừ xu hoặc các tùy chọn
    * @returns {Object} - Thông tin xu sau khi trừ
    */
-  schema.methods.deductCoins = async function(amount, reason = '') {
+  schema.methods.deductCoins = async function(amount, options = '') {
     if (isNaN(amount) || amount <= 0) {
       throw new Error('Số lượng xu phải là số dương');
     }
@@ -376,6 +385,16 @@ const setupMethods = (schema) => {
     this.coin_spent += amount;
 
     await this.save();
+
+    // Parse reason from options
+    let reason = '';
+    if (typeof options === 'string') {
+      reason = options;
+    } else if (typeof options === 'object') {
+      reason = options.reason || options.description || '';
+    }
+
+    console.log(`[User.deductCoins] ✅ Deducted ${amount} xu from user ${this._id} (reason: ${reason})`);
 
     return {
       coin: this.coin,
@@ -409,13 +428,25 @@ const setupMethods = (schema) => {
     const currentCoins = this.coin;
 
     if (newAmount > currentCoins) {
-      // Thêm xu
+      // Thêm xu (không tạo transaction tự động)
       const amountToAdd = newAmount - currentCoins;
-      return this.addCoins(amountToAdd, options);
+      await this.addCoins(amountToAdd, { ...options, createTransaction: false });
+      return {
+        coin: this.coin,
+        coin_total: this.coin_total,
+        coin_spent: this.coin_spent,
+        changed: amountToAdd
+      };
     } else if (newAmount < currentCoins) {
-      // Trừ xu
+      // Trừ xu (không tạo transaction tự động)
       const amountToDeduct = currentCoins - newAmount;
-      return this.deductCoins(amountToDeduct, options);
+      await this.deductCoins(amountToDeduct, { ...options, createTransaction: false });
+      return {
+        coin: this.coin,
+        coin_total: this.coin_total,
+        coin_spent: this.coin_spent,
+        changed: -amountToDeduct
+      };
     } else {
       // Không thay đổi
       return {

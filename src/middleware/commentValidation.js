@@ -9,17 +9,34 @@ const mongoose = require('mongoose');
  * Validation cho tạo comment mới
  */
 const validateCreateComment = [
+  // Handle both string and object content formats
   body('content')
-    .trim()
-    .notEmpty()
-    .withMessage('Nội dung bình luận không được để trống')
-    .isLength({ min: 1, max: 2000 })
-    .withMessage('Nội dung bình luận phải từ 1-2000 ký tự')
     .custom((value) => {
+      let content = '';
+
+      if (typeof value === 'string') {
+        // Legacy format: content is a string
+        content = value.trim();
+      } else if (typeof value === 'object' && value.original) {
+        // New format: content is an object with 'original' property
+        content = value.original.trim();
+      } else {
+        throw new Error('Định dạng nội dung bình luận không hợp lệ');
+      }
+
+      if (!content || content.length === 0) {
+        throw new Error('Nội dung bình luận không được để trống');
+      }
+
+      if (content.length > 2000) {
+        throw new Error('Nội dung bình luận phải từ 1-2000 ký tự');
+      }
+
       // Check for excessive whitespace
-      if (value.replace(/\s/g, '').length < 1) {
+      if (content.replace(/\s/g, '').length < 1) {
         throw new Error('Nội dung bình luận không được chỉ chứa khoảng trắng');
       }
+
       return true;
     }),
 
@@ -208,8 +225,8 @@ const validateGetComments = [
 
   query('sort')
     .optional()
-    .isIn(['newest', 'oldest', 'popular', 'most_liked'])
-    .withMessage('Sort phải là newest, oldest, popular hoặc most_liked'),
+    .isIn(['newest', 'oldest', 'popular', 'most_liked', 'createdAt'])
+    .withMessage('Sort phải là newest, oldest, popular, most_liked hoặc createdAt'),
 
   query('include_replies')
     .optional()

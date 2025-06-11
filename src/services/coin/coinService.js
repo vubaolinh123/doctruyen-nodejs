@@ -42,10 +42,10 @@ class CoinService {
 
     switch (action) {
       case 'give':
-        // Thêm xu cho người dùng
-        await user.addCoins(numAmount);
+        // Thêm xu cho người dùng (không tạo transaction tự động)
+        await user.addCoins(numAmount, { createTransaction: false });
 
-        // Tạo giao dịch
+        // Tạo giao dịch admin
         await Transaction.createTransaction({
           user_id: userId,
           description: description,
@@ -63,10 +63,10 @@ class CoinService {
           throw new Error('Số xu không đủ để trừ');
         }
 
-        // Trừ xu của người dùng
-        await user.subtractCoins(numAmount);
+        // Trừ xu của người dùng (không tạo transaction tự động)
+        await user.subtractCoins(numAmount, { createTransaction: false });
 
-        // Tạo giao dịch
+        // Tạo giao dịch admin
         await Transaction.createTransaction({
           user_id: userId,
           description: description,

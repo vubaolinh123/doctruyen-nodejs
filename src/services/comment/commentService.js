@@ -114,8 +114,25 @@ class CommentService {
         metadata: bodyMetadata = {}
       } = commentData;
 
+      // Extract content string from object or use as string
+      let contentString = '';
+      if (typeof content === 'string') {
+        contentString = content;
+      } else if (typeof content === 'object' && content.original) {
+        contentString = content.original;
+      } else {
+        throw new Error('Content must be a string or object with original property');
+      }
+
+      console.log('[Comment Service] Extracted content:', {
+        originalContent: content,
+        contentType: typeof content,
+        extractedString: contentString,
+        stringLength: contentString.length
+      });
+
       let parentComment = null;
-      let finalContent = content;
+      let finalContent = contentString;
       let quoteData = null;
       let finalParentId = hierarchy.parent_id;
 
@@ -134,6 +151,12 @@ class CommentService {
         // Check if we need to convert Level 3 to Level 2 with quote
         if (commentQuoteUtils.shouldConvertToQuotedReply(targetLevel, parentComment)) {
           console.log('[Comment Service] Converting Level 3+ to Level 2 with quote');
+          console.log('[Comment Service] Content before quote formatting:', {
+            originalContent: content,
+            contentType: typeof content,
+            finalContent: finalContent,
+            finalContentType: typeof finalContent
+          });
 
           // Generate quote data
           quoteData = commentQuoteUtils.generateQuoteData(parentComment, parentComment.user_id);
@@ -142,8 +165,13 @@ class CommentService {
           finalContent = commentQuoteUtils.formatQuotedComment(
             quoteData.quoted_username,
             quoteData.quoted_text,
-            content
+            finalContent
           );
+
+          console.log('[Comment Service] Content after quote formatting:', {
+            formattedContent: finalContent,
+            formattedContentType: typeof finalContent
+          });
 
           // Get appropriate parent (Level 1 comment)
           const quotedReplyParent = await commentQuoteUtils.getQuotedReplyParent(parentComment, Comment);
@@ -239,7 +267,9 @@ class CommentService {
         hasUserId: !!newCommentData.user_id,
         userIdType: typeof newCommentData.user_id,
         target: newCommentData.target,
-        content: newCommentData.content.original.substring(0, 100) + '...',
+        content: typeof newCommentData.content.original === 'string' ?
+          newCommentData.content.original.substring(0, 100) + '...' :
+          'Invalid content type: ' + typeof newCommentData.content.original,
         hasQuote: !!quoteData,
         finalParentId: validParentId
       });
@@ -678,16 +708,16 @@ class CommentService {
       return commentsWithReplyCounts.map(comment => {
         const commentObj = comment.toObject ? comment.toObject() : comment;
 
+        // Initialize variables outside of userId check to avoid scope issues
+        const likesUsers = commentObj.engagement.likes.users || [];
+        const dislikesUsers = commentObj.engagement.dislikes.users || [];
+        const likesUsersStr = likesUsers.map(id => id.toString());
+        const dislikesUsersStr = dislikesUsers.map(id => id.toString());
+
         // Check if user liked/disliked
         commentObj.userReaction = null;
         if (userId) {
           const userIdStr = userId.toString();
-          const likesUsers = commentObj.engagement.likes.users || [];
-          const dislikesUsers = commentObj.engagement.dislikes.users || [];
-
-          // Convert ObjectIds to strings for comparison
-          const likesUsersStr = likesUsers.map(id => id.toString());
-          const dislikesUsersStr = dislikesUsers.map(id => id.toString());
 
           if (likesUsersStr.includes(userIdStr)) {
             commentObj.userReaction = 'like';
@@ -696,7 +726,7 @@ class CommentService {
           }
         }
 
-        // Debug logging for userReaction
+        // Debug logging for userReaction (now variables are always in scope)
         if (process.env.NODE_ENV === 'development' && userId) {
           const userIdStr = userId.toString();
           console.log('[CommentService] UserReaction Debug:', {

@@ -72,13 +72,24 @@ function formatQuotedComment(username, quotedText, newContent) {
     return newContent || '';
   }
 
+  // Type safety check for newContent
+  let contentString = '';
+  if (typeof newContent === 'string') {
+    contentString = newContent;
+  } else if (typeof newContent === 'object' && newContent && newContent.original) {
+    contentString = newContent.original;
+  } else if (newContent) {
+    // Fallback: convert to string
+    contentString = String(newContent);
+  }
+
   const quotePrefix = `"@${username}: ${quotedText}"`;
-  
-  if (!newContent || newContent.trim() === '') {
+
+  if (!contentString || contentString.trim() === '') {
     return quotePrefix;
   }
 
-  return `${quotePrefix}\n\n${newContent.trim()}`;
+  return `${quotePrefix}\n\n${contentString.trim()}`;
 }
 
 /**

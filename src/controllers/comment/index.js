@@ -25,5 +25,16 @@ module.exports = {
   getHighlyFlaggedComments: moderationController.getHighlyFlaggedComments,
   getSuspiciousComments: moderationController.getSuspiciousComments,
   getModerationHistory: moderationController.getModerationHistory,
-  resetFlags: moderationController.resetFlags
+  resetFlags: moderationController.resetFlags,
+  getCommentAnalytics: moderationController.getCommentAnalytics,
+  getStoriesWithComments: moderationController.getStoriesWithComments,
+  getStoryCommentStats: moderationController.getStoryCommentStats,
+  getChaptersWithComments: moderationController.getChaptersWithComments,
+  getUsersWithComments: moderationController.getUsersWithComments,
+
+  // Comment detail operations
+  getCommentsByStory: moderationController.getCommentsByStory,
+  getCommentsByChapter: moderationController.getCommentsByChapter,
+  getCommentsByUser: moderationController.getCommentsByUser,
+  getUserCommentActivity: moderationController.getUserCommentActivity
 };

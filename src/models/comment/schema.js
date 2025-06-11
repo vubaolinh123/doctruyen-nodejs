@@ -172,19 +172,49 @@ const commentSchema = new Schema({
       },
       reasons: [{
         type: String,
-        enum: ['spam', 'inappropriate', 'harassment', 'off-topic', 'other']
+        enum: ['spam', 'inappropriate', 'harassment', 'off-topic', 'violence', 'hate-speech', 'misinformation', 'copyright', 'other']
       }],
       flagged_by: [{
         user_id: {
           type: Schema.Types.ObjectId,
           ref: 'User'
         },
-        reason: String,
+        reason: {
+          type: String,
+          enum: ['spam', 'inappropriate', 'harassment', 'off-topic', 'violence', 'hate-speech', 'misinformation', 'copyright', 'other']
+        },
+        custom_reason: String, // For 'other' category
+        severity: {
+          type: String,
+          enum: ['low', 'medium', 'high', 'critical'],
+          default: 'medium'
+        },
         flagged_at: {
           type: Date,
           default: Date.now
+        },
+        reporter_ip: String, // Hashed IP for tracking
+        additional_context: String // Extra details from reporter
+      }],
+      // Report resolution tracking
+      resolution: {
+        status: {
+          type: String,
+          enum: ['pending', 'resolved', 'dismissed', 'escalated'],
+          default: 'pending'
+        },
+        resolved_by: {
+          type: Schema.Types.ObjectId,
+          ref: 'User'
+        },
+        resolved_at: Date,
+        resolution_reason: String,
+        admin_notes: String,
+        action_taken: {
+          type: String,
+          enum: ['none', 'warning', 'content-hidden', 'content-deleted', 'user-suspended', 'user-banned']
         }
-      }]
+      }
     },
     auto_moderation: {
       spam_score: {
@@ -235,11 +265,25 @@ const commentSchema = new Schema({
   toJSON: {
     virtuals: true,
     transform: function(doc, ret) {
-      // Remove sensitive data from JSON output
-      delete ret.metadata.ip_hash;
-      delete ret.metadata.user_agent_hash;
-      delete ret.moderation.auto_moderation;
-      return ret;
+      // Remove sensitive data from JSON output with safe checks
+      try {
+        // Safely remove metadata sensitive fields
+        if (ret.metadata && typeof ret.metadata === 'object') {
+          delete ret.metadata.ip_hash;
+          delete ret.metadata.user_agent_hash;
+        }
+
+        // Safely remove moderation auto_moderation
+        if (ret.moderation && typeof ret.moderation === 'object') {
+          delete ret.moderation.auto_moderation;
+        }
+
+        return ret;
+      } catch (error) {
+        console.error('Error in comment schema transform:', error);
+        // Return the original ret object if transform fails
+        return ret;
+      }
     }
   },
   toObject: { virtuals: true }
@@ -257,8 +301,72 @@ commentSchema.index({ 'engagement.score': -1, createdAt: -1 });
 // Text index for search
 commentSchema.index({ 'content.sanitized': 'text' });
 
+// Reported comments indexes
+commentSchema.index({ 'moderation.flags.count': 1, 'moderation.flags.resolution.status': 1, createdAt: -1 });
+commentSchema.index({ 'moderation.flags.resolution.status': 1, 'moderation.flags.flagged_by.severity': 1, createdAt: -1 });
+commentSchema.index({ 'moderation.flags.flagged_by.reason': 1, createdAt: -1 });
+
 // Sparse indexes
 commentSchema.index({ 'hierarchy.parent_id': 1 }, { sparse: true });
 commentSchema.index({ 'target.chapter_id': 1 }, { sparse: true });
+
+// === SCHEMA METHODS ===
+
+/**
+ * Pre-save middleware to ensure required nested objects exist
+ */
+commentSchema.pre('save', function(next) {
+  // Ensure metadata object exists
+  if (!this.metadata) {
+    this.metadata = {};
+  }
+
+  // Ensure moderation object exists with default values
+  if (!this.moderation) {
+    this.moderation = {
+      status: 'active',
+      flags: {
+        count: 0,
+        reasons: [],
+        flagged_by: []
+      }
+    };
+  }
+
+  // Ensure moderation.flags exists
+  if (!this.moderation.flags) {
+    this.moderation.flags = {
+      count: 0,
+      reasons: [],
+      flagged_by: []
+    };
+  }
+
+  // Ensure engagement object exists
+  if (!this.engagement) {
+    this.engagement = {
+      likes: { count: 0, users: [] },
+      dislikes: { count: 0, users: [] },
+      replies: { count: 0 },
+      score: 0
+    };
+  }
+
+  next();
+});
+
+/**
+ * Static method to safely find comments with proper structure validation
+ */
+commentSchema.statics.findSafe = function(query = {}, options = {}) {
+  // Add validation to ensure documents have required structure
+  const safeQuery = {
+    ...query,
+    'target': { $exists: true, $ne: null },
+    'moderation': { $exists: true, $ne: null }
+  };
+
+  return this.find(safeQuery, null, options);
+};
 
 module.exports = commentSchema;

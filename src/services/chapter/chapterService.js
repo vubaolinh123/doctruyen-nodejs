@@ -622,10 +622,13 @@ class ChapterService {
   /**
    * Lấy danh sách chapter theo truyện
    * @param {string} storyId - ID của truyện
+   * @param {Object} options - Tùy chọn
    * @returns {Promise<Object>} - Danh sách chapter và thông tin truyện
    */
-  async getChaptersByStory(storyId) {
+  async getChaptersByStory(storyId, options = {}) {
     try {
+      const { excludeContent = false } = options;
+
       // Kiểm tra storyId có hợp lệ không
       if (!storyId || typeof storyId !== 'string') {
         console.error(`[Service] ID truyện không hợp lệ: ${storyId}`);
@@ -648,10 +651,22 @@ class ChapterService {
       // Tạo ObjectId từ storyId
       const storyObjectId = new mongoose.Types.ObjectId(storyId);
 
+      // Xây dựng query với select fields
+      let query = Chapter.find({ story_id: storyObjectId });
+
+      // Nếu excludeContent = true, loại bỏ trường content
+      if (excludeContent) {
+        query = query.select('-content');
+        console.log(`[Service] Loại bỏ trường content cho story ID: ${storyId}`);
+      }
+
       // Lấy tất cả chapter của truyện
-      const chapters = await Chapter.find({ story_id: storyObjectId })
+      const chapters = await query
         .sort({ chapter: 1 }) // Sắp xếp theo số chương tăng dần
         .lean();
+
+      console.log(`[Service] Lấy được ${chapters.length} chapters cho story ID: ${storyId}, excludeContent: ${excludeContent}`);
+
       return {
         story,
         chapters,
@@ -659,6 +674,141 @@ class ChapterService {
       };
     } catch (error) {
       console.error(`[Service] Lỗi khi lấy danh sách chapter theo story ID: ${storyId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Lấy danh sách chapter theo truyện với pagination và search
+   * @param {string} storyId - ID của truyện
+   * @param {Object} options - Tùy chọn pagination và search
+   * @returns {Promise<Object>} - Danh sách chapter với pagination metadata
+   */
+  async getChaptersByStoryWithPagination(storyId, options = {}) {
+    try {
+      const {
+        page = 1,
+        limit = 100,
+        search = '',
+        sort = 'chapter',
+        excludeContent = false
+      } = options;
+
+      // Kiểm tra storyId có hợp lệ không
+      if (!storyId || typeof storyId !== 'string') {
+        console.error(`[Service] ID truyện không hợp lệ: ${storyId}`);
+        throw new Error('ID truyện không hợp lệ');
+      }
+
+      // Kiểm tra storyId có phải là ObjectId hợp lệ không
+      if (!mongoose.Types.ObjectId.isValid(storyId)) {
+        console.error(`[Service] ID truyện không phải là ObjectId hợp lệ: ${storyId}`);
+        throw new Error('ID truyện không hợp lệ');
+      }
+
+      // Kiểm tra truyện tồn tại
+      const story = await Story.findById(storyId);
+      if (!story) {
+        console.error(`[Service] Không tìm thấy truyện với ID: ${storyId}`);
+        throw new Error('Không tìm thấy truyện');
+      }
+
+      // Tạo ObjectId từ storyId
+      const storyObjectId = new mongoose.Types.ObjectId(storyId);
+
+      // Xây dựng query filter
+      const query = { story_id: storyObjectId };
+
+      // Thêm search filter nếu có - search toàn bộ chapters của story
+      if (search && search.trim()) {
+        const searchTerm = search.trim();
+        const searchNumber = parseInt(searchTerm);
+
+        // Tạo query OR để tìm kiếm linh hoạt hơn
+        const searchQuery = [];
+
+        // Nếu search là số, tìm theo chapter number
+        if (!isNaN(searchNumber)) {
+          searchQuery.push({ chapter: searchNumber });
+        }
+
+        // Luôn tìm theo tên chapter (case-insensitive)
+        searchQuery.push({ name: { $regex: searchTerm, $options: 'i' } });
+
+        // Nếu search term chứa "chapter" hoặc "chương", tìm theo pattern
+        if (searchTerm.toLowerCase().includes('chapter') || searchTerm.toLowerCase().includes('chương')) {
+          const numberMatch = searchTerm.match(/\d+/);
+          if (numberMatch) {
+            searchQuery.push({ chapter: parseInt(numberMatch[0]) });
+          }
+        }
+
+        // Áp dụng OR query
+        query.$or = searchQuery;
+      }
+
+      // Xây dựng sort object
+      let sortObject = {};
+      if (sort === 'chapter') {
+        sortObject = { chapter: 1 };
+      } else if (sort === '-chapter') {
+        sortObject = { chapter: -1 };
+      } else if (sort === 'name') {
+        sortObject = { name: 1 };
+      } else if (sort === '-name') {
+        sortObject = { name: -1 };
+      } else if (sort === 'createdAt') {
+        sortObject = { createdAt: 1 };
+      } else if (sort === '-createdAt') {
+        sortObject = { createdAt: -1 };
+      } else {
+        sortObject = { chapter: 1 }; // Default sort
+      }
+
+      // Tính toán pagination
+      const pageNumber = parseInt(page);
+      const limitNumber = parseInt(limit);
+      const skipNumber = (pageNumber - 1) * limitNumber;
+
+      // Xây dựng query với select fields
+      let chapterQuery = Chapter.find(query);
+
+      // Nếu excludeContent = true, loại bỏ trường content
+      if (excludeContent) {
+        chapterQuery = chapterQuery.select('-content');
+        console.log(`[Service] Loại bỏ trường content cho pagination, story ID: ${storyId}`);
+      }
+
+      // Thực hiện query với pagination
+      const [chapters, totalItems] = await Promise.all([
+        chapterQuery
+          .sort(sortObject)
+          .skip(skipNumber)
+          .limit(limitNumber)
+          .lean(),
+        Chapter.countDocuments(query)
+      ]);
+
+      // Tính toán pagination metadata
+      const totalPages = Math.ceil(totalItems / limitNumber);
+      const hasNext = pageNumber < totalPages;
+      const hasPrevious = pageNumber > 1;
+
+      console.log(`[Service] Tìm thấy ${chapters.length}/${totalItems} chapter cho story ID: ${storyId}, page: ${pageNumber}/${totalPages}`);
+
+      return {
+        chapters,
+        pagination: {
+          currentPage: pageNumber,
+          totalPages,
+          totalItems,
+          limit: limitNumber,
+          hasNext,
+          hasPrevious
+        }
+      };
+    } catch (error) {
+      console.error(`[Service] Lỗi khi lấy danh sách chapter với pagination cho story ID: ${storyId}`, error);
       throw error;
     }
   }

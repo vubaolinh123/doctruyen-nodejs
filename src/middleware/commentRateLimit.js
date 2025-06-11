@@ -176,8 +176,25 @@ const spamDetection = async (req, res, next) => {
  * Content length validation
  */
 const contentValidation = (req, res, next) => {
+  // Handle both string and object content formats
+  let content = '';
+
   if (req.body.content) {
-    const content = req.body.content.trim();
+    if (typeof req.body.content === 'string') {
+      // Legacy format: content is a string
+      content = req.body.content.trim();
+    } else if (typeof req.body.content === 'object' && req.body.content.original) {
+      // New format: content is an object with 'original' property
+      content = req.body.content.original.trim();
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'Định dạng nội dung bình luận không hợp lệ'
+      });
+    }
+  }
+
+  if (content) {
 
     if (content.length < 1) {
       return res.status(400).json({

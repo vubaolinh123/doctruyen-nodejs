@@ -1,49 +1,102 @@
 const chapterService = require('../../services/chapter/chapterService');
 
 /**
- * Lấy danh sách chapter theo story ID
+ * Lấy danh sách chapter theo story ID với tối ưu hóa
  * @param {Object} req - Request object
  * @param {Object} res - Response object
  */
 exports.getChaptersByStory = async (req, res) => {
   try {
-    console.log(`[API] Lấy danh sách chapter theo story ID: ${req.params.storyId}`);
+    const storyId = req.params.storyId;
+
+    // Lấy query parameters
+    const {
+      page,
+      limit,
+      search = '',
+      sort = 'chapter',
+      excludeContent = 'false' // Tham số mới để loại bỏ content
+    } = req.query;
+
+    console.log(`[API] Lấy danh sách chapter cho story ID: ${storyId}, excludeContent: ${excludeContent}`);
 
     // Kiểm tra storyId có tồn tại không
-    if (!req.params.storyId) {
+    if (!storyId) {
       console.error('[API] Thiếu ID truyện');
-      return res.status(400).json({ error: 'Thiếu ID truyện' });
+      return res.status(400).json({
+        success: false,
+        message: 'Thiếu ID truyện'
+      });
     }
 
     try {
-      const result = await chapterService.getChaptersByStory(req.params.storyId);
+      let result;
 
-      // Kiểm tra cấu trúc dữ liệu trả về
-      if (result && result.chapters) {
-        console.log(`[API] Tìm thấy ${result.chapters.length} chapter cho story ID: ${req.params.storyId}`);
+      // Nếu có pagination parameters, sử dụng pagination
+      if (page || limit) {
+        result = await chapterService.getChaptersByStoryWithPagination(storyId, {
+          page: parseInt(page || 1),
+          limit: parseInt(limit || 100),
+          search: search.toString(),
+          sort,
+          excludeContent: excludeContent === 'true'
+        });
 
-        // Trả về mảng chapters thay vì object phức tạp
-        return res.json(result.chapters);
+        console.log(`[API] Tìm thấy ${result.chapters.length} chapter (trang ${page}/${result.pagination.totalPages}) cho story ID: ${storyId}`);
+
+        // Trả về dữ liệu với pagination metadata
+        return res.json({
+          success: true,
+          chapters: result.chapters,
+          pagination: {
+            currentPage: result.pagination.currentPage,
+            totalPages: result.pagination.totalPages,
+            totalItems: result.pagination.totalItems,
+            limit: result.pagination.limit,
+            hasNext: result.pagination.hasNext,
+            hasPrevious: result.pagination.hasPrevious
+          }
+        });
       } else {
-        console.log(`[API] Không tìm thấy chapter cho story ID: ${req.params.storyId}`);
-        return res.json([]);
+        // Không có pagination, lấy tất cả chapters
+        result = await chapterService.getChaptersByStory(storyId, {
+          excludeContent: excludeContent === 'true'
+        });
+
+        console.log(`[API] Tìm thấy ${result.chapters.length} chapter cho story ID: ${storyId}`);
+
+        // Trả về dữ liệu dạng array đơn giản (tương thích với frontend hiện tại)
+        return res.json(result.chapters);
       }
     } catch (serviceError) {
       console.error(`[API] Lỗi từ service khi lấy danh sách chapter: ${serviceError.message}`);
 
       // Xử lý các lỗi cụ thể từ service
       if (serviceError.message.includes('ID truyện không hợp lệ')) {
-        return res.status(400).json({ error: 'ID truyện không hợp lệ' });
+        return res.status(400).json({
+          success: false,
+          message: 'ID truyện không hợp lệ'
+        });
       } else if (serviceError.message.includes('Không tìm thấy truyện')) {
-        return res.status(404).json({ error: 'Không tìm thấy truyện' });
+        return res.status(404).json({
+          success: false,
+          message: 'Không tìm thấy truyện'
+        });
       } else {
-        // Lỗi không xác định, trả về lỗi 500
-        return res.status(500).json({ error: 'Lỗi khi lấy danh sách chapter' });
+        return res.status(500).json({
+          success: false,
+          message: 'Lỗi khi lấy danh sách chapter',
+          error: serviceError.message
+        });
       }
     }
   } catch (err) {
     console.error(`[API] Lỗi không xác định khi lấy danh sách chapter theo story ID: ${req.params.storyId}`, err);
-    return res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ nội bộ',
+      error: err.message
+    });
   }
 };
 

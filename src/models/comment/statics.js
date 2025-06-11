@@ -27,7 +27,7 @@ const setupStatics = (schema) => {
 
       // Build sort criteria with support for all filter types
       let sortCriteria = {};
-      if (sort === 'newest') {
+      if (sort === 'newest' || sort === 'createdAt') {
         sortCriteria = { createdAt: -1 };
       } else if (sort === 'oldest') {
         sortCriteria = { createdAt: 1 };
@@ -151,7 +151,7 @@ const setupStatics = (schema) => {
 
       // Build sort criteria with support for all filter types
       let sortCriteria = {};
-      if (sort === 'newest') {
+      if (sort === 'newest' || sort === 'createdAt') {
         sortCriteria = { createdAt: -1 };
       } else if (sort === 'oldest') {
         sortCriteria = { createdAt: 1 };
@@ -277,7 +277,7 @@ const setupStatics = (schema) => {
       let sortCriteria = {};
       if (sort === 'oldest') {
         sortCriteria = { createdAt: 1 };
-      } else if (sort === 'newest') {
+      } else if (sort === 'newest' || sort === 'createdAt') {
         sortCriteria = { createdAt: -1 };
       } else if (sort === 'popular') {
         sortCriteria = { 'engagement.score': -1, createdAt: 1 };

@@ -37,16 +37,93 @@ class BaseCommentController {
       // Check cache first (only for non-authenticated requests to avoid userReaction issues)
       const cachedResult = !options.user_id ? cacheService.getCachedComments(options) : null;
       if (cachedResult) {
+        // Get story metadata for cached results too
+        let meta = null;
+        if (story_id) {
+          try {
+            const Story = require('../../models/story');
+            const story = await Story.findById(story_id)
+              .select('name slug image')
+              .lean();
+
+            if (story) {
+              // Get comment stats for this story
+              const Comment = require('../../models/comment');
+              const [totalComments, activeComments, hiddenComments, deletedComments] = await Promise.all([
+                Comment.countDocuments({ 'target.story_id': story_id }),
+                Comment.countDocuments({ 'target.story_id': story_id, 'moderation.status': 'active' }),
+                Comment.countDocuments({ 'target.story_id': story_id, 'moderation.status': 'hidden' }),
+                Comment.countDocuments({ 'target.story_id': story_id, 'moderation.status': 'deleted' })
+              ]);
+
+              meta = {
+                story: {
+                  _id: story._id,
+                  name: story.name,
+                  slug: story.slug,
+                  image: story.image
+                },
+                totalComments,
+                activeComments,
+                hiddenComments,
+                deletedComments
+              };
+            }
+          } catch (storyError) {
+            console.error('Error fetching story metadata for cached result:', storyError);
+            // Continue without meta data
+          }
+        }
+
         return res.json({
           success: true,
           data: cachedResult.comments,
           pagination: cachedResult.pagination,
+          meta,
           cached: true
         });
       }
 
       // Get from service
       const result = await commentService.getComments(options);
+
+      // Get story metadata if story_id is provided
+      let meta = null;
+      if (story_id) {
+        try {
+          const Story = require('../../models/story');
+          const story = await Story.findById(story_id)
+            .select('name slug image')
+            .lean();
+
+          if (story) {
+            // Get comment stats for this story
+            const Comment = require('../../models/comment');
+            const [totalComments, activeComments, hiddenComments, deletedComments] = await Promise.all([
+              Comment.countDocuments({ 'target.story_id': story_id }),
+              Comment.countDocuments({ 'target.story_id': story_id, 'moderation.status': 'active' }),
+              Comment.countDocuments({ 'target.story_id': story_id, 'moderation.status': 'hidden' }),
+              Comment.countDocuments({ 'target.story_id': story_id, 'moderation.status': 'deleted' })
+            ]);
+
+            meta = {
+              story: {
+                _id: story._id,
+                name: story.name,
+                slug: story.slug,
+                image: story.image
+              },
+              totalComments,
+              activeComments,
+              hiddenComments,
+              deletedComments
+            };
+          }
+        } catch (storyError) {
+          console.error('Error fetching story metadata:', storyError);
+          // Continue without meta data
+        }
+      }
 
       // Cache result
       cacheService.cacheComments(options, result, 300); // 5 minutes
@@ -55,6 +132,7 @@ class BaseCommentController {
         success: true,
         data: result.comments,
         pagination: result.pagination,
+        meta,
         cached: false
       });
     } catch (error) {

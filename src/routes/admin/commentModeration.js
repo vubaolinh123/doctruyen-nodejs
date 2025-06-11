@@ -96,6 +96,71 @@ router.get('/stats',
   commentController.getModerationStats
 );
 
+// Get comment analytics
+router.get('/analytics',
+  authenticateToken,
+  checkAdminPermission,
+  commentController.getCommentAnalytics
+);
+
+// Get stories with comments
+router.get('/stories',
+  authenticateToken,
+  checkAdminPermission,
+  commentController.getStoriesWithComments
+);
+
+// Get comments by story ID
+router.get('/story/:storyId',
+  authenticateToken,
+  checkAdminPermission,
+  commentController.getCommentsByStory
+);
+
+// Get story comment stats
+router.get('/stories/stats',
+  authenticateToken,
+  checkAdminPermission,
+  commentController.getStoryCommentStats
+);
+
+// Get chapters with comments
+router.get('/chapters',
+  authenticateToken,
+  checkAdminPermission,
+  commentController.getChaptersWithComments
+);
+
+// Get comments by chapter ID
+router.get('/chapter/:chapterId',
+  authenticateToken,
+  checkAdminPermission,
+  commentController.getCommentsByChapter
+);
+
+// Get users with comments
+router.get('/users',
+  authenticateToken,
+  checkAdminPermission,
+  commentController.getUsersWithComments
+);
+
+// Get comments by user ID
+router.get('/user/:userId',
+  authenticateToken,
+  checkAdminPermission,
+  commentController.getCommentsByUser
+);
+
+// Get user comment activity overview (stories/chapters)
+router.get('/user/:userId/activity',
+  authenticateToken,
+  checkAdminPermission,
+  commentController.getUserCommentActivity
+);
+
+
+
 // Get highly flagged comments
 router.get('/highly-flagged',
   authenticateToken,

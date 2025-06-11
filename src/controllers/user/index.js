@@ -1,15 +1,29 @@
 const baseController = require('./baseController');
 const specialController = require('./specialController');
+const adminController = require('./adminController');
+const analyticsController = require('./analyticsController');
 
 module.exports = {
   // Controllers cơ bản
-  getAll: baseController.getAll,
+  getAll: adminController.getAllUsersAdmin, // Sử dụng admin version với filters
   getById: baseController.getById,
   create: baseController.create,
   update: baseController.update,
-  remove: baseController.remove,
+  remove: adminController.deleteUser, // Sử dụng admin version
 
   // Controllers đặc biệt
   getBySlug: specialController.getBySlug,
-  getSlugById: specialController.getSlugById
-}; 
+  getSlugById: specialController.getSlugById,
+
+  // Admin controllers
+  getUserStats: adminController.getUserStats,
+  updateUserStatus: adminController.updateUserStatus,
+  updateUserRole: adminController.updateUserRole,
+  bulkUserOperations: adminController.bulkUserOperations,
+
+  // Analytics controllers
+  getRegistrationStats: analyticsController.getRegistrationStats,
+  getRegistrationOverview: analyticsController.getRegistrationOverview,
+  getRegistrationByType: analyticsController.getRegistrationByType,
+  getGrowthRate: analyticsController.getGrowthRate
+};

@@ -6,15 +6,9 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:api": "jest src/tests/api",
-    "test:comments": "jest src/tests/api/commentAPI.basic.test.js",
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "update-chapter-count": "node src/scripts/updateChapterCount.js",
-    "test-comments-basic": "node src/scripts/testCommentSystem.js",
-    "test-comments-performance": "node src/scripts/testCommentSystem.js performance",
-    "test-comments-spam": "node src/scripts/testCommentSystem.js spam",
-    "test-comments-all": "node src/scripts/testCommentSystem.js all"
+    "update-chapter-count": "node src/scripts/updateChapterCount.js"
   },
   "keywords": [],
   "author": "",
