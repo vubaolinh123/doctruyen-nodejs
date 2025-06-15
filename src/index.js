@@ -32,20 +32,29 @@ console.log('\x1b[33m%s\x1b[0m', '-------------------------------------');
 app.use(express.json());
 
 // Centralized CORS Configuration
-// Only apply CORS in production environment
+// Apply CORS in both development and production environments
 if (process.env.NODE_ENV === 'production') {
   console.log('\x1b[36m%s\x1b[0m', `[${startupTimestamp}] ✓ Applying CORS for production environment`);
-  console.log('\x1b[36m%s\x1b[0m', `[${startupTimestamp}] ✓ Allowed origin: https://comic.linkcualinh.com`);
+  console.log('\x1b[36m%s\x1b[0m', `[${startupTimestamp}] ✓ Allowed origin: ${process.env.FRONTEND_URL}`);
 
   app.use(cors({
-    origin: 'https://comic.linkcualinh.com',
+    origin: process.env.FRONTEND_URL,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
   }));
 } else {
-  console.log('\x1b[36m%s\x1b[0m', `[${startupTimestamp}] ✓ Development environment - CORS configuration skipped`);
+  console.log('\x1b[36m%s\x1b[0m', `[${startupTimestamp}] ✓ Applying CORS for development environment`);
+  console.log('\x1b[36m%s\x1b[0m', `[${startupTimestamp}] ✓ Allowed origins: localhost:3000, localhost:3001`);
+
+  app.use(cors({
+    origin: ['http://localhost:3000', 'http://localhost:3001', 'https://localhost:3000', 'https://localhost:3001'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    optionsSuccessStatus: 200
+  }));
 }
 
 // Log incoming requests và responses
