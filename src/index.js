@@ -30,10 +30,23 @@ console.log('\x1b[36m%s\x1b[0m', `[${startupTimestamp}] ✓ Timezone: ${process.
 console.log('\x1b[33m%s\x1b[0m', '-------------------------------------');
 
 app.use(express.json());
-app.use(cors({
-    origin: '*', // *
+
+// Centralized CORS Configuration
+// Only apply CORS in production environment
+if (process.env.NODE_ENV === 'production') {
+  console.log('\x1b[36m%s\x1b[0m', `[${startupTimestamp}] ✓ Applying CORS for production environment`);
+  console.log('\x1b[36m%s\x1b[0m', `[${startupTimestamp}] ✓ Allowed origin: https://comic.linkcualinh.com`);
+
+  app.use(cors({
+    origin: 'https://comic.linkcualinh.com',
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
   }));
+} else {
+  console.log('\x1b[36m%s\x1b[0m', `[${startupTimestamp}] ✓ Development environment - CORS configuration skipped`);
+}
 
 // Log incoming requests và responses
 app.use(requestLogger);

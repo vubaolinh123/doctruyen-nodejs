@@ -191,36 +191,47 @@ class StoriesReadingSpecialController {
   }
 
   /**
-   * Thêm bookmark
+   * Thêm bookmark (tương thích với frontend API)
    */
   async addBookmark(req, res) {
     try {
       const { userId, storyId } = req.params;
-      const { chapterId, position = 0, note = '' } = req.body;
+      const { storyId: bodyStoryId, chapterId, note = '' } = req.body;
 
-      if (!userId || !storyId || !chapterId) {
+      // Kiểm tra quyền truy cập - user chỉ có thể tạo bookmark cho chính mình
+      if (req.user.id !== userId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Không có quyền tạo bookmark cho người dùng khác'
+        });
+      }
+
+      // Sử dụng storyId từ params hoặc body
+      const finalStoryId = bodyStoryId || storyId;
+
+      if (!userId || !finalStoryId || !chapterId) {
         return res.status(400).json({
           success: false,
-          message: 'User ID, Story ID and Chapter ID are required'
+          message: 'Thiếu thông tin bắt buộc: userId, storyId, chapterId'
         });
       }
 
       const bookmarkData = {
         chapterId,
-        position: Math.max(0, Math.min(100, position)),
+        position: 0, // Không sử dụng position trong hệ thống mới
         note: note.trim()
       };
 
       const item = await storiesReadingService.addBookmark(
         userId,
-        storyId,
+        finalStoryId,
         bookmarkData
       );
 
       res.json({
         success: true,
         data: item,
-        message: 'Bookmark added successfully'
+        message: 'Đã cập nhật/tạo mới bookmark thành công'
       });
     } catch (err) {
       console.error('Error in addBookmark:', err);
@@ -271,6 +282,44 @@ class StoriesReadingSpecialController {
       });
     }
   }
+
+  /**
+   * Lấy tất cả bookmarks của một story
+   */
+  async getBookmarks(req, res) {
+    try {
+      const { userId, storyId } = req.params;
+
+      if (!userId || !storyId) {
+        return res.status(400).json({
+          success: false,
+          message: 'User ID and Story ID are required'
+        });
+      }
+
+      const readingHistory = await storiesReadingService.findByUserAndStory(userId, storyId);
+
+      if (!readingHistory) {
+        return res.json({
+          success: true,
+          data: []
+        });
+      }
+
+      res.json({
+        success: true,
+        data: readingHistory.bookmarks || []
+      });
+    } catch (err) {
+      console.error('Error in getBookmarks:', err);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  }
+
+
 
   /**
    * Cập nhật ghi chú cá nhân

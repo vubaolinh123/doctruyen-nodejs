@@ -41,8 +41,8 @@ class StoriesReadingService {
       .skip((page - 1) * parseInt(limit))
       .limit(parseInt(limit))
       .populate('story_id', 'name slug image status authors categories')
-      .populate('current_chapter.chapter_id', 'name chapter_number slug')
-      .populate('last_completed_chapter.chapter_id', 'name chapter_number slug');
+      .populate('current_chapter.chapter_id', 'name chapter slug')
+      .populate('last_completed_chapter.chapter_id', 'name chapter slug');
 
     return {
       items,
@@ -58,9 +58,9 @@ class StoriesReadingService {
   async getById(id) {
     const item = await StoriesReading.findById(id)
       .populate('story_id', 'name slug image status authors categories')
-      .populate('current_chapter.chapter_id', 'name chapter_number slug')
-      .populate('last_completed_chapter.chapter_id', 'name chapter_number slug')
-      .populate('bookmarks.chapter_id', 'name chapter_number slug');
+      .populate('current_chapter.chapter_id', 'name chapter slug')
+      .populate('last_completed_chapter.chapter_id', 'name chapter slug')
+      .populate('bookmarks.chapter_id', 'name chapter slug');
 
     if (!item) {
       throw new Error('Not found');
@@ -134,17 +134,21 @@ class StoriesReadingService {
     // Validate story và chapter tồn tại
     await this.validateStoryAndChapter(storyId, chapterData.chapterId);
 
-    // Lấy thông tin chapter để có chapter_number
+    // Lấy thông tin chapter để có chapter number
     const chapter = await Chapter.findById(chapterData.chapterId)
-      .select('chapter_number name');
+      .select('chapter name');
 
     if (!chapter) {
       throw new Error('Chapter not found');
     }
 
+    if (chapter.chapter === undefined || chapter.chapter === null) {
+      throw new Error(`Chapter ${chapterData.chapterId} does not have a valid chapter number: ${chapter.chapter}`);
+    }
+
     const enrichedChapterData = {
       ...chapterData,
-      chapterNumber: chapter.chapter_number
+      chapterNumber: chapter.chapter
     };
 
     return StoriesReading.upsertReading(userId, storyId, enrichedChapterData, options);
@@ -163,7 +167,7 @@ class StoriesReadingService {
   async addBookmark(userId, storyId, bookmarkData) {
     // Validate chapter tồn tại
     const chapter = await Chapter.findById(bookmarkData.chapterId)
-      .select('chapter_number name');
+      .select('chapter name');
 
     if (!chapter) {
       throw new Error('Chapter not found');
@@ -171,7 +175,7 @@ class StoriesReadingService {
 
     const enrichedBookmarkData = {
       ...bookmarkData,
-      chapterNumber: chapter.chapter_number
+      chapterNumber: chapter.chapter
     };
 
     return StoriesReading.addBookmark(userId, storyId, enrichedBookmarkData);
@@ -347,8 +351,8 @@ class StoriesReadingService {
   async exportUserReadingData(userId) {
     const readingHistory = await StoriesReading.find({ user_id: userId })
       .populate('story_id', 'name slug image')
-      .populate('current_chapter.chapter_id', 'name chapter_number')
-      .populate('last_completed_chapter.chapter_id', 'name chapter_number')
+      .populate('current_chapter.chapter_id', 'name chapter')
+      .populate('last_completed_chapter.chapter_id', 'name chapter')
       .sort({ 'reading_stats.last_read_at': -1 });
 
     const stats = await this.getUserReadingStats(userId);

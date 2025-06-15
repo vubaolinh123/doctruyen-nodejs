@@ -23,6 +23,7 @@ module.exports = {
   // Bookmark operations
   addBookmark: specialController.addBookmark,
   removeBookmark: specialController.removeBookmark,
+  getBookmarks: specialController.getBookmarks,
 
   // Personal notes
   updatePersonalNotes: specialController.updatePersonalNotes,

@@ -60,10 +60,18 @@ module.exports = function(schema) {
 
   // Virtual format reading time
   schema.virtual('formatted_reading_time').get(function() {
-    const totalMinutes = this.reading_stats.total_reading_time || 0;
+    const totalSeconds = this.reading_stats.total_reading_time || 0;
+
+    // Convert seconds to appropriate unit
+    if (totalSeconds < 60) {
+      return `${totalSeconds} giây`;
+    }
+
+    const totalMinutes = Math.floor(totalSeconds / 60);
+    const remainingSeconds = totalSeconds % 60;
 
     if (totalMinutes < 60) {
-      return `${totalMinutes} phút`;
+      return remainingSeconds > 0 ? `${totalMinutes} phút ${remainingSeconds} giây` : `${totalMinutes} phút`;
     }
 
     const hours = Math.floor(totalMinutes / 60);

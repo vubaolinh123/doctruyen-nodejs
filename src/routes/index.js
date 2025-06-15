@@ -24,7 +24,7 @@ router.use('/users', require('./users'));
 router.use('/purchased-stories', auth, require('./purchasedStories'));
 router.use('/stories-reading', auth, require('./storiesReading'));
 router.use('/transactions', auth, require('./transactions'));
-router.use('/bookmarks', auth, require('./bookmarks'));
+
 // Route attendance không cần middleware auth ở đây vì đã có authenticateToken trong route
 router.use('/attendance', require('./attendance'));
 // Route comments

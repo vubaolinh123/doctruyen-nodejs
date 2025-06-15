@@ -59,45 +59,96 @@ module.exports = function(schema) {
       status = 'reading' // Trạng thái: 'reading' hoặc 'completed'
     } = chapterData;
 
-    // Prepare update operations - đã loại bỏ reading_position
-    const updateOps = {
-      $set: {
-        'current_chapter.chapter_id': chapterId,
-        'current_chapter.chapter_number': chapterNumber,
-        'reading_stats.last_read_at': new Date()
-      },
-      $inc: {
-        'reading_stats.visit_count': 1,
-        'reading_stats.total_reading_time': readingTime // Tính bằng giây
-      },
-      $setOnInsert: {
-        user_id: userId,
-        story_id: storyId,
-        reading_status: status,
-        'reading_stats.first_read_at': new Date()
-      }
-    };
+    try {
+      // Tách logic thành hai operations riêng biệt để tránh conflict hoàn toàn
+      // Bước 1: Kiểm tra xem document đã tồn tại chưa
+      const existingDoc = await this.findOne({ user_id: userId, story_id: storyId });
 
-    // Nếu đánh dấu chapter đã hoàn thành hoặc status là 'completed'
-    if (markCompleted || status === 'completed') {
-      updateOps.$set['last_completed_chapter.chapter_id'] = chapterId;
-      updateOps.$set['last_completed_chapter.chapter_number'] = chapterNumber;
-      updateOps.$set['last_completed_chapter.completed_at'] = new Date();
-      updateOps.$inc['reading_stats.completed_chapters'] = 1;
-      updateOps.$set['reading_status'] = 'completed';
-    } else if (status === 'reading') {
-      updateOps.$set['reading_status'] = 'reading';
+      if (existingDoc) {
+        // Document đã tồn tại - chỉ update
+
+      const updateOps = {
+        $set: {
+          'current_chapter.chapter_id': chapterId,
+          'current_chapter.chapter_number': chapterNumber,
+          'reading_stats.last_read_at': new Date()
+        },
+        $inc: {
+          'reading_stats.visit_count': 1,
+          'reading_stats.total_reading_time': readingTime
+        }
+      };
+
+      // Xử lý reading_status cho document đã tồn tại
+      if (markCompleted || status === 'completed') {
+        updateOps.$set['last_completed_chapter.chapter_id'] = chapterId;
+        updateOps.$set['last_completed_chapter.chapter_number'] = chapterNumber;
+        updateOps.$set['last_completed_chapter.completed_at'] = new Date();
+        updateOps.$inc['reading_stats.completed_chapters'] = 1;
+        updateOps.$set['reading_status'] = 'completed';
+      }
+        // Không set reading_status = 'reading' cho document đã tồn tại để tránh override 'completed'
+
+        try {
+          const result = await this.findOneAndUpdate(
+            { user_id: userId, story_id: storyId },
+            updateOps,
+            { new: true, runValidators: true }
+          );
+
+          return result;
+
+        } catch (error) {
+          throw error;
+        }
+
+      } else {
+        // Document chưa tồn tại - tạo mới
+        const newDoc = {
+          user_id: userId,
+          story_id: storyId,
+          current_chapter: {
+            chapter_id: chapterId,
+            chapter_number: chapterNumber
+          },
+          reading_stats: {
+            first_read_at: new Date(),
+            last_read_at: new Date(),
+            visit_count: 1,
+            total_reading_time: readingTime,
+            completed_chapters: markCompleted || status === 'completed' ? 1 : 0
+          },
+          reading_status: markCompleted || status === 'completed' ? 'completed' : 'reading'
+        };
+
+        // Thêm completed chapter info nếu cần
+        if (markCompleted || status === 'completed') {
+          newDoc.last_completed_chapter = {
+            chapter_id: chapterId,
+            chapter_number: chapterNumber,
+            completed_at: new Date()
+          };
+        }
+
+        try {
+          const result = await this.create(newDoc);
+          return result;
+
+        } catch (error) {
+          throw error;
+        }
+      }
+
+    } catch (globalError) {
+      // Provide specific error messages based on error type
+      if (globalError.code === 40 || globalError.message.includes('conflict')) {
+        throw new Error(`MongoDB conflict error resolved with new approach. Original error: ${globalError.message}`);
+      } else if (globalError.code === 11000) {
+        throw new Error(`Duplicate key error: Document may already exist. Original error: ${globalError.message}`);
+      } else {
+        throw new Error(`Database operation failed: ${globalError.message}`);
+      }
     }
-
-    return this.findOneAndUpdate(
-      { user_id: userId, story_id: storyId },
-      updateOps,
-      {
-        new: true,
-        upsert: true,
-        runValidators: true
-      }
-    );
   };
 
   /**

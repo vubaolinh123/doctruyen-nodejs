@@ -62,6 +62,9 @@ router.put('/user/:userId/story/:storyId/notes', controller.updatePersonalNotes)
 // Thêm bookmark
 router.post('/user/:userId/story/:storyId/bookmarks', controller.addBookmark);
 
+// Lấy tất cả bookmarks của một story
+router.get('/user/:userId/story/:storyId/bookmarks', controller.getBookmarks);
+
 // Xóa bookmark
 router.delete('/user/:userId/story/:storyId/bookmarks/:bookmarkId', controller.removeBookmark);
 
