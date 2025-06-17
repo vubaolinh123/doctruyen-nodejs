@@ -548,9 +548,81 @@ const updateUserProfile = async (userId, updateData) => {
     }
   }
 
-  if (updateData.banner !== undefined) user.banner = updateData.banner;
+  // Handle banner data conversion - same logic as avatar
+  if (updateData.banner !== undefined) {
+    if (typeof updateData.banner === 'string' && updateData.banner.startsWith('{')) {
+      try {
+        // Parse JSON string to object for new schema
+        const bannerData = JSON.parse(updateData.banner);
+        user.banner = {
+          primaryUrl: bannerData.primaryUrl || bannerData.bannerUrl || '',
+          variants: bannerData.variants || bannerData.sizes || [],
+          googleDriveId: bannerData.googleDriveId || '',
+          lastUpdated: new Date(),
+          position: bannerData.position || 0.5,
+          containerHeight: bannerData.containerHeight || 450,
+          metadata: {
+            fileName: bannerData.metadata?.fileName || '',
+            size: bannerData.metadata?.size || '',
+            mimeType: bannerData.metadata?.mimeType || ''
+          }
+        };
+      } catch (e) {
+        // If parsing fails, treat as simple URL
+        user.banner = {
+          primaryUrl: updateData.banner,
+          variants: [],
+          googleDriveId: '',
+          lastUpdated: new Date(),
+          position: 0.5,
+          containerHeight: 450,
+          metadata: {
+            fileName: '',
+            size: '',
+            mimeType: ''
+          }
+        };
+      }
+    } else if (typeof updateData.banner === 'object') {
+      // Already an object, store directly
+      user.banner = updateData.banner;
+    } else {
+      // Simple string URL - convert to object schema
+      user.banner = {
+        primaryUrl: updateData.banner,
+        variants: [],
+        googleDriveId: '',
+        lastUpdated: new Date(),
+        position: 0.5,
+        containerHeight: 450,
+        metadata: {
+          fileName: '',
+          size: '',
+          mimeType: ''
+        }
+      };
+    }
+  }
   if (updateData.gender !== undefined) user.gender = updateData.gender;
-  if (updateData.birthday !== undefined) user.birthday = updateData.birthday;
+
+  // Handle birthday field with proper date conversion
+  if (updateData.birthday !== undefined) {
+    if (updateData.birthday === '' || updateData.birthday === null) {
+      user.birthday = null;
+    } else {
+      // Ensure birthday is stored as a proper Date object
+      try {
+        const birthdayDate = new Date(updateData.birthday);
+        if (!isNaN(birthdayDate.getTime())) {
+          user.birthday = birthdayDate;
+        } else {
+          console.warn('[AuthService] Invalid birthday format:', updateData.birthday);
+        }
+      } catch (error) {
+        console.warn('[AuthService] Error parsing birthday:', error);
+      }
+    }
+  }
 
   // Khởi tạo social object nếu chưa có, preserving existing data
   if (!user.social) {

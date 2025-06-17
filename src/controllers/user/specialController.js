@@ -244,3 +244,46 @@ exports.getUserCoinsForUser = async (req, res) => {
     });
   }
 };
+
+/**
+ * Lấy thống kê toàn diện của người dùng
+ * @route GET /api/users/me/comprehensive-stats
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ * @access Private (Yêu cầu xác thực)
+ */
+exports.getUserComprehensiveStats = async (req, res) => {
+  try {
+    console.log('[UserController] Getting comprehensive stats for user:', req.user?.id);
+
+    // Kiểm tra xác thực
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized. User authentication required.'
+      });
+    }
+
+    const userId = req.user.id;
+
+    // Gọi service để lấy thống kê toàn diện
+    const comprehensiveStats = await userService.getUserComprehensiveStats(userId);
+
+    console.log('[UserController] ✅ Successfully retrieved comprehensive stats');
+
+    res.json({
+      success: true,
+      data: comprehensiveStats,
+      message: 'Comprehensive user statistics retrieved successfully'
+    });
+
+  } catch (error) {
+    console.error('[UserController] ❌ Error getting comprehensive stats:', error);
+
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ nội bộ khi lấy thống kê người dùng',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};

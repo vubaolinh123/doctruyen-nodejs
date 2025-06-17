@@ -14,6 +14,7 @@ module.exports = {
   // Controllers đặc biệt
   getBySlug: specialController.getBySlug,
   getSlugById: specialController.getSlugById,
+  getUserComprehensiveStats: specialController.getUserComprehensiveStats,
 
   // Admin controllers
   getUserStats: adminController.getUserStats,

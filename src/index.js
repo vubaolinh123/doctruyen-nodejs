@@ -29,7 +29,19 @@ console.log('\x1b[36m%s\x1b[0m', `[${startupTimestamp}] ✓ Môi trường: ${pr
 console.log('\x1b[36m%s\x1b[0m', `[${startupTimestamp}] ✓ Timezone: ${process.env.TZ}`);
 console.log('\x1b[33m%s\x1b[0m', '-------------------------------------');
 
-app.use(express.json());
+// Configure Express body parsers with proper size limits for file uploads
+app.use(express.json({ limit: '50mb' })); // Increase JSON limit
+app.use(express.urlencoded({
+  limit: '50mb',
+  extended: true,
+  parameterLimit: 50000
+})); // Support large form data
+app.use(express.raw({
+  limit: '50mb',
+  type: ['application/octet-stream']
+  // IMPORTANT: Do NOT include 'multipart/form-data' here as it conflicts with multer
+  // Multer needs to handle multipart data directly, not Express raw middleware
+})); // Support raw binary data
 
 // Centralized CORS Configuration
 // Apply CORS in both development and production environments
@@ -37,12 +49,28 @@ if (process.env.NODE_ENV === 'production') {
   console.log('\x1b[36m%s\x1b[0m', `[${startupTimestamp}] ✓ Applying CORS for production environment`);
   console.log('\x1b[36m%s\x1b[0m', `[${startupTimestamp}] ✓ Allowed origin: ${process.env.FRONTEND_URL}`);
 
+  // Validate FRONTEND_URL environment variable
+  if (!process.env.FRONTEND_URL) {
+    console.error('\x1b[31m%s\x1b[0m', `[${startupTimestamp}] ✗ ERROR: FRONTEND_URL environment variable is not set!`);
+    process.exit(1);
+  }
+
   app.use(cors({
     origin: process.env.FRONTEND_URL,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+      'Origin',
+      'Cache-Control',
+      'X-File-Name'
+    ],
+    exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
+    optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
+    maxAge: 86400 // Cache preflight for 24 hours
   }));
 } else {
   console.log('\x1b[36m%s\x1b[0m', `[${startupTimestamp}] ✓ Applying CORS for development environment`);
@@ -52,10 +80,32 @@ if (process.env.NODE_ENV === 'production') {
     origin: ['http://localhost:3000', 'http://localhost:3001', 'https://localhost:3000', 'https://localhost:3001'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    optionsSuccessStatus: 200
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+      'Origin',
+      'Cache-Control',
+      'X-File-Name'
+    ],
+    exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
+    optionsSuccessStatus: 200,
+    maxAge: 86400
   }));
 }
+
+// Debug middleware for file upload requests
+app.use('/api/images/upload', (req, res, next) => {
+  const debugTimestamp = getLogTimestamp();
+  console.log('\x1b[35m%s\x1b[0m', `[${debugTimestamp}] 🔍 File upload request debug:`);
+  console.log('\x1b[35m%s\x1b[0m', `[${debugTimestamp}] - Method: ${req.method}`);
+  console.log('\x1b[35m%s\x1b[0m', `[${debugTimestamp}] - Origin: ${req.headers.origin}`);
+  console.log('\x1b[35m%s\x1b[0m', `[${debugTimestamp}] - Content-Type: ${req.headers['content-type']}`);
+  console.log('\x1b[35m%s\x1b[0m', `[${debugTimestamp}] - Content-Length: ${req.headers['content-length']}`);
+  console.log('\x1b[35m%s\x1b[0m', `[${debugTimestamp}] - Authorization: ${req.headers.authorization ? 'Present' : 'Missing'}`);
+  next();
+});
 
 // Log incoming requests và responses
 app.use(requestLogger);

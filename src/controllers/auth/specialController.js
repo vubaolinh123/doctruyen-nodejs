@@ -214,6 +214,11 @@ exports.updateBannerPosition = async (req, res) => {
 
     // Cập nhật position với enhanced positioning metadata
     if (enhancedPositioning) {
+      console.log('[updateBannerPosition] Creating enhanced positioning metadata:', {
+        position,
+        enhancedPositioning
+      });
+
       // Create enhanced positioning metadata
       bannerData.positioning = {
         position: position,
@@ -232,13 +237,20 @@ exports.updateBannerPosition = async (req, res) => {
         viewportHeight: enhancedPositioning.viewportHeight
       };
 
-
+      console.log('[updateBannerPosition] Enhanced positioning metadata created:', bannerData.positioning);
     }
 
     // Update legacy fields for backward compatibility
     bannerData.position = position;
     bannerData.containerHeight = containerHeight || 450;
     bannerData.lastUpdated = new Date();
+
+    console.log('[updateBannerPosition] Final banner data before save:', {
+      position: bannerData.position,
+      enhancedPosition: bannerData.positioning?.position,
+      hasEnhancedPositioning: !!bannerData.positioning,
+      enhancedMetadata: bannerData.positioning
+    });
 
     // Lưu lại vào database (store as proper MongoDB object)
     user.banner = bannerData;
@@ -268,7 +280,7 @@ exports.updateBannerPosition = async (req, res) => {
  */
 async function handleTempToGoogleDriveUpload(req, res, userId, tempId, position, containerHeight) {
   try {
-
+    const { enhancedPositioning } = req.body;
 
     // Step 1: Get temp image path
     const { getTempImagePath } = require('../image/tempImageController');
@@ -328,6 +340,42 @@ async function handleTempToGoogleDriveUpload(req, res, userId, tempId, position,
       }
     };
 
+    // Add enhanced positioning metadata if provided
+    if (enhancedPositioning) {
+      console.log('[handleTempToGoogleDriveUpload] Adding enhanced positioning metadata:', {
+        position: position || 0,
+        enhancedPositioning
+      });
+
+      bannerData.positioning = {
+        position: position || 0,
+        containerHeight: containerHeight || 450,
+        containerWidth: enhancedPositioning.containerWidth,
+        imageWidth: enhancedPositioning.imageWidth,
+        imageHeight: enhancedPositioning.imageHeight,
+        aspectRatio: enhancedPositioning.aspectRatio,
+        calculatedImageHeight: enhancedPositioning.calculatedImageHeight,
+        maxDragDistance: enhancedPositioning.maxDragDistance,
+        minOffset: enhancedPositioning.minOffset,
+        maxOffset: enhancedPositioning.maxOffset,
+        positionedAt: new Date(),
+        deviceType: enhancedPositioning.deviceType,
+        viewportWidth: enhancedPositioning.viewportWidth,
+        viewportHeight: enhancedPositioning.viewportHeight
+      };
+
+      console.log('[handleTempToGoogleDriveUpload] Enhanced positioning metadata created:', bannerData.positioning);
+    } else {
+      console.log('[handleTempToGoogleDriveUpload] No enhanced positioning metadata provided');
+    }
+
+    console.log('[handleTempToGoogleDriveUpload] Final banner data before save:', {
+      position: bannerData.position,
+      enhancedPosition: bannerData.positioning?.position,
+      hasEnhancedPositioning: !!bannerData.positioning,
+      enhancedMetadata: bannerData.positioning
+    });
+
     // Store banner data as proper MongoDB object (no JSON.stringify needed)
     user.banner = bannerData;
     await user.save();
@@ -354,7 +402,8 @@ async function handleTempToGoogleDriveUpload(req, res, userId, tempId, position,
       message: 'Banner uploaded and positioned successfully',
       bannerUrl: uploadResult.publicUrl,
       position: position,
-      googleDriveId: uploadResult.id
+      googleDriveId: uploadResult.id,
+      bannerData: bannerData // Include complete banner data with enhanced positioning
     });
 
   } catch (error) {

@@ -217,6 +217,20 @@ class StoriesReadingService {
   }
 
   /**
+   * Lấy tất cả bookmarks của user từ tất cả stories
+   */
+  async getAllUserBookmarks(userId, options = {}) {
+    return StoriesReading.getAllUserBookmarks(userId, options);
+  }
+
+  /**
+   * Xóa toàn bộ lịch sử đọc của user cho một story (bao gồm tất cả bookmarks)
+   */
+  async deleteUserStoryReading(userId, storyId) {
+    return StoriesReading.deleteUserStoryReading(userId, storyId);
+  }
+
+  /**
    * Cleanup orphaned records
    */
   async cleanupOrphanedRecords() {

@@ -362,3 +362,8 @@ exports.cleanupTempImageInternal = async (tempId) => {
     return { success: false, error: 'Failed to delete temporary image' };
   }
 };
+
+/**
+ * Export tempImages Map for use by other controllers
+ */
+exports.tempImages = tempImages;

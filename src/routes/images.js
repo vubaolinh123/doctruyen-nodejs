@@ -436,8 +436,20 @@ router.post('/upload',
  */
 router.post('/upload/temp',
   authenticateToken,
+  require('../middleware/upload/uploadMiddleware').cleanupMemory,
   require('../middleware/upload/uploadMiddleware').uploadGeneric,
   require('../middleware/upload/uploadMiddleware').handleMulterError,
+  // Add debug middleware for temp uploads
+  (req, res, next) => {
+    console.log('[TempUpload] Middleware - File received:', {
+      hasFile: !!req.file,
+      originalname: req.file?.originalname,
+      mimetype: req.file?.mimetype,
+      size: req.file?.size,
+      bufferLength: req.file?.buffer?.length
+    });
+    next();
+  },
   uploadTempImage
 );
 

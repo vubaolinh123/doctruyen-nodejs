@@ -464,6 +464,95 @@ class StoriesReadingSpecialController {
       });
     }
   }
+
+  /**
+   * Lấy tất cả bookmarks của user từ tất cả stories
+   */
+  async getAllUserBookmarks(req, res) {
+    try {
+      const { userId } = req.params;
+      const { limit = 50, skip = 0, sort = 'created_at' } = req.query;
+
+      if (!userId) {
+        return res.status(400).json({
+          success: false,
+          message: 'User ID is required'
+        });
+      }
+
+      // Kiểm tra quyền truy cập - user chỉ có thể xem bookmark của chính mình
+      if (req.user.id !== userId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Không có quyền xem bookmark của người dùng khác'
+        });
+      }
+
+      const options = {
+        limit: parseInt(limit),
+        skip: parseInt(skip),
+        sort
+      };
+
+      const result = await storiesReadingService.getAllUserBookmarks(userId, options);
+
+      res.json({
+        success: true,
+        data: result.bookmarks,
+        pagination: {
+          total: result.total,
+          totalPages: result.totalPages,
+          currentPage: result.currentPage,
+          limit: parseInt(limit),
+          skip: parseInt(skip)
+        }
+      });
+    } catch (err) {
+      console.error('Error in getAllUserBookmarks:', err);
+      res.status(500).json({
+        success: false,
+        message: err.message
+      });
+    }
+  }
+
+  /**
+   * Xóa toàn bộ lịch sử đọc của user cho một story (bao gồm tất cả bookmarks)
+   */
+  async deleteUserStoryReading(req, res) {
+    try {
+      const { userId, storyId } = req.params;
+
+      if (!userId || !storyId) {
+        return res.status(400).json({
+          success: false,
+          message: 'User ID and Story ID are required'
+        });
+      }
+
+      const result = await storiesReadingService.deleteUserStoryReading(userId, storyId);
+
+      res.json({
+        success: true,
+        message: result.message,
+        data: result.deletedRecord
+      });
+    } catch (err) {
+      console.error('Error in deleteUserStoryReading:', err);
+
+      if (err.message.includes('Không tìm thấy')) {
+        return res.status(404).json({
+          success: false,
+          message: err.message
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        message: err.message
+      });
+    }
+  }
 }
 
 module.exports = new StoriesReadingSpecialController();

@@ -14,6 +14,8 @@ router.get('/test', (req, res) => {
   });
 });
 
+
+
 // ============================================
 // ROUTES CRUD CƠ BẢN
 // ============================================
@@ -39,6 +41,9 @@ router.get('/user/:userId/recent', controller.getRecentlyRead);
 // Tìm kiếm trong lịch sử đọc
 router.get('/user/:userId/search', controller.searchReadingHistory);
 
+// Lấy tất cả bookmarks của user từ tất cả stories
+router.get('/user/:userId/bookmarks', controller.getAllUserBookmarks);
+
 // ============================================
 // ROUTES THEO USER VÀ STORY
 // ============================================
@@ -54,6 +59,9 @@ router.put('/user/:userId/story/:storyId/status', controller.updateReadingStatus
 
 // Cập nhật ghi chú cá nhân
 router.put('/user/:userId/story/:storyId/notes', controller.updatePersonalNotes);
+
+// Xóa toàn bộ lịch sử đọc của user cho một story (bao gồm tất cả bookmarks)
+router.delete('/user/:userId/story/:storyId', controller.deleteUserStoryReading);
 
 // ============================================
 // BOOKMARK ROUTES

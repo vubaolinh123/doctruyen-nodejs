@@ -1,6 +1,9 @@
 const mongoose = require('mongoose');
 const User = require('../../models/user');
 const Transaction = require('../../models/transaction');
+const StoriesReading = require('../../models/storiesReading');
+const Comment = require('../../models/comment');
+const UserRating = require('../../models/userRating');
 
 /**
  * Service xử lý các tác vụ liên quan đến người dùng
@@ -194,11 +197,197 @@ class UserService {
    */
   async updateUser(id, updateData) {
     try {
-      const user = await User.findByIdAndUpdate(id, updateData, { new: true });
+      const user = await User.findById(id);
       if (!user) {
         throw new Error('Không tìm thấy người dùng');
       }
-      return user;
+
+      // Handle avatar data conversion - same logic as authService.updateUserProfile
+      if (updateData.avatar !== undefined) {
+        if (typeof updateData.avatar === 'string' && updateData.avatar.startsWith('{')) {
+          try {
+            // Parse JSON string to object for new schema
+            const avatarData = JSON.parse(updateData.avatar);
+            user.avatar = {
+              primaryUrl: avatarData.primaryUrl || avatarData.avatarUrl || '',
+              variants: avatarData.variants || avatarData.sizes || [],
+              googleDriveId: avatarData.googleDriveId || '',
+              lastUpdated: new Date(),
+              metadata: {
+                originalFilename: avatarData.metadata?.originalFilename || '',
+                processedVariants: avatarData.metadata?.processedVariants || 0,
+                uploadedFiles: avatarData.metadata?.uploadedFiles || 0,
+                fileSize: avatarData.metadata?.fileSize || '',
+                mimeType: avatarData.metadata?.mimeType || '',
+                dimensions: avatarData.metadata?.dimensions || { width: 0, height: 0 }
+              }
+            };
+          } catch (e) {
+            // If parsing fails, treat as simple URL
+            user.avatar = {
+              primaryUrl: updateData.avatar,
+              variants: [],
+              googleDriveId: '',
+              lastUpdated: new Date(),
+              metadata: {
+                originalFilename: '',
+                processedVariants: 0,
+                uploadedFiles: 0,
+                fileSize: '',
+                mimeType: '',
+                dimensions: { width: 0, height: 0 }
+              }
+            };
+          }
+        } else if (typeof updateData.avatar === 'object') {
+          // Already an object, store directly
+          user.avatar = updateData.avatar;
+        } else {
+          // Simple string URL - convert to object schema
+          user.avatar = {
+            primaryUrl: updateData.avatar,
+            variants: [],
+            googleDriveId: '',
+            lastUpdated: new Date(),
+            metadata: {
+              originalFilename: '',
+              processedVariants: 0,
+              uploadedFiles: 0,
+              fileSize: '',
+              mimeType: '',
+              dimensions: { width: 0, height: 0 }
+            }
+          };
+        }
+        // Remove avatar from updateData to prevent overwriting
+        delete updateData.avatar;
+      }
+
+      // Handle banner data conversion - same logic as authService.updateUserProfile
+      if (updateData.banner !== undefined) {
+        if (typeof updateData.banner === 'string' && updateData.banner.startsWith('{')) {
+          try {
+            // Parse JSON string to object for new schema
+            const bannerData = JSON.parse(updateData.banner);
+            user.banner = {
+              primaryUrl: bannerData.primaryUrl || bannerData.bannerUrl || '',
+              variants: bannerData.variants || bannerData.sizes || [],
+              googleDriveId: bannerData.googleDriveId || '',
+              lastUpdated: new Date(),
+              position: bannerData.position || 0.5,
+              containerHeight: bannerData.containerHeight || 450,
+              metadata: {
+                fileName: bannerData.metadata?.fileName || '',
+                size: bannerData.metadata?.size || '',
+                mimeType: bannerData.metadata?.mimeType || ''
+              }
+            };
+          } catch (e) {
+            // If parsing fails, treat as simple URL
+            user.banner = {
+              primaryUrl: updateData.banner,
+              variants: [],
+              googleDriveId: '',
+              lastUpdated: new Date(),
+              position: 0.5,
+              containerHeight: 450,
+              metadata: {
+                fileName: '',
+                size: '',
+                mimeType: ''
+              }
+            };
+          }
+        } else if (typeof updateData.banner === 'object') {
+          // Already an object, store directly
+          user.banner = updateData.banner;
+        } else {
+          // Simple string URL - convert to object schema
+          user.banner = {
+            primaryUrl: updateData.banner,
+            variants: [],
+            googleDriveId: '',
+            lastUpdated: new Date(),
+            position: 0.5,
+            containerHeight: 450,
+            metadata: {
+              fileName: '',
+              size: '',
+              mimeType: ''
+            }
+          };
+        }
+        // Remove banner from updateData to prevent overwriting
+        delete updateData.banner;
+      }
+
+      // Handle social data properly
+      if (updateData.bio !== undefined ||
+          updateData.facebook !== undefined ||
+          updateData.twitter !== undefined ||
+          updateData.instagram !== undefined ||
+          updateData.youtube !== undefined ||
+          updateData.website !== undefined) {
+
+        // Initialize social object if it doesn't exist
+        if (!user.social) {
+          user.social = {
+            bio: '',
+            facebook: '',
+            twitter: '',
+            instagram: '',
+            youtube: '',
+            website: ''
+          };
+        }
+
+        // Update social fields
+        if (updateData.bio !== undefined) user.social.bio = updateData.bio;
+        if (updateData.facebook !== undefined) user.social.facebook = updateData.facebook;
+        if (updateData.twitter !== undefined) user.social.twitter = updateData.twitter;
+        if (updateData.instagram !== undefined) user.social.instagram = updateData.instagram;
+        if (updateData.youtube !== undefined) user.social.youtube = updateData.youtube;
+        if (updateData.website !== undefined) user.social.website = updateData.website;
+
+        // Remove social fields from updateData to prevent overwriting
+        delete updateData.bio;
+        delete updateData.facebook;
+        delete updateData.twitter;
+        delete updateData.instagram;
+        delete updateData.youtube;
+        delete updateData.website;
+      }
+
+      // Handle birthday field with proper date conversion
+      if (updateData.birthday !== undefined) {
+        if (updateData.birthday === '' || updateData.birthday === null) {
+          user.birthday = null;
+        } else {
+          // Ensure birthday is stored as a proper Date object
+          try {
+            const birthdayDate = new Date(updateData.birthday);
+            if (!isNaN(birthdayDate.getTime())) {
+              user.birthday = birthdayDate;
+            } else {
+              console.warn('[UserService] Invalid birthday format:', updateData.birthday);
+            }
+          } catch (error) {
+            console.warn('[UserService] Error parsing birthday:', error);
+          }
+        }
+        delete updateData.birthday;
+      }
+
+      // Apply remaining updates
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key] !== undefined) {
+          user[key] = updateData[key];
+        }
+      });
+
+      // Save the user with all updates
+      const updatedUser = await user.save();
+      return updatedUser;
     } catch (error) {
       throw error;
     }
@@ -1310,6 +1499,369 @@ class UserService {
 
       return growthStats;
     } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Lấy thống kê toàn diện của người dùng
+   * Bao gồm: thể loại yêu thích, thành tích, và hoạt động theo thời gian
+   * @param {string} userId - ID người dùng
+   * @returns {Object} Thống kê toàn diện
+   */
+  async getUserComprehensiveStats(userId) {
+    try {
+      console.log(`[UserService] Getting comprehensive stats for user: ${userId}`);
+
+      // Convert userId to ObjectId
+      const userObjectId = new mongoose.Types.ObjectId(userId);
+
+      // 1. Lấy thống kê thể loại yêu thích
+      const favoriteGenresStats = await this.getFavoriteGenresStats(userObjectId);
+
+      // 2. Lấy thống kê thành tích
+      const achievementsStats = await this.getAchievementsStats(userObjectId);
+
+      // 3. Lấy dữ liệu hoạt động theo thời gian
+      const activityTimelineStats = await this.getActivityTimelineStats(userObjectId);
+
+      console.log(`[UserService] ✅ Successfully retrieved comprehensive stats for user: ${userId}`);
+
+      return {
+        favoriteGenres: favoriteGenresStats,
+        achievements: achievementsStats,
+        activityTimeline: activityTimelineStats
+      };
+    } catch (error) {
+      console.error(`[UserService] ❌ Error getting comprehensive stats for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Lấy thống kê thể loại yêu thích của người dùng
+   * @param {ObjectId} userId - ID người dùng
+   * @returns {Array} Danh sách thể loại yêu thích
+   */
+  async getFavoriteGenresStats(userId) {
+    try {
+      const pipeline = [
+        // Match user's reading records
+        { $match: { user_id: userId } },
+
+        // Lookup story information with categories
+        {
+          $lookup: {
+            from: 'stories',
+            localField: 'story_id',
+            foreignField: '_id',
+            as: 'story'
+          }
+        },
+
+        // Unwind story array
+        { $unwind: '$story' },
+
+        // Lookup categories
+        {
+          $lookup: {
+            from: 'categories',
+            localField: 'story.categories',
+            foreignField: '_id',
+            as: 'categories'
+          }
+        },
+
+        // Unwind categories to count each genre separately
+        { $unwind: '$categories' },
+
+        // Group by category to count occurrences
+        {
+          $group: {
+            _id: '$categories._id',
+            name: { $first: '$categories.name' },
+            slug: { $first: '$categories.slug' },
+            count: { $sum: 1 }
+          }
+        },
+
+        // Sort by count descending
+        { $sort: { count: -1 } },
+
+        // Limit to top 5 genres
+        { $limit: 5 }
+      ];
+
+      const genreStats = await StoriesReading.aggregate(pipeline);
+
+      // Calculate total stories for percentage calculation
+      const totalStories = await StoriesReading.countDocuments({ user_id: userId });
+
+      // Format results with percentages
+      const formattedStats = genreStats.map(genre => ({
+        name: genre.name,
+        slug: genre.slug,
+        count: genre.count,
+        percentage: totalStories > 0 ? Math.round((genre.count / totalStories) * 100) : 0
+      }));
+
+      console.log(`[UserService] Found ${formattedStats.length} favorite genres for user`);
+      return formattedStats;
+    } catch (error) {
+      console.error('[UserService] Error getting favorite genres stats:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Lấy thống kê thành tích của người dùng
+   * @param {ObjectId} userId - ID người dùng
+   * @returns {Object} Thống kê thành tích
+   */
+  async getAchievementsStats(userId) {
+    try {
+      // Get reading stats using existing method
+      const readingStats = await StoriesReading.getUserReadingStats(userId);
+
+      // Count comments by user
+      const totalComments = await Comment.countDocuments({ user_id: userId });
+
+      // Count ratings by user
+      const totalRatings = await UserRating.countDocuments({ user_id: userId });
+
+      const achievements = {
+        totalStoriesRead: readingStats.total_stories || 0,
+        totalChaptersRead: readingStats.total_chapters_read || 0,
+        totalComments: totalComments || 0,
+        totalRatings: totalRatings || 0,
+        totalReadingTime: readingStats.total_reading_time || 0 // in seconds
+      };
+
+      console.log(`[UserService] Retrieved achievements stats:`, achievements);
+      return achievements;
+    } catch (error) {
+      console.error('[UserService] Error getting achievements stats:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Lấy dữ liệu hoạt động theo thời gian của người dùng
+   * @param {ObjectId} userId - ID người dùng
+   * @returns {Object} Dữ liệu hoạt động theo thời gian
+   */
+  async getActivityTimelineStats(userId) {
+    try {
+      const timezone = 'Asia/Ho_Chi_Minh';
+
+      // Get daily activity for last 30 days
+      const dailyActivity = await this.getDailyActivityStats(userId, 30, timezone);
+
+      // Get monthly activity for last 12 months
+      const monthlyActivity = await this.getMonthlyActivityStats(userId, 12, timezone);
+
+      // Get yearly activity for last 3 years
+      const yearlyActivity = await this.getYearlyActivityStats(userId, 3, timezone);
+
+      const activityTimeline = {
+        daily: dailyActivity,
+        monthly: monthlyActivity,
+        yearly: yearlyActivity
+      };
+
+      console.log(`[UserService] Retrieved activity timeline with ${dailyActivity.length} daily, ${monthlyActivity.length} monthly, ${yearlyActivity.length} yearly records`);
+      return activityTimeline;
+    } catch (error) {
+      console.error('[UserService] Error getting activity timeline stats:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Lấy thống kê hoạt động hàng ngày
+   * @param {ObjectId} userId - ID người dùng
+   * @param {number} days - Số ngày gần đây
+   * @param {string} timezone - Múi giờ
+   * @returns {Array} Thống kê hoạt động hàng ngày
+   */
+  async getDailyActivityStats(userId, days = 30, timezone = 'Asia/Ho_Chi_Minh') {
+    try {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+
+      const pipeline = [
+        {
+          $match: {
+            user_id: userId,
+            'reading_stats.last_read_at': {
+              $gte: startDate,
+              $lte: endDate
+            }
+          }
+        },
+        {
+          $addFields: {
+            localDate: {
+              $dateToString: {
+                format: "%Y-%m-%d",
+                date: "$reading_stats.last_read_at",
+                timezone: timezone
+              }
+            }
+          }
+        },
+        {
+          $group: {
+            _id: "$localDate",
+            chaptersRead: { $sum: "$reading_stats.completed_chapters" },
+            readingTime: { $sum: "$reading_stats.total_reading_time" },
+            storiesAccessed: { $sum: 1 }
+          }
+        },
+        {
+          $sort: { _id: 1 }
+        },
+        {
+          $project: {
+            date: "$_id",
+            chaptersRead: 1,
+            readingTime: 1,
+            storiesAccessed: 1,
+            _id: 0
+          }
+        }
+      ];
+
+      return await StoriesReading.aggregate(pipeline);
+    } catch (error) {
+      console.error('[UserService] Error getting daily activity stats:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Lấy thống kê hoạt động hàng tháng
+   * @param {ObjectId} userId - ID người dùng
+   * @param {number} months - Số tháng gần đây
+   * @param {string} timezone - Múi giờ
+   * @returns {Array} Thống kê hoạt động hàng tháng
+   */
+  async getMonthlyActivityStats(userId, months = 12, timezone = 'Asia/Ho_Chi_Minh') {
+    try {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setMonth(startDate.getMonth() - months);
+
+      const pipeline = [
+        {
+          $match: {
+            user_id: userId,
+            'reading_stats.last_read_at': {
+              $gte: startDate,
+              $lte: endDate
+            }
+          }
+        },
+        {
+          $addFields: {
+            localMonth: {
+              $dateToString: {
+                format: "%Y-%m",
+                date: "$reading_stats.last_read_at",
+                timezone: timezone
+              }
+            }
+          }
+        },
+        {
+          $group: {
+            _id: "$localMonth",
+            chaptersRead: { $sum: "$reading_stats.completed_chapters" },
+            readingTime: { $sum: "$reading_stats.total_reading_time" },
+            storiesAccessed: { $sum: 1 }
+          }
+        },
+        {
+          $sort: { _id: 1 }
+        },
+        {
+          $project: {
+            month: "$_id",
+            chaptersRead: 1,
+            readingTime: 1,
+            storiesAccessed: 1,
+            _id: 0
+          }
+        }
+      ];
+
+      return await StoriesReading.aggregate(pipeline);
+    } catch (error) {
+      console.error('[UserService] Error getting monthly activity stats:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Lấy thống kê hoạt động hàng năm
+   * @param {ObjectId} userId - ID người dùng
+   * @param {number} years - Số năm gần đây
+   * @param {string} timezone - Múi giờ
+   * @returns {Array} Thống kê hoạt động hàng năm
+   */
+  async getYearlyActivityStats(userId, years = 3, timezone = 'Asia/Ho_Chi_Minh') {
+    try {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setFullYear(startDate.getFullYear() - years);
+
+      const pipeline = [
+        {
+          $match: {
+            user_id: userId,
+            'reading_stats.last_read_at': {
+              $gte: startDate,
+              $lte: endDate
+            }
+          }
+        },
+        {
+          $addFields: {
+            localYear: {
+              $dateToString: {
+                format: "%Y",
+                date: "$reading_stats.last_read_at",
+                timezone: timezone
+              }
+            }
+          }
+        },
+        {
+          $group: {
+            _id: "$localYear",
+            chaptersRead: { $sum: "$reading_stats.completed_chapters" },
+            readingTime: { $sum: "$reading_stats.total_reading_time" },
+            storiesAccessed: { $sum: 1 }
+          }
+        },
+        {
+          $sort: { _id: 1 }
+        },
+        {
+          $project: {
+            year: "$_id",
+            chaptersRead: 1,
+            readingTime: 1,
+            storiesAccessed: 1,
+            _id: 0
+          }
+        }
+      ];
+
+      return await StoriesReading.aggregate(pipeline);
+    } catch (error) {
+      console.error('[UserService] Error getting yearly activity stats:', error);
       throw error;
     }
   }

@@ -19,11 +19,13 @@ module.exports = {
   findByUser: specialController.findByUser,
   upsertReading: specialController.upsertReading,
   updateReadingStatus: specialController.updateReadingStatus,
+  deleteUserStoryReading: specialController.deleteUserStoryReading,
 
   // Bookmark operations
   addBookmark: specialController.addBookmark,
   removeBookmark: specialController.removeBookmark,
   getBookmarks: specialController.getBookmarks,
+  getAllUserBookmarks: specialController.getAllUserBookmarks,
 
   // Personal notes
   updatePersonalNotes: specialController.updatePersonalNotes,

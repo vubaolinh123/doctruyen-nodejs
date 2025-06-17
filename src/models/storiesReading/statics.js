@@ -11,15 +11,28 @@ module.exports = function(schema) {
       user_id: userId,
       story_id: storyId
     })
-    .populate('story_id', 'name slug image status')
+    .populate({
+      path: 'story_id',
+      select: 'name slug image status author_id categories',
+      populate: [
+        {
+          path: 'author_id',
+          select: 'name slug'
+        },
+        {
+          path: 'categories',
+          select: 'name slug'
+        }
+      ]
+    })
     .populate('current_chapter.chapter_id', 'name chapter_number slug')
     .populate('last_completed_chapter.chapter_id', 'name chapter_number slug');
   };
 
   /**
-   * Lấy danh sách lịch sử đọc của người dùng với filtering
+   * Lấy danh sách lịch sử đọc của người dùng với filtering và enhanced data
    */
-  schema.statics.findByUser = function(userId, options = {}) {
+  schema.statics.findByUser = async function(userId, options = {}) {
     const {
       status,
       limit = 10,
@@ -28,22 +41,264 @@ module.exports = function(schema) {
       includeCompleted = true
     } = options;
 
-    const query = { user_id: userId };
+    const mongoose = require('mongoose');
+    const userObjectId = typeof userId === 'string' ? new mongoose.Types.ObjectId(userId) : userId;
 
-    // Filter theo reading status
+    // Build match query
+    const matchQuery = { user_id: userObjectId };
     if (status) {
-      query.reading_status = status;
+      matchQuery.reading_status = status;
     } else if (!includeCompleted) {
-      query.reading_status = { $ne: 'completed' };
+      matchQuery.reading_status = { $ne: 'completed' };
     }
 
-    return this.find(query)
-      .sort(sort)
-      .skip(skip)
-      .limit(limit)
-      .populate('story_id', 'name slug image status authors categories')
-      .populate('current_chapter.chapter_id', 'name chapter_number slug')
-      .populate('last_completed_chapter.chapter_id', 'name chapter_number slug');
+    const pipeline = [
+      { $match: matchQuery },
+
+      // Lookup story information
+      {
+        $lookup: {
+          from: 'stories',
+          localField: 'story_id',
+          foreignField: '_id',
+          as: 'story'
+        }
+      },
+      { $unwind: '$story' },
+
+      // Lookup authors (optimized - only essential fields)
+      {
+        $lookup: {
+          from: 'authors',
+          localField: 'story.author_id',
+          foreignField: '_id',
+          as: 'story.author_id',
+          pipeline: [
+            {
+              $project: {
+                _id: 1,
+                slug: 1,
+                name: 1
+                // Excluded: status, createdAt, updatedAt, __v
+              }
+            }
+          ]
+        }
+      },
+
+      // Lookup categories (optimized - only essential fields)
+      {
+        $lookup: {
+          from: 'categories',
+          localField: 'story.categories',
+          foreignField: '_id',
+          as: 'story.categories',
+          pipeline: [
+            {
+              $project: {
+                _id: 1,
+                slug: 1,
+                name: 1
+                // Excluded: status, createdAt, updatedAt, __v
+              }
+            }
+          ]
+        }
+      },
+
+      // Lookup current chapter (optimized - only essential fields)
+      {
+        $lookup: {
+          from: 'chapters',
+          localField: 'current_chapter.chapter_id',
+          foreignField: '_id',
+          as: 'current_chapter_data',
+          pipeline: [
+            {
+              $project: {
+                _id: 1,
+                story_id: 1,
+                chapter: 1,
+                name: 1,
+                slug: 1
+                // Excluded: content, audio, audio_show, show_ads, link_ref, pass_code, is_new, status, createdAt, updatedAt, __v
+              }
+            }
+          ]
+        }
+      },
+
+      // Lookup last completed chapter (optimized - only essential fields)
+      {
+        $lookup: {
+          from: 'chapters',
+          localField: 'last_completed_chapter.chapter_id',
+          foreignField: '_id',
+          as: 'last_completed_chapter_data',
+          pipeline: [
+            {
+              $project: {
+                _id: 1,
+                story_id: 1,
+                chapter: 1,
+                name: 1,
+                slug: 1
+                // Excluded: content, audio, audio_show, show_ads, link_ref, pass_code, is_new, status, createdAt, updatedAt, __v
+              }
+            }
+          ]
+        }
+      },
+
+      // Count total chapters for the story
+      {
+        $lookup: {
+          from: 'chapters',
+          let: { storyId: '$story._id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$story_id', '$$storyId'] } } },
+            { $count: 'total' }
+          ],
+          as: 'chapter_count_data'
+        }
+      },
+
+      // Project enhanced data structure
+      {
+        $addFields: {
+          story_id: {
+            _id: '$story._id',
+            name: '$story.name',
+            slug: '$story.slug',
+            image: '$story.image',
+            status: '$story.status',
+            author_id: '$story.author_id',
+            categories: '$story.categories'
+          },
+          'current_chapter.chapter_id': {
+            $arrayElemAt: ['$current_chapter_data', 0]
+          },
+          'last_completed_chapter.chapter_id': {
+            $arrayElemAt: ['$last_completed_chapter_data', 0]
+          },
+          total_chapters: {
+            $ifNull: [
+              { $arrayElemAt: ['$chapter_count_data.total', 0] },
+              0
+            ]
+          },
+          // Enhanced computed fields
+          progress_percentage: {
+            $cond: {
+              if: { $gt: [{ $arrayElemAt: ['$chapter_count_data.total', 0] }, 0] },
+              then: {
+                $round: [
+                  {
+                    $multiply: [
+                      {
+                        $divide: [
+                          '$reading_stats.completed_chapters',
+                          { $arrayElemAt: ['$chapter_count_data.total', 0] }
+                        ]
+                      },
+                      100
+                    ]
+                  },
+                  1
+                ]
+              },
+              else: 0
+            }
+          },
+          is_up_to_date: {
+            $eq: [
+              '$current_chapter.chapter_number',
+              { $arrayElemAt: ['$chapter_count_data.total', 0] }
+            ]
+          },
+          bookmark_count: { $size: { $ifNull: ['$bookmarks', []] } },
+          reading_status_display: {
+            $switch: {
+              branches: [
+                { case: { $eq: ['$reading_status', 'reading'] }, then: 'Đang đọc' },
+                { case: { $eq: ['$reading_status', 'completed'] }, then: 'Hoàn thành' },
+                { case: { $eq: ['$reading_status', 'paused'] }, then: 'Tạm dừng' },
+                { case: { $eq: ['$reading_status', 'dropped'] }, then: 'Đã bỏ' },
+                { case: { $eq: ['$reading_status', 'plan_to_read'] }, then: 'Dự định đọc' }
+              ],
+              default: 'Không rõ'
+            }
+          },
+          formatted_reading_time: {
+            $let: {
+              vars: {
+                totalSeconds: '$reading_stats.total_reading_time',
+                hours: { $floor: { $divide: ['$reading_stats.total_reading_time', 3600] } },
+                minutes: { $floor: { $divide: [{ $mod: ['$reading_stats.total_reading_time', 3600] }, 60] } }
+              },
+              in: {
+                $cond: {
+                  if: { $gte: ['$$hours', 1] },
+                  then: { $concat: [{ $toString: '$$hours' }, 'h ', { $toString: '$$minutes' }, 'm'] },
+                  else: { $concat: [{ $toString: '$$minutes' }, ' phút'] }
+                }
+              }
+            }
+          },
+          priority_display: {
+            $switch: {
+              branches: [
+                { case: { $eq: ['$metadata.priority', 1] }, then: 'Thấp' },
+                { case: { $eq: ['$metadata.priority', 2] }, then: 'Thấp' },
+                { case: { $eq: ['$metadata.priority', 3] }, then: 'Trung bình' },
+                { case: { $eq: ['$metadata.priority', 4] }, then: 'Cao' },
+                { case: { $eq: ['$metadata.priority', 5] }, then: 'Rất cao' }
+              ],
+              default: 'Trung bình'
+            }
+          },
+          last_activity: '$reading_stats.last_read_at'
+        }
+      },
+
+      // Remove temporary fields and optimize final structure
+      {
+        $project: {
+          // Essential fields only
+          _id: 1,
+          user_id: 1,
+          story_id: 1,
+          current_chapter: 1,
+          last_completed_chapter: 1,
+          reading_status: 1,
+          reading_stats: 1,
+          bookmarks: 1,
+          personal_notes: 1,
+          metadata: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          // Enhanced computed fields
+          total_chapters: 1,
+          progress_percentage: 1,
+          is_up_to_date: 1,
+          bookmark_count: 1,
+          reading_status_display: 1,
+          formatted_reading_time: 1,
+          priority_display: 1,
+          last_activity: 1
+          // Excluded: __v, story, current_chapter_data, last_completed_chapter_data, chapter_count_data
+        }
+      },
+
+      // Sort
+      { $sort: sort },
+
+      // Pagination
+      { $skip: skip },
+      { $limit: limit }
+    ];
+
+    return this.aggregate(pipeline);
   };
 
   /**
@@ -172,6 +427,43 @@ module.exports = function(schema) {
   };
 
   /**
+   * Xóa toàn bộ lịch sử đọc của user cho một story (bao gồm tất cả bookmarks)
+   */
+  schema.statics.deleteUserStoryReading = async function(userId, storyId) {
+    try {
+      const mongoose = require('mongoose');
+      const userObjectId = typeof userId === 'string' ? new mongoose.Types.ObjectId(userId) : userId;
+      const storyObjectId = typeof storyId === 'string' ? new mongoose.Types.ObjectId(storyId) : storyId;
+
+      // Tìm và xóa reading record
+      const deletedRecord = await this.findOneAndDelete({
+        user_id: userObjectId,
+        story_id: storyObjectId
+      });
+
+      if (!deletedRecord) {
+        throw new Error('Không tìm thấy lịch sử đọc để xóa');
+      }
+
+      // Trả về thông tin về record đã xóa
+      return {
+        success: true,
+        message: 'Đã xóa lịch sử đọc và tất cả bookmarks thành công',
+        deletedRecord: {
+          _id: deletedRecord._id,
+          story_id: deletedRecord.story_id,
+          reading_status: deletedRecord.reading_status,
+          bookmarks_count: deletedRecord.bookmarks ? deletedRecord.bookmarks.length : 0,
+          reading_stats: deletedRecord.reading_stats
+        }
+      };
+    } catch (error) {
+      console.error('Error deleting user story reading:', error);
+      throw new Error(`Không thể xóa lịch sử đọc: ${error.message}`);
+    }
+  };
+
+  /**
    * Thêm bookmark
    */
   schema.statics.addBookmark = async function(userId, storyId, bookmarkData) {
@@ -209,6 +501,171 @@ module.exports = function(schema) {
       { $pull: { bookmarks: { _id: bookmarkId } } },
       { new: true }
     );
+  };
+
+  /**
+   * Lấy tất cả bookmarks của user từ tất cả stories với thông tin đầy đủ
+   */
+  schema.statics.getAllUserBookmarks = async function(userId, options = {}) {
+    const { limit = 50, skip = 0, sort = 'created_at' } = options;
+
+    try {
+      // Convert userId to ObjectId if it's a string
+      const mongoose = require('mongoose');
+      const userObjectId = typeof userId === 'string' ? new mongoose.Types.ObjectId(userId) : userId;
+
+      // If no records, return early
+      const userRecords = await this.find({ user_id: userObjectId });
+      if (userRecords.length === 0) {
+        return {
+          bookmarks: [],
+          total: 0,
+          totalPages: 0,
+          currentPage: 1
+        };
+      }
+
+      // Sử dụng aggregation pipeline để lấy tất cả bookmarks với thông tin đầy đủ
+      const pipeline = [
+        // Match user's reading records
+        { $match: { user_id: userObjectId } },
+
+        // Unwind bookmarks array
+        { $unwind: '$bookmarks' },
+
+        // Lookup story information
+        {
+          $lookup: {
+            from: 'stories',
+            localField: 'story_id',
+            foreignField: '_id',
+            as: 'story'
+          }
+        },
+        { $unwind: '$story' },
+
+        // Lookup chapter information (optimized - only essential fields)
+        {
+          $lookup: {
+            from: 'chapters',
+            localField: 'bookmarks.chapter_id',
+            foreignField: '_id',
+            as: 'chapter',
+            pipeline: [
+              {
+                $project: {
+                  _id: 1,
+                  name: 1,
+                  slug: 1,
+                  chapter: 1
+                  // Excluded: content, audio, audio_show, show_ads, link_ref, pass_code, is_new, status, createdAt, updatedAt, __v
+                }
+              }
+            ]
+          }
+        },
+        { $unwind: '$chapter' },
+
+        // Lookup authors (optimized - only essential fields)
+        {
+          $lookup: {
+            from: 'authors',
+            localField: 'story.author_id',
+            foreignField: '_id',
+            as: 'story.author_id',
+            pipeline: [
+              {
+                $project: {
+                  _id: 1,
+                  slug: 1,
+                  name: 1
+                  // Excluded: status, createdAt, updatedAt, __v
+                }
+              }
+            ]
+          }
+        },
+
+        // Lookup categories (optimized - only essential fields)
+        {
+          $lookup: {
+            from: 'categories',
+            localField: 'story.categories',
+            foreignField: '_id',
+            as: 'story.categories',
+            pipeline: [
+              {
+                $project: {
+                  _id: 1,
+                  slug: 1,
+                  name: 1
+                  // Excluded: status, createdAt, updatedAt, __v
+                }
+              }
+            ]
+          }
+        },
+
+        // Project the final structure (optimized)
+        {
+          $project: {
+            _id: '$bookmarks._id',
+            bookmark_id: '$bookmarks._id',
+            story_id: '$story_id',
+            chapter_id: '$bookmarks.chapter_id',
+            chapter_number: '$bookmarks.chapter_number',
+            position: '$bookmarks.position',
+            note: '$bookmarks.note',
+            created_at: '$bookmarks.created_at',
+            story: {
+              _id: '$story._id',
+              name: '$story.name',
+              slug: '$story.slug',
+              image: '$story.image',
+              status: '$story.status',
+              author_id: '$story.author_id', // Use optimized author_id instead of authors
+              categories: '$story.categories'
+            },
+            chapter: {
+              _id: '$chapter._id',
+              name: '$chapter.name',
+              slug: '$chapter.slug',
+              chapter: '$chapter.chapter'
+            }
+            // Excluded: reading_stats (not needed for bookmark display)
+          }
+        },
+
+        // Sort bookmarks
+        { $sort: sort === 'created_at' ? { created_at: -1 } : { 'story.name': 1 } },
+
+        // Pagination
+        { $skip: skip },
+        { $limit: limit }
+      ];
+
+      const bookmarks = await this.aggregate(pipeline);
+
+      // Get total count for pagination
+      const countPipeline = [
+        { $match: { user_id: userObjectId } },
+        { $unwind: '$bookmarks' },
+        { $count: 'total' }
+      ];
+
+      const countResult = await this.aggregate(countPipeline);
+      const total = countResult.length > 0 ? countResult[0].total : 0;
+
+      return {
+        bookmarks,
+        total,
+        totalPages: Math.ceil(total / limit),
+        currentPage: Math.floor(skip / limit) + 1
+      };
+    } catch (error) {
+      console.error('Error in getAllUserBookmarks:', error);
+      throw error;
+    }
   };
 
   /**
@@ -275,7 +732,20 @@ module.exports = function(schema) {
     })
     .sort({ 'reading_stats.last_read_at': -1 })
     .limit(limit)
-    .populate('story_id', 'name slug image')
+    .populate({
+      path: 'story_id',
+      select: 'name slug image author_id categories',
+      populate: [
+        {
+          path: 'author_id',
+          select: 'name slug'
+        },
+        {
+          path: 'categories',
+          select: 'name slug'
+        }
+      ]
+    })
     .populate('current_chapter.chapter_id', 'name chapter_number');
   };
 
@@ -296,12 +766,55 @@ module.exports = function(schema) {
         }
       },
       { $unwind: '$story' },
+
+      // Lookup authors (optimized - only essential fields)
+      {
+        $lookup: {
+          from: 'authors',
+          localField: 'story.author_id',
+          foreignField: '_id',
+          as: 'story.author_id',
+          pipeline: [
+            {
+              $project: {
+                _id: 1,
+                slug: 1,
+                name: 1
+                // Excluded: status, createdAt, updatedAt, __v
+              }
+            }
+          ]
+        }
+      },
+
+      // Lookup categories (optimized - only essential fields)
+      {
+        $lookup: {
+          from: 'categories',
+          localField: 'story.categories',
+          foreignField: '_id',
+          as: 'story.categories',
+          pipeline: [
+            {
+              $project: {
+                _id: 1,
+                slug: 1,
+                name: 1
+                // Excluded: status, createdAt, updatedAt, __v
+              }
+            }
+          ]
+        }
+      },
+
       {
         $match: {
           $or: [
             { 'story.name': { $regex: searchTerm, $options: 'i' } },
             { 'personal_notes': { $regex: searchTerm, $options: 'i' } },
-            { 'metadata.personal_tags': { $regex: searchTerm, $options: 'i' } }
+            { 'metadata.personal_tags': { $regex: searchTerm, $options: 'i' } },
+            { 'story.author_id.name': { $regex: searchTerm, $options: 'i' } },
+            { 'story.categories.name': { $regex: searchTerm, $options: 'i' } }
           ]
         }
       }
@@ -312,6 +825,43 @@ module.exports = function(schema) {
     }
 
     pipeline.push(
+      // Lookup current chapter (optimized - only essential fields)
+      {
+        $lookup: {
+          from: 'chapters',
+          localField: 'current_chapter.chapter_id',
+          foreignField: '_id',
+          as: 'current_chapter_data',
+          pipeline: [
+            {
+              $project: {
+                _id: 1,
+                story_id: 1,
+                chapter: 1,
+                name: 1,
+                slug: 1
+                // Excluded: content, audio, audio_show, show_ads, link_ref, pass_code, is_new, status, createdAt, updatedAt, __v
+              }
+            }
+          ]
+        }
+      },
+
+      // Project the final structure
+      {
+        $addFields: {
+          'current_chapter.chapter_id': {
+            $arrayElemAt: ['$current_chapter_data', 0]
+          },
+          story_id: '$story'
+        }
+      },
+
+      // Remove temporary fields
+      {
+        $unset: ['story', 'current_chapter_data']
+      },
+
       { $sort: { 'reading_stats.last_read_at': -1 } },
       { $skip: skip },
       { $limit: limit }
