@@ -83,6 +83,19 @@ const chapterSchema = new Schema({
     type: Boolean,
     default: false,
     index: true
+  },
+
+  // Hệ thống nội dung trả phí
+  isPaid: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+
+  price: {
+    type: Number,
+    default: 0,
+    min: 0
   }
 }, {
   timestamps: true,

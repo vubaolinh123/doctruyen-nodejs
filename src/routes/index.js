@@ -24,6 +24,7 @@ router.use('/users', require('./users'));
 router.use('/purchased-stories', auth, require('./purchasedStories'));
 router.use('/stories-reading', auth, require('./storiesReading'));
 router.use('/transactions', auth, require('./transactions'));
+router.use('/purchase', require('./purchase'));
 
 // Route attendance không cần middleware auth ở đây vì đã có authenticateToken trong route
 router.use('/attendance', require('./attendance'));
@@ -39,6 +40,8 @@ router.use('/admin/users', auth, require('./admin/users'));
 router.use('/admin/permission-templates', require('./admin/permissionTemplates'));
 router.use('/admin/attendance-rewards', require('./admin/attendanceRewards'));
 router.use('/admin/comments', require('./admin/commentModeration'));
+router.use('/admin/chapters', auth, require('./admin/bulkChapters'));
 router.use('/admin/comments/reported', require('./admin/reportedComments'));
+// router.use('/admin/business-logic', require('./admin/businessLogic')); // Temporarily disabled
 
 module.exports = router;

@@ -110,6 +110,81 @@ exports.authenticateToken = async (req, res, next) => {
 };
 
 /**
+ * Middleware xác thực JWT token tùy chọn (không bắt buộc)
+ * Nếu có token thì xác thực, nếu không có thì vẫn cho phép tiếp tục
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next function
+ */
+exports.optionalAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    // Nếu không có token, vẫn cho phép tiếp tục nhưng req.user = null
+    if (!authHeader?.startsWith('Bearer ')) {
+      req.user = null;
+      return next();
+    }
+
+    const token = authHeader.split(' ')[1];
+
+    if (!token) {
+      req.user = null;
+      return next();
+    }
+
+    // Kiểm tra token có trong blacklist không
+    const isBlacklisted = await TokenBlacklist.findOne({ token });
+    if (isBlacklisted) {
+      req.user = null;
+      return next();
+    }
+
+    // Verify JWT token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Kiểm tra user có tồn tại không
+    const user = await User.findById(decoded.id);
+    if (!user || !user.isActive) {
+      req.user = null;
+      return next();
+    }
+
+    // Lấy thông tin mới nhất từ database
+    const freshUser = await User.findById(user._id);
+    if (!freshUser) {
+      req.user = null;
+      return next();
+    }
+
+    // Lưu đầy đủ thông tin user mới nhất vào request
+    req.user = {
+      id: freshUser._id,
+      email: freshUser.email,
+      role: freshUser.role,
+      name: freshUser.name,
+      banner: freshUser.banner,
+      avatar: freshUser.avatar,
+      gender: freshUser.gender,
+      birthday: freshUser.birthday,
+      accountType: freshUser.accountType,
+      diem_danh: freshUser.diem_danh,
+      coin: freshUser.coin,
+      coin_total: freshUser.coin_total,
+      isActive: freshUser.isActive,
+      email_verified_at: freshUser.email_verified_at
+    };
+
+    next();
+  } catch (error) {
+    // Nếu có lỗi trong quá trình xác thực, vẫn cho phép tiếp tục nhưng req.user = null
+    console.warn('Optional auth error (continuing without auth):', error.message);
+    req.user = null;
+    next();
+  }
+};
+
+/**
  * Middleware kiểm tra quyền admin
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object

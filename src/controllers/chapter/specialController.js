@@ -149,20 +149,39 @@ exports.getChapterByStoryAndChapterSlug = async (req, res) => {
 };
 
 /**
- * Lấy danh sách chapter theo slug của truyện
+ * Lấy danh sách chapter theo slug của truyện với access control
  * @param {Object} req - Request object
  * @param {Object} res - Response object
  */
 exports.getChaptersByStorySlug = async (req, res) => {
   try {
     const storySlug = req.params.storySlug;
-    const chapters = await chapterService.getChaptersByStorySlug(storySlug);
+
+    // SERVER-SIDE ACCESS CONTROL: Extract user ID from session/token/headers
+    const userId = req.user?.id || req.user?._id || req.headers['x-user-id'] || null;
+
+    console.log(`[API] Getting chapters for story: ${storySlug}, user: ${userId || 'anonymous'}`);
+
+    // FREEMIUM MODEL: Get chapters with access control validation
+    const result = await chapterService.getChaptersByStorySlug(storySlug, userId);
+
     res.json({
       success: true,
-      chapters
+      chapters: result.chapters,
+      story: result.story,
+      accessInfo: {
+        isAuthenticated: !!userId,
+        totalChapters: result.chapters.length,
+        accessibleChapters: result.chapters.filter(ch => ch.hasAccess).length,
+        paidChapters: result.chapters.filter(ch => ch.isPaid).length
+      }
     });
   } catch (err) {
-    res.status(404).json({ error: err.message });
+    console.error('[API] Error getting chapters with access control:', err);
+    res.status(404).json({
+      success: false,
+      error: err.message
+    });
   }
 };
 

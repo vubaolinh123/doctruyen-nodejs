@@ -2,6 +2,7 @@ const Chapter = require('../../models/chapter');
 const Story = require('../../models/story');
 const mongoose = require('mongoose');
 const slugify = require('slugify');
+const hasPaidChaptersService = require('../story/hasPaidChaptersService');
 
 class ChapterService {
   /**
@@ -56,6 +57,10 @@ class ChapterService {
       status: chapterData.status !== undefined ? Boolean(chapterData.status) : true
     };
 
+    // Add paid content fields if provided
+    if (chapterData.isPaid !== undefined) newChapterData.isPaid = Boolean(chapterData.isPaid);
+    if (chapterData.price !== undefined) newChapterData.price = Number(chapterData.price) || 0;
+
     // Tạo chapter mới
     const item = new Chapter(newChapterData);
     const savedChapter = await item.save();
@@ -66,6 +71,18 @@ class ChapterService {
       chapterData.story_id,
       { chapter_count: currentCount + 1 }
     );
+
+    // AUTO-UPDATE: Update story's hasPaidChapters field if chapter is paid
+    if (newChapterData.isPaid) {
+      try {
+        await hasPaidChaptersService.updateStoryHasPaidChapters(chapterData.story_id);
+        console.log(`[ChapterService] Auto-updated hasPaidChapters for story ${chapterData.story_id} after creating paid chapter`);
+      } catch (error) {
+        console.error('[ChapterService] Error auto-updating hasPaidChapters:', error);
+        // Don't throw error - chapter creation should succeed even if hasPaidChapters update fails
+      }
+    }
+
     return savedChapter;
   }
 
@@ -91,6 +108,11 @@ class ChapterService {
     // Prepare update data
     const dataToUpdate = {};
 
+    // Track if paid status is changing for auto-update logic
+    const oldIsPaid = currentChapter.isPaid || false;
+    const newIsPaid = updateData.isPaid !== undefined ? Boolean(updateData.isPaid) : oldIsPaid;
+    const isPaidStatusChanged = oldIsPaid !== newIsPaid;
+
     // Only update fields that are present in request
     if (updateData.kho_truyen_chapter_id !== undefined) dataToUpdate.kho_truyen_chapter_id = updateData.kho_truyen_chapter_id;
     if (updateData.story_id !== undefined) dataToUpdate.story_id = updateData.story_id;
@@ -105,6 +127,10 @@ class ChapterService {
     if (updateData.pass_code !== undefined) dataToUpdate.pass_code = updateData.pass_code;
     if (updateData.is_new !== undefined) dataToUpdate.is_new = Boolean(updateData.is_new);
     if (updateData.status !== undefined) dataToUpdate.status = Boolean(updateData.status);
+
+    // Add paid content fields
+    if (updateData.isPaid !== undefined) dataToUpdate.isPaid = Boolean(updateData.isPaid);
+    if (updateData.price !== undefined) dataToUpdate.price = Number(updateData.price) || 0;
 
     // Cập nhật chapter
     const updatedChapter = await Chapter.findByIdAndUpdate(
@@ -136,6 +162,23 @@ class ChapterService {
           { chapter_count: newCount + 1 }
         );
       }
+
+      // AUTO-UPDATE: Update hasPaidChapters for both old and new stories
+      try {
+        await hasPaidChaptersService.updateStoryHasPaidChapters(oldStoryId);
+        await hasPaidChaptersService.updateStoryHasPaidChapters(newStoryId);
+        console.log(`[ChapterService] Auto-updated hasPaidChapters for both stories after chapter move`);
+      } catch (error) {
+        console.error('[ChapterService] Error auto-updating hasPaidChapters after story change:', error);
+      }
+    } else if (isPaidStatusChanged) {
+      // AUTO-UPDATE: Update hasPaidChapters if paid status changed
+      try {
+        await hasPaidChaptersService.updateStoryHasPaidChapters(oldStoryId);
+        console.log(`[ChapterService] Auto-updated hasPaidChapters for story ${oldStoryId} after isPaid change: ${oldIsPaid} -> ${newIsPaid}`);
+      } catch (error) {
+        console.error('[ChapterService] Error auto-updating hasPaidChapters after isPaid change:', error);
+      }
     }
 
     return updatedChapter;
@@ -154,6 +197,7 @@ class ChapterService {
     }
 
     const storyId = chapter.story_id;
+    const wasChapterPaid = chapter.isPaid || false;
 
     // Xóa chapter
     const deletedChapter = await Chapter.findByIdAndDelete(id);
@@ -168,6 +212,16 @@ class ChapterService {
             storyId,
             { chapter_count: currentCount - 1 }
           );
+        }
+      }
+
+      // AUTO-UPDATE: Update hasPaidChapters if deleted chapter was paid
+      if (wasChapterPaid) {
+        try {
+          await hasPaidChaptersService.updateStoryHasPaidChapters(storyId);
+          console.log(`[ChapterService] Auto-updated hasPaidChapters for story ${storyId} after deleting paid chapter`);
+        } catch (error) {
+          console.error('[ChapterService] Error auto-updating hasPaidChapters after chapter deletion:', error);
         }
       }
     }
@@ -378,14 +432,265 @@ class ChapterService {
   }
 
   /**
-   * Lấy danh sách chapter theo slug của truyện
+   * Lấy danh sách chapter theo slug của truyện với access control (OPTIMIZED for large datasets)
    * @param {string} storySlug - Slug của truyện
-   * @returns {Promise<Array>} - Danh sách chapter
+   * @param {string} userId - ID của user (optional)
+   * @param {Object} options - Pagination and optimization options
+   * @returns {Promise<Object>} - Story info và danh sách chapter với access status
    * @throws {Error} - Nếu không tìm thấy truyện
    */
-  async getChaptersByStorySlug(storySlug) {
+  async getChaptersByStorySlug(storySlug, userId = null, options = {}) {
+    const {
+      page = 1,
+      limit = 1000, // Default limit for large stories
+      projection = '_id name chapter slug isPaid price'
+    } = options;
+
+    const startTime = Date.now();
+
+    // Tìm truyện theo slug với minimal projection
+    const story = await Story.findOne({ slug: storySlug }).select('_id name slug isPaid price hasPaidChapters chapter_count');
+
+    if (!story) {
+      throw new Error('Không tìm thấy truyện');
+    }
+
+    console.log(`[ChapterService] Processing story with ${story.chapter_count || 'unknown'} chapters`);
+
+    // PERFORMANCE: Use aggregation pipeline for large datasets
+    const aggregationPipeline = [
+      {
+        $match: {
+          story_id: story._id,
+          status: true
+        }
+      },
+      {
+        $sort: { chapter: 1 }
+      },
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          chapter: 1,
+          slug: 1,
+          isPaid: { $ifNull: ['$isPaid', false] },
+          price: { $ifNull: ['$price', 0] }
+        }
+      }
+    ];
+
+    // Add pagination for very large datasets
+    if (story.chapter_count > 2000) {
+      const skip = (page - 1) * limit;
+      aggregationPipeline.push({ $skip: skip });
+      aggregationPipeline.push({ $limit: limit });
+    }
+
+    const chapters = await Chapter.aggregate(aggregationPipeline);
+
+    // PERFORMANCE: Optimized user access checking
+    let userPurchases = [];
+    if (userId) {
+      userPurchases = await this.getUserPurchasesOptimized(userId, story._id, chapters);
+    }
+
+    // HIERARCHICAL ACCESS CONTROL: Apply proper business logic
+    const chaptersWithAccess = this.mapChaptersWithHierarchicalAccess(chapters, userPurchases, story._id, story);
+
+    const result = {
+      story: {
+        _id: story._id,
+        name: story.name,
+        slug: story.slug,
+        isPaid: story.isPaid || false,
+        price: story.price || 0,
+        hasPaidChapters: story.hasPaidChapters || false,
+        totalChapters: story.chapter_count || chapters.length
+      },
+      chapters: chaptersWithAccess,
+      pagination: story.chapter_count > 2000 ? {
+        page,
+        limit,
+        total: story.chapter_count,
+        hasMore: (page * limit) < story.chapter_count
+      } : null
+    };
+
+    const executionTime = Date.now() - startTime;
+    console.log(`[ChapterService] Processed ${chapters.length} chapters for story ${storySlug} in ${executionTime}ms`);
+
+    return result;
+  }
+
+  /**
+   * Optimized user purchases fetching (without caching)
+   * @param {string} userId - User ID
+   * @param {ObjectId} storyId - Story ID
+   * @param {Array} chapters - Chapter array for filtering
+   * @returns {Promise<Array>} - User purchases
+   */
+  async getUserPurchasesOptimized(userId, storyId, chapters) {
+    try {
+      // PERFORMANCE: Use UserPurchases model for optimized purchase lookup
+      const UserPurchases = require('../../models/userPurchases');
+
+      const userPurchaseDoc = await UserPurchases.findOne({ user_id: new mongoose.Types.ObjectId(userId) });
+
+      if (!userPurchaseDoc) {
+        return [];
+      }
+
+      // Convert to flat array format for compatibility
+      const userPurchases = [];
+
+      // Add story purchases
+      userPurchaseDoc.purchasedStories.forEach(purchase => {
+        if (purchase.story_id.toString() === storyId.toString()) {
+          userPurchases.push({
+            _id: purchase._id,
+            user_id: userId,
+            story_id: purchase.story_id,
+            createdAt: purchase.purchase_date
+          });
+        }
+      });
+
+      // Add chapter purchases for this story
+      const chapterIds = chapters.map(c => c._id.toString());
+
+      userPurchaseDoc.purchasedChapters.forEach((purchase) => {
+        if (purchase.story_id.toString() === storyId.toString() &&
+            chapterIds.includes(purchase.chapter_id.toString()) &&
+            purchase.status === 'active') {
+          userPurchases.push({
+            _id: purchase._id,
+            user_id: userId,
+            chapter_id: purchase.chapter_id,
+            story_id: purchase.story_id,
+            createdAt: purchase.purchase_date
+          });
+        }
+      });
+
+      return userPurchases;
+    } catch (error) {
+      console.error('[ChapterService] Error fetching user purchases:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Optimized chapter access mapping
+   * @param {Array} chapters - Chapters array
+   * @param {Array} userPurchases - User purchases array
+   * @param {ObjectId} storyId - Story ID
+   * @returns {Array} - Chapters with access information
+   */
+  /**
+   * HIERARCHICAL ACCESS CONTROL: Apply proper business logic for story/chapter purchases
+   * @param {Array} chapters - List of chapters
+   * @param {Array} userPurchases - User's purchase data
+   * @param {string} storyId - Story ID
+   * @param {Object} story - Story object with business model info
+   * @returns {Array} - Chapters with access control applied
+   */
+  mapChaptersWithHierarchicalAccess(chapters, userPurchases, storyId, story) {
+    // PERFORMANCE: Create lookup maps for O(1) access
+    const storyPurchaseMap = new Map();
+    const chapterPurchaseMap = new Map();
+
+    userPurchases.forEach((purchase) => {
+      // Story-level purchases (has story_id but NO chapter_id)
+      if (purchase.story_id && !purchase.chapter_id) {
+        storyPurchaseMap.set(purchase.story_id.toString(), purchase);
+      }
+      // Chapter-level purchases (has chapter_id)
+      if (purchase.chapter_id) {
+        chapterPurchaseMap.set(purchase.chapter_id.toString(), purchase);
+      }
+    });
+
+    // Check if user has story-level purchase
+    const hasStoryPurchase = storyPurchaseMap.has(storyId.toString());
+
+    // BUSINESS LOGIC: Determine purchase model based on story configuration
+    // Model A: story.isPaid = true → Buy entire story to unlock all chapters
+    // Model B: story.isPaid = false + story.hasPaidChapters = true → Buy individual chapters
+    // Constraint: isPaid and hasPaidChapters should NEVER both be true
+    const useStoryLevelModel = story.isPaid === true; // Model A
+    const useChapterLevelModel = story.isPaid === false && story.hasPaidChapters === true; // Model B
+
+    // Debug logging (only in development)
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[HierarchicalAccess] Story: ${story.name || story.slug}`);
+      console.log(`[HierarchicalAccess] story.isPaid: ${story.isPaid}, story.hasPaidChapters: ${story.hasPaidChapters}`);
+      console.log(`[HierarchicalAccess] Model: ${useStoryLevelModel ? 'A (Story-level)' : useChapterLevelModel ? 'B (Chapter-level)' : 'Free'}`);
+      console.log(`[HierarchicalAccess] HasStoryPurchase: ${hasStoryPurchase}`);
+    }
+
+    return chapters.map(chapter => {
+      let hasAccess = true;
+      let accessReason = 'free';
+
+      if (useStoryLevelModel) {
+        // MODEL A: story.isPaid = true → All chapters locked until story is purchased
+        if (hasStoryPurchase) {
+          hasAccess = true;
+          accessReason = 'story_purchased';
+        } else {
+          hasAccess = false;
+          accessReason = 'story_not_purchased';
+        }
+      } else if (useChapterLevelModel) {
+        // MODEL B: story.isPaid = false + hasPaidChapters = true → Individual chapter purchases
+        if (!chapter.isPaid) {
+          // Free chapters in freemium model
+          hasAccess = true;
+          accessReason = 'free';
+        } else {
+          // Paid chapters in freemium model
+          if (hasStoryPurchase) {
+            // Story purchase takes priority even in Model B
+            hasAccess = true;
+            accessReason = 'story_purchased';
+          } else if (chapterPurchaseMap.has(chapter._id.toString())) {
+            hasAccess = true;
+            accessReason = 'chapter_purchased';
+          } else {
+            hasAccess = false;
+            accessReason = 'chapter_not_purchased';
+          }
+        }
+      } else {
+        // FREE STORY: story.isPaid = false + hasPaidChapters = false → All chapters free
+        hasAccess = true;
+        accessReason = 'free';
+      }
+
+      return {
+        _id: chapter._id,
+        name: chapter.name,
+        chapter: chapter.chapter,
+        slug: chapter.slug,
+        isPaid: chapter.isPaid,
+        price: chapter.price,
+        hasAccess,
+        accessReason
+      };
+    });
+  }
+
+  /**
+   * SERVER-SIDE ACCESS CONTROL: Lấy danh sách chapter với validation access
+   * @param {string} storySlug - Slug của truyện
+   * @param {string|null} userId - ID của user (null nếu chưa đăng nhập)
+   * @returns {Promise<Object>} - Danh sách chapter với thông tin access
+   * @throws {Error} - Nếu không tìm thấy truyện
+   */
+  async getChaptersByStorySlugWithAccess(storySlug, userId = null) {
     // Tìm truyện theo slug
-    const story = await Story.findOne({ slug: storySlug });
+    const story = await Story.findOne({ slug: storySlug }).select('_id name slug isPaid price');
 
     if (!story) {
       throw new Error('Không tìm thấy truyện');
@@ -395,9 +700,88 @@ class ChapterService {
     const chapters = await Chapter.find({
       story_id: story._id,
       status: true
-    }).sort({ chapter: 1 }).select('_id name chapter slug createdAt');
+    }).sort({ chapter: 1 }).select('_id name chapter slug isPaid price');
 
-    return chapters;
+    // SERVER-SIDE ACCESS CONTROL: Validate access for each chapter
+    let userPurchases = null;
+
+    if (userId) {
+      // Authenticated user: Check purchase status
+      try {
+        const purchaseService = require('../purchase/purchaseService');
+        userPurchases = await purchaseService.getUserPurchases(userId);
+        console.log(`[ChapterService] Found ${userPurchases?.stories?.length || 0} story purchases and ${userPurchases?.chapters?.length || 0} chapter purchases for user ${userId}`);
+      } catch (error) {
+        console.error('[ChapterService] Error getting user purchases:', error);
+        // Continue with null purchases (treat as no purchases)
+      }
+    }
+
+    // Apply hierarchical access control to each chapter
+    const chaptersWithAccess = chapters.map(chapter => {
+      let hasAccess = false;
+      let accessReason = 'no_access';
+
+      if (!userId) {
+        // Unauthenticated user
+        if (!story.isPaid && !chapter.isPaid) {
+          hasAccess = true;
+          accessReason = 'free_content';
+        } else {
+          hasAccess = false;
+          accessReason = 'authentication_required';
+        }
+      } else {
+        // Authenticated user: Apply hierarchical permission system
+        if (story.isPaid) {
+          // Story-level paid content
+          const hasStoryAccess = userPurchases?.stories?.some(purchase =>
+            purchase.storyId.toString() === story._id.toString()
+          ) || false;
+
+          hasAccess = hasStoryAccess;
+          accessReason = hasStoryAccess ? 'story_purchased' : 'story_not_purchased';
+        } else {
+          // Free story: check individual chapter access
+          if (chapter.isPaid) {
+            // Paid chapter in free story (freemium model)
+            const hasChapterAccess = userPurchases?.chapters?.some(purchase =>
+              purchase.chapterId.toString() === chapter._id.toString()
+            ) || false;
+
+            hasAccess = hasChapterAccess;
+            accessReason = hasChapterAccess ? 'chapter_purchased' : 'chapter_not_purchased';
+          } else {
+            // Free chapter in free story
+            hasAccess = true;
+            accessReason = 'free_content';
+          }
+        }
+      }
+
+      return {
+        _id: chapter._id,
+        name: chapter.name,
+        chapter: chapter.chapter,
+        slug: chapter.slug,
+        isPaid: chapter.isPaid || false,
+        price: chapter.price || 0,
+        // SERVER-SIDE ACCESS CONTROL: Include access status in response
+        hasAccess,
+        accessReason
+      };
+    });
+
+    return {
+      story: {
+        _id: story._id,
+        name: story.name,
+        slug: story.slug,
+        isPaid: story.isPaid || false,
+        price: story.price || 0
+      },
+      chapters: chaptersWithAccess
+    };
   }
 
   /**

@@ -638,23 +638,6 @@ class CommentService {
         }
       });
 
-      // Enhanced debug logging for reply count calculation
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[CommentService] Reply Count Aggregation Debug (FIXED):', {
-          inputCommentIds: commentIds.map(id => id.toString()),
-          aggregationQuery: {
-            match: {
-              'hierarchy.level': { $gt: 0 },
-              'moderation.status': 'active',
-              '_id': { $nin: commentIds.map(id => id.toString()) }
-            }
-          },
-          aggregationResults: replyCountsAggregation,
-          replyCountMap: Object.fromEntries(replyCountMap),
-          totalRepliesFound: replyCountsAggregation.length
-        });
-      }
-
       // Add reply counts to comments
       return comments.map(comment => {
         const commentObj = comment.toObject ? comment.toObject() : comment;
@@ -671,19 +654,6 @@ class CommentService {
           commentObj.engagement.replies = {};
         }
         commentObj.engagement.replies.count = actualReplyCount;
-
-        // Enhanced debug logging for individual comment reply count
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`[CommentService] Setting reply count for comment ${commentIdStr} (FIXED):`, {
-            commentId: commentIdStr,
-            hierarchyLevel: commentObj.hierarchy?.level,
-            actualReplyCount,
-            previousCount: commentObj.engagement?.replies?.count,
-            finalCount: commentObj.engagement.replies.count,
-            shouldHaveReplies: actualReplyCount > 0,
-            isRootComment: commentObj.hierarchy?.level === 0
-          });
-        }
 
         return commentObj;
       });
@@ -724,24 +694,6 @@ class CommentService {
           } else if (dislikesUsersStr.includes(userIdStr)) {
             commentObj.userReaction = 'dislike';
           }
-        }
-
-        // Debug logging for userReaction (now variables are always in scope)
-        if (process.env.NODE_ENV === 'development' && userId) {
-          const userIdStr = userId.toString();
-          console.log('[CommentService] UserReaction Debug:', {
-            commentId: commentObj._id,
-            userId: userIdStr,
-            likesUsers: likesUsers,
-            likesUsersStr: likesUsersStr,
-            dislikesUsers: dislikesUsers,
-            dislikesUsersStr: dislikesUsersStr,
-            userInLikesOriginal: likesUsers.includes(userIdStr),
-            userInLikesConverted: likesUsersStr.includes(userIdStr),
-            userInDislikesOriginal: dislikesUsers.includes(userIdStr),
-            userInDislikesConverted: dislikesUsersStr.includes(userIdStr),
-            finalUserReaction: commentObj.userReaction
-          });
         }
 
         // Check permissions for authenticated users only

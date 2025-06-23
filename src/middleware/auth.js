@@ -13,7 +13,6 @@ const authenticateToken = (req, res, next) => {
 
   const token = authHeader.split(' ')[1];
   console.log('[Auth Middleware] Token extracted:', token ? 'Yes' : 'No');
-  console.log('[Auth Middleware] Token length:', token ? token.length : 0);
 
   if (!token) {
     return res.status(401).json({
@@ -24,13 +23,6 @@ const authenticateToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    console.log('[Auth Middleware] Token decoded successfully:', {
-      id: decoded.id,
-      email: decoded.email,
-      role: decoded.role,
-      hasId: !!decoded.id,
-      decodedKeys: Object.keys(decoded)
-    });
 
     req.user = decoded; // Lưu thông tin người dùng vào req.user
     next();

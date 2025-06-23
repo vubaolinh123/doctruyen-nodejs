@@ -105,6 +105,26 @@ const storySchema = new Schema({
     default: 0,
     min: 0,
     index: true
+  },
+
+  // Hệ thống nội dung trả phí
+  isPaid: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+
+  price: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+
+  // FREEMIUM MODEL: Indicates if story has any paid chapters
+  hasPaidChapters: {
+    type: Boolean,
+    default: false,
+    index: true
   }
 }, {
   timestamps: true,

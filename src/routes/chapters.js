@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const controller = require('../controllers/chapter');
 const auth = require('../middleware/auth');
+const { optionalAuth } = require('../middleware/auth.middleware');
 
 // ==========================================================
 // CÁC ROUTE CÔNG KHAI (PUBLIC)
@@ -70,8 +71,8 @@ router.put('/admin/:id/toggle-flag', auth, controller.toggleFlag);
 // Lấy chapter theo slug
 router.get('/slug/:slug', controller.getChapterBySlug);
 
-// Lấy tất cả chapter của một truyện (theo slug)
-router.get('/story/slug/:storySlug', controller.getChaptersByStorySlug);
+// Lấy tất cả chapter của một truyện (theo slug) - với access control
+router.get('/story/slug/:storySlug', optionalAuth, controller.getChaptersByStorySlug);
 
 // Lấy chapter theo story slug và chapter slug
 router.get('/story/:storySlug/chapter/:chapterSlug', controller.getChapterByStoryAndChapterSlug);

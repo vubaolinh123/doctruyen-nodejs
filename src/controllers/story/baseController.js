@@ -2,6 +2,7 @@ const storyService = require('../../services/story/storyService');
 const storyStatsService = require('../../services/storyStats/storyStatsService');
 const mongoose = require('mongoose');
 const slugify = require('slugify');
+const BusinessLogicValidator = require('../../services/validation/businessLogicValidator');
 
 /**
  * Lấy danh sách tất cả truyện
@@ -239,7 +240,10 @@ exports.create = async (req, res) => {
       hot_day,
       hot_month,
       hot_all_time,
-      status
+      status,
+      isPaid,
+      price,
+      hasPaidChapters
     } = req.body;
 
     console.log(`[API] Tạo truyện mới - name: ${name}`);
@@ -249,6 +253,17 @@ exports.create = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Tên truyện là bắt buộc'
+      });
+    }
+
+    // BUSINESS LOGIC VALIDATION using centralized validator
+    try {
+      BusinessLogicValidator.validateStoryBusinessLogic({ isPaid, hasPaidChapters, price });
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+        type: 'BUSINESS_LOGIC_VIOLATION'
       });
     }
 
@@ -296,12 +311,24 @@ exports.create = async (req, res) => {
 exports.update = async (req, res) => {
   try {
     const { id } = req.params;
+    const { isPaid, price, hasPaidChapters } = req.body;
     console.log(`[API] Cập nhật truyện - id: ${id}`);
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
         message: 'ID truyện không hợp lệ'
+      });
+    }
+
+    // BUSINESS LOGIC VALIDATION using centralized validator
+    try {
+      BusinessLogicValidator.validateStoryBusinessLogic({ isPaid, hasPaidChapters, price });
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+        type: 'BUSINESS_LOGIC_VIOLATION'
       });
     }
 
@@ -316,7 +343,7 @@ exports.update = async (req, res) => {
       req.body.slug = slug;
     }
 
-    const updatedStory = await storyService.updateStory(id, req.body);
+    const updatedStory = await storyService.updateStoryWithPaidContentLogic(id, req.body);
 
     if (!updatedStory) {
       return res.status(404).json({

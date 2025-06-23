@@ -1,5 +1,6 @@
 const Story = require('../../models/story');
 const Chapter = require('../../models/chapter');
+const Category = require('../../models/category');
 const StoryStats = require('../../models/storyStats');
 const storyStatsService = require('../storyStats/storyStatsService');
 const mongoose = require('mongoose');
@@ -61,7 +62,7 @@ const processCategoryFilter = async (query, categoryValue) => {
   } else {
     try {
       // Nếu là slug, cần tìm category trước
-      const Category = require('../../models/category');
+      // Category model is already imported at the top of the file
 
       // Tìm chính xác slug
       const category = await Category.findOne({ slug: categoryValue });
@@ -112,7 +113,7 @@ const processMultipleCategoriesFilter = async (query, categoriesValue) => {
   if (cleanCategoryValues.length > 0) {
     try {
       // Luôn xử lý như slug, vì frontend luôn gửi slug
-      const Category = require('../../models/category');
+      // Category model is already imported at the top of the file
 
       // Tìm tất cả thể loại theo slug - CHÍNH XÁC slug, không phải regex
       const categories = await Category.find({ slug: { $in: cleanCategoryValues } });
@@ -893,6 +894,14 @@ const createStory = async (storyData) => {
     newStoryData.slug = storyData.slug;
   }
 
+  // Add paid content fields
+  if (storyData.isPaid !== undefined) {
+    newStoryData.isPaid = Boolean(storyData.isPaid);
+  }
+  if (storyData.price !== undefined) {
+    newStoryData.price = Number(storyData.price) || 0;
+  }
+
   const item = new Story(newStoryData);
   return await item.save();
 };
@@ -926,6 +935,10 @@ const updateStory = async (id, updateData) => {
   if (updateData.hot_all_time !== undefined) dataToUpdate.hot_all_time = Boolean(updateData.hot_all_time);
   if (updateData.status !== undefined) dataToUpdate.status = Boolean(updateData.status);
 
+  // Add paid content fields
+  if (updateData.isPaid !== undefined) dataToUpdate.isPaid = Boolean(updateData.isPaid);
+  if (updateData.price !== undefined) dataToUpdate.price = Number(updateData.price) || 0;
+
   // If name is updated but slug is not provided, regenerate the slug
   if (updateData.name && updateData.slug === undefined) {
     dataToUpdate.slug = slugify(updateData.name, {
@@ -941,6 +954,82 @@ const updateStory = async (id, updateData) => {
     { new: true }
   ).populate('authors', 'name slug')
    .populate('categories', 'name slug');
+};
+
+/**
+ * Cập nhật truyện với logic paid content business rules
+ * @param {string} id - ID của truyện
+ * @param {Object} updateData - Dữ liệu cần cập nhật
+ * @returns {Promise<Object>} - Truyện sau khi cập nhật
+ */
+const updateStoryWithPaidContentLogic = async (id, updateData) => {
+  // Chapter model is already imported at the top of the file
+
+  // Kiểm tra story tồn tại
+  const existingStory = await Story.findById(id);
+  if (!existingStory) {
+    throw new Error('Không tìm thấy truyện');
+  }
+
+  // BUSINESS LOGIC VALIDATION: isPaid và hasPaidChapters không được cùng true
+  if (updateData.isPaid === true && updateData.hasPaidChapters === true) {
+    throw new Error('Business Logic Violation: isPaid và hasPaidChapters không thể cùng là true. Chỉ được chọn một trong hai mô hình: Story-level purchase (isPaid=true) hoặc Chapter-level purchase (hasPaidChapters=true)');
+  }
+
+  // BUSINESS LOGIC: Model A - Story-level purchase
+  if (updateData.isPaid === true && !existingStory.isPaid) {
+    console.log(`[StoryService] Setting story ${id} to Model A (Story-level purchase)`);
+
+    // Cập nhật tất cả chapters trong story thành free
+    await Chapter.updateMany(
+      { story_id: id },
+      {
+        $set: {
+          isPaid: false,
+          price: 0
+        }
+      }
+    );
+
+    // Đảm bảo hasPaidChapters = false cho Model A
+    updateData.hasPaidChapters = false;
+
+    console.log(`[StoryService] Updated story ${id} to Model A: All chapters free, story-level purchase required`);
+  }
+
+  // BUSINESS LOGIC: Model B - Chapter-level purchase
+  if (updateData.hasPaidChapters === true && updateData.isPaid !== true) {
+    console.log(`[StoryService] Setting story ${id} to Model B (Chapter-level purchase)`);
+
+    // Đảm bảo isPaid = false cho Model B
+    updateData.isPaid = false;
+    updateData.price = 0;
+
+    console.log(`[StoryService] Updated story ${id} to Model B: Individual chapter purchases allowed`);
+  }
+
+  // BUSINESS LOGIC: Free story
+  if (updateData.isPaid === false && updateData.hasPaidChapters === false) {
+    console.log(`[StoryService] Setting story ${id} to Free model`);
+
+    // Cập nhật tất cả chapters thành free
+    await Chapter.updateMany(
+      { story_id: id },
+      {
+        $set: {
+          isPaid: false,
+          price: 0
+        }
+      }
+    );
+
+    updateData.price = 0;
+
+    console.log(`[StoryService] Updated story ${id} to Free model: All chapters free`);
+  }
+
+  // Gọi updateStory thông thường
+  return await updateStory(id, updateData);
 };
 
 /**
@@ -1296,6 +1385,7 @@ module.exports = {
   getStoryBySlug,
   createStory,
   updateStory,
+  updateStoryWithPaidContentLogic,
   deleteStory,
   incrementStoryViews,
   buildStoryQuery,

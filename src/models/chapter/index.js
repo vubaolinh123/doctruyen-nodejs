@@ -19,7 +19,7 @@ setupStatics(chapterSchema);
 // Thiết lập hooks
 setupHooks(chapterSchema);
 
-// Tạo model
-const Chapter = mongoose.model('Chapter', chapterSchema);
+// Tạo model - check if already exists to prevent OverwriteModelError
+const Chapter = mongoose.models.Chapter || mongoose.model('Chapter', chapterSchema);
 
 module.exports = Chapter;

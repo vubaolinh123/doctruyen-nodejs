@@ -19,7 +19,7 @@ setupStatics(storySchema);
 // Thiết lập hooks
 setupHooks(storySchema);
 
-// Tạo model
-const Story = mongoose.model('Story', storySchema);
+// Tạo model - check if already exists to prevent OverwriteModelError
+const Story = mongoose.models.Story || mongoose.model('Story', storySchema);
 
 module.exports = Story;

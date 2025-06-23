@@ -19,7 +19,7 @@ setupStatics(categorySchema);
 // Thiết lập hooks
 setupHooks(categorySchema);
 
-// Tạo model
-const Category = mongoose.model('Category', categorySchema);
+// Tạo model - check if already exists to prevent OverwriteModelError
+const Category = mongoose.models.Category || mongoose.model('Category', categorySchema);
 
 module.exports = Category;
