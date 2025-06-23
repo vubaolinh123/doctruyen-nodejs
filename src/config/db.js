@@ -1,8 +1,5 @@
 const mongoose = require('mongoose');
 
-// Remove process.env.TZ setting as it conflicts with moment-timezone
-// We'll use moment-timezone for all timezone handling instead
-
 // Override default mongoose toJSON method to convert Date fields to Vietnam timezone
 mongoose.set('toJSON', {
   transform: (doc, ret) => {
