@@ -55,7 +55,7 @@ const commentSchema = new Schema({
       username: String,
       position: Number
     }],
-    // Quote support for Level 3 -> Level 2 conversion
+    // Quote support for Level 2+ -> Level 1 conversion
     quote: {
       // ID of the comment being quoted
       quoted_comment_id: {
@@ -78,7 +78,7 @@ const commentSchema = new Schema({
         type: String,
         trim: true
       },
-      // Indicates this comment was created from Level 3 -> Level 2 conversion
+      // Indicates this comment was created from Level 2+ -> Level 1 conversion
       is_level_conversion: {
         type: Boolean,
         default: false

@@ -132,19 +132,20 @@ function validateQuoteData(quoteData) {
 }
 
 /**
- * Check if a comment should be converted from Level 3 to Level 2 with quote
+ * Check if a comment should be converted to Level 1 with quote
  * @param {number} targetLevel - The level the comment would be at
  * @param {Object} parentComment - The parent comment
  * @returns {boolean} - True if conversion is needed
  */
 function shouldConvertToQuotedReply(targetLevel, parentComment) {
-  // Convert Level 3 comments to Level 2 with quote
-  if (targetLevel >= 3) {
+  // Convert Level 2+ comments to Level 1 with quote
+  // This ensures only 2 levels are displayed: Level 0 (root) and Level 1 (replies with quotes)
+  if (targetLevel >= 2) {
     return true;
   }
 
-  // Also convert if parent is already at max level
-  if (parentComment && parentComment.hierarchy?.level >= 2) {
+  // Also convert if parent is already at level 1 or higher
+  if (parentComment && parentComment.hierarchy?.level >= 1) {
     return true;
   }
 
@@ -155,32 +156,30 @@ function shouldConvertToQuotedReply(targetLevel, parentComment) {
  * Get the appropriate parent for a quoted reply
  * @param {Object} originalParent - The comment being replied to
  * @param {Object} Comment - Comment model for database queries
- * @returns {Promise<Object>} - The appropriate parent comment (Level 1)
+ * @returns {Promise<Object>} - The appropriate parent comment (Level 0 root)
  */
 async function getQuotedReplyParent(originalParent, Comment) {
   if (!originalParent) {
     throw new Error('Original parent comment is required');
   }
 
-  // If original parent is Level 1, use it as parent
-  if (originalParent.hierarchy?.level === 1) {
-    return originalParent;
-  }
-
-  // If original parent is Level 2, find its Level 1 parent
-  if (originalParent.hierarchy?.level === 2 && originalParent.hierarchy?.parent_id) {
-    const level1Parent = await Comment.findById(originalParent.hierarchy.parent_id);
-    if (level1Parent && level1Parent.hierarchy?.level === 1) {
-      return level1Parent;
-    }
-  }
+  // For Level 2 → Level 1 conversion, always use the root comment as parent
+  // This ensures all quoted replies appear as Level 1 comments
 
   // If original parent is Level 0 (root), it becomes the parent
   if (originalParent.hierarchy?.level === 0) {
     return originalParent;
   }
 
-  // Fallback: find root comment
+  // If original parent is Level 1, find its root parent
+  if (originalParent.hierarchy?.level === 1 && originalParent.hierarchy?.root_id) {
+    const rootComment = await Comment.findById(originalParent.hierarchy.root_id);
+    if (rootComment && rootComment.hierarchy?.level === 0) {
+      return rootComment;
+    }
+  }
+
+  // Fallback: find root comment using root_id
   if (originalParent.hierarchy?.root_id) {
     const rootComment = await Comment.findById(originalParent.hierarchy.root_id);
     if (rootComment) {

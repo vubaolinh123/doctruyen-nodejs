@@ -148,9 +148,11 @@ class CommentService {
         // Calculate target level
         const targetLevel = (parentComment.hierarchy?.level || 0) + 1;
 
-        // Check if we need to convert Level 3 to Level 2 with quote
+
+
+        // Check if we need to convert Level 2+ to Level 1 with quote
         if (commentQuoteUtils.shouldConvertToQuotedReply(targetLevel, parentComment)) {
-          console.log('[Comment Service] Converting Level 3+ to Level 2 with quote');
+          console.log('[Comment Service] Converting Level 2+ to Level 1 with quote');
           console.log('[Comment Service] Content before quote formatting:', {
             originalContent: content,
             contentType: typeof content,
@@ -173,7 +175,7 @@ class CommentService {
             formattedContentType: typeof finalContent
           });
 
-          // Get appropriate parent (Level 1 comment)
+          // Get appropriate parent (Level 0 root comment)
           const quotedReplyParent = await commentQuoteUtils.getQuotedReplyParent(parentComment, Comment);
           finalParentId = quotedReplyParent._id;
 

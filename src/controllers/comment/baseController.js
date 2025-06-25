@@ -252,12 +252,28 @@ class BaseCommentController {
       const userRole = req.user.role;
       const { reason } = req.body || {}; // Make reason optional
 
+      // Get comment data before deletion for cache invalidation
+      const Comment = require('../../models/comment');
+      const comment = await Comment.findById(id);
+      if (!comment) {
+        return res.status(404).json({
+          success: false,
+          message: 'Bình luận không tồn tại'
+        });
+      }
+
+      // Store target info for cache invalidation
+      const storyId = comment.target.story_id;
+      const chapterId = comment.target.chapter_id;
+
       const result = await commentService.deleteComment(id, userId, reason, userRole);
 
-      // Invalidate cache
-      cacheService.invalidateStoryCache(req.body.story_id);
-      if (req.body.chapter_id) {
-        cacheService.invalidateChapterCache(req.body.chapter_id);
+      // Invalidate cache using the comment's target information
+      if (storyId) {
+        cacheService.invalidateStoryCache(storyId);
+      }
+      if (chapterId) {
+        cacheService.invalidateChapterCache(chapterId);
       }
 
       res.json(result);

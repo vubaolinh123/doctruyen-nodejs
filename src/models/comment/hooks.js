@@ -83,15 +83,26 @@ const setupHooks = (schema) => {
         throw new Error('Parent comment not found');
       }
 
-      // Check depth limit
-      if (parentComment.hierarchy.level >= 3) {
-        throw new Error('Maximum nesting level reached');
-      }
+      // Check if this is a quote conversion (Level 2+ → Level 1)
+      const isQuoteConversion = this.content?.quote?.is_level_conversion === true;
 
-      // Set hierarchy properties
-      this.hierarchy.level = parentComment.hierarchy.level + 1;
-      this.hierarchy.root_id = parentComment.hierarchy.root_id || parentComment._id;
-      this.hierarchy.path = (parentComment.hierarchy.path || '/') + this._id.toString() + '/';
+      if (isQuoteConversion) {
+        // For quote conversion, always set as Level 1 regardless of parent level
+        this.hierarchy.level = 1;
+        this.hierarchy.root_id = parentComment.hierarchy.root_id || parentComment._id;
+        this.hierarchy.path = (parentComment.hierarchy.path || '/') + this._id.toString() + '/';
+      } else {
+        // Normal hierarchy calculation
+        // Check depth limit
+        if (parentComment.hierarchy.level >= 3) {
+          throw new Error('Maximum nesting level reached');
+        }
+
+        // Set hierarchy properties
+        this.hierarchy.level = parentComment.hierarchy.level + 1;
+        this.hierarchy.root_id = parentComment.hierarchy.root_id || parentComment._id;
+        this.hierarchy.path = (parentComment.hierarchy.path || '/') + this._id.toString() + '/';
+      }
     } else {
       // Đây là root comment
       this.hierarchy.level = 0;
