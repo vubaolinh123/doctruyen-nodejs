@@ -164,6 +164,12 @@ const setupHooks = (schema) => {
 
       // Nếu moderation status thay đổi
       if (doc.isModified('moderation.status')) {
+        console.log('[Comment Hook] Moderation status changed:', {
+          commentId: doc._id,
+          oldStatus: doc.getChanges()?.moderation?.status,
+          newStatus: doc.moderation.status,
+          parentId: doc.hierarchy.parent_id
+        });
         await this.handleModerationStatusChange(doc);
       }
 
@@ -296,10 +302,22 @@ const setupHooks = (schema) => {
 
         // Decrease parent reply count
         if (doc.hierarchy.parent_id) {
-          await doc.constructor.findByIdAndUpdate(
+          console.log('[Comment Hook] Decreasing parent reply count:', {
+            commentId: doc._id,
+            parentId: doc.hierarchy.parent_id,
+            status: doc.moderation.status
+          });
+
+          const updateResult = await doc.constructor.findByIdAndUpdate(
             doc.hierarchy.parent_id,
-            { $inc: { 'engagement.replies.count': -1 } }
+            { $inc: { 'engagement.replies.count': -1 } },
+            { new: true }
           );
+
+          console.log('[Comment Hook] Parent reply count updated:', {
+            parentId: doc.hierarchy.parent_id,
+            newReplyCount: updateResult?.engagement?.replies?.count
+          });
         }
       }
     } catch (error) {

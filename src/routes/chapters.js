@@ -77,6 +77,9 @@ router.get('/story/slug/:storySlug', optionalAuth, controller.getChaptersByStory
 // Lấy chapter theo story slug và chapter slug
 router.get('/story/:storySlug/chapter/:chapterSlug', controller.getChapterByStoryAndChapterSlug);
 
+// CRITICAL FIX: Add missing access control route for chapter reading page
+router.get('/access-control/:storySlug/:chapterSlug', optionalAuth, controller.getChapterByStoryAndChapterSlug);
+
 // Lấy chapter mới nhất của một truyện
 router.get('/story/:storyId/latest', controller.getLatestChapter);
 

@@ -113,11 +113,28 @@ const validateUpdateComment = [
     }),
 
   body('content')
-    .trim()
-    .notEmpty()
-    .withMessage('Nội dung bình luận không được để trống')
-    .isLength({ min: 1, max: 2000 })
-    .withMessage('Nội dung bình luận phải từ 1-2000 ký tự'),
+    .custom((value) => {
+      // Handle both string and object content formats
+      let contentString = '';
+
+      if (typeof value === 'string') {
+        contentString = value.trim();
+      } else if (typeof value === 'object' && value && value.original) {
+        contentString = value.original.trim();
+      } else {
+        throw new Error('Nội dung bình luận phải là string hoặc object với thuộc tính original');
+      }
+
+      if (!contentString || contentString.length === 0) {
+        throw new Error('Nội dung bình luận không được để trống');
+      }
+
+      if (contentString.length < 1 || contentString.length > 2000) {
+        throw new Error('Nội dung bình luận phải từ 1-2000 ký tự');
+      }
+
+      return true;
+    }),
 
   body('edit_reason')
     .optional()

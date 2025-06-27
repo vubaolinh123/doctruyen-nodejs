@@ -168,12 +168,26 @@ class PurchaseService {
 
       // Lưu vào UserPurchases
       const userPurchases = await UserPurchases.purchaseChapter(
-        userId, 
-        chapterId, 
-        chapter.story_id._id, 
-        chapter.price, 
+        userId,
+        chapterId,
+        chapter.story_id._id,
+        chapter.price,
         transaction._id
       );
+
+      // CRITICAL FIX: Ensure database write is committed before returning
+      // Add a small delay to prevent read-after-write consistency issues
+      console.log(`[PurchaseService.purchaseChapter] ✅ Purchase saved, ensuring database consistency...`);
+      await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay
+
+      // Verify the purchase was saved correctly
+      const verifyPurchase = await UserPurchases.checkChapterPurchased(userId, chapterId);
+      console.log(`[PurchaseService.purchaseChapter] 🔍 Purchase verification result: ${verifyPurchase}`);
+
+      if (!verifyPurchase) {
+        console.error(`[PurchaseService.purchaseChapter] ❌ CRITICAL ERROR: Purchase was not saved correctly!`);
+        throw new Error('Lỗi hệ thống: Không thể xác nhận giao dịch. Vui lòng thử lại.');
+      }
 
       return {
         success: true,
@@ -297,9 +311,28 @@ class PurchaseService {
         }
 
         // Kiểm tra đã mua chapter chưa
-        console.log(`[PurchaseService.checkAccess] 🔍 Checking chapter purchase for userId: ${userId}, chapterId: ${chapterId}`);
+        console.log(`[PurchaseService.checkAccess] 🔍 DEBUGGING CHAPTER ACCESS CHECK`);
+        console.log(`[PurchaseService.checkAccess] userId: ${userId} (type: ${typeof userId})`);
+        console.log(`[PurchaseService.checkAccess] chapterId: ${chapterId} (type: ${typeof chapterId})`);
+        console.log(`[PurchaseService.checkAccess] Timestamp: ${new Date().toISOString()}`);
+
         const chapterPurchased = await UserPurchases.checkChapterPurchased(userId, chapterId);
         console.log(`[PurchaseService.checkAccess] 📊 Chapter purchase result: ${chapterPurchased}`);
+
+        if (!chapterPurchased) {
+          // Additional debugging: Check if user has any purchases at all
+          const userPurchasesDoc = await UserPurchases.findOne({ user_id: userId });
+          console.log(`[PurchaseService.checkAccess] 🔍 User purchases document exists: ${!!userPurchasesDoc}`);
+          if (userPurchasesDoc) {
+            console.log(`[PurchaseService.checkAccess] 📋 User has ${userPurchasesDoc.purchasedChapters?.length || 0} chapter purchases`);
+            const recentPurchases = userPurchasesDoc.purchasedChapters?.slice(-3) || [];
+            console.log(`[PurchaseService.checkAccess] 📝 Recent chapter purchases:`, recentPurchases.map(p => ({
+              chapter_id: p.chapter_id,
+              status: p.status,
+              purchase_date: p.purchase_date
+            })));
+          }
+        }
 
         if (chapterPurchased) {
           console.log(`[PurchaseService.checkAccess] ✅ Chapter access granted - user has purchased chapter`);

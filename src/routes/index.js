@@ -14,6 +14,8 @@ router.use('/seo-config', require('./seoConfig'));
 router.use('/cache-config', require('./cacheConfig'));
 router.use('/rankings', require('./rankings'));
 router.use('/story-stats', require('./storyStats'));
+// CRITICAL FIX: Add missing bookmarks router
+router.use('/bookmarks', require('./bookmarks'));
 
 // Route public cho user
 router.get('/public/users/slug/:slug', auth.optional, userController.getBySlug);
@@ -22,7 +24,8 @@ router.get('/public/users/slug-only/:id', userController.getSlugById);
 // Các route cần xác thực
 router.use('/users', require('./users'));
 router.use('/purchased-stories', auth, require('./purchasedStories'));
-router.use('/stories-reading', auth, require('./storiesReading'));
+// CRITICAL FIX: Change to optional auth for reading progress compatibility
+router.use('/stories-reading', require('./storiesReading'));
 router.use('/transactions', auth, require('./transactions'));
 router.use('/purchase', require('./purchase'));
 

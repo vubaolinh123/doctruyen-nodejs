@@ -227,11 +227,26 @@ const setupMethods = (schema) => {
 
   /**
    * Edit comment content
-   * @param {String} newContent - Nội dung mới
+   * @param {String|Object} newContent - Nội dung mới (string hoặc object với original property)
    * @param {String} reason - Lý do edit
    * @returns {Promise<void>}
    */
   schema.methods.editContent = async function(newContent, reason = '') {
+    // Extract content string from object or use as string
+    let contentString = '';
+    if (typeof newContent === 'string') {
+      contentString = newContent;
+    } else if (typeof newContent === 'object' && newContent && newContent.original) {
+      contentString = newContent.original;
+    } else {
+      throw new Error('Content must be a string or object with original property');
+    }
+
+    // Validate extracted content
+    if (!contentString || typeof contentString !== 'string') {
+      throw new Error('Extracted content must be a non-empty string');
+    }
+
     // Save edit history
     this.metadata.edit_history.push({
       content: this.content.original,
@@ -240,8 +255,8 @@ const setupMethods = (schema) => {
     });
 
     // Update content
-    this.content.original = newContent;
-    this.content.sanitized = this.sanitizeContent(newContent);
+    this.content.original = contentString;
+    this.content.sanitized = this.sanitizeContent(contentString);
 
     await this.save();
   };

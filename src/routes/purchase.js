@@ -16,6 +16,14 @@ router.use(logRequest);
 router.get('/check-access', optionalAuth, purchaseController.checkAccess);
 
 /**
+ * @route POST /api/purchase/check-access
+ * @desc Kiểm tra quyền truy cập nội dung (POST method for frontend compatibility)
+ * @access Public (Optional authentication)
+ * @body { userId?: string, storyId: string, chapterId?: string }
+ */
+router.post('/check-access', optionalAuth, purchaseController.checkAccess);
+
+/**
  * @route POST /api/purchase/story
  * @desc Mua truyện
  * @access Private (Authenticated users)

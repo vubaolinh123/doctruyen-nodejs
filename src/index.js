@@ -66,7 +66,12 @@ if (process.env.NODE_ENV === 'production') {
       'Accept',
       'Origin',
       'Cache-Control',
-      'X-File-Name'
+      'Pragma',
+      'Expires',
+      'X-File-Name',
+      // REAL-TIME COMMENT FIX: Add cache-control headers for no-cache functionality
+      'If-None-Match',
+      'If-Modified-Since'
     ],
     exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
     optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
@@ -87,7 +92,12 @@ if (process.env.NODE_ENV === 'production') {
       'Accept',
       'Origin',
       'Cache-Control',
-      'X-File-Name'
+      'Pragma',
+      'Expires',
+      'X-File-Name',
+      // REAL-TIME COMMENT FIX: Add cache-control headers for no-cache functionality
+      'If-None-Match',
+      'If-Modified-Since'
     ],
     exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
     optionsSuccessStatus: 200,

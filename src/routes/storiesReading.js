@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const controller = require('../controllers/storiesReading');
+const { optionalAuth } = require('../middleware/auth.middleware');
 
 // ============================================
 // TEST ROUTE (for debugging)
@@ -49,10 +50,11 @@ router.get('/user/:userId/bookmarks', controller.getAllUserBookmarks);
 // ============================================
 
 // Lấy lịch sử đọc cụ thể của user cho một story
-router.get('/user/:userId/story/:storyId', controller.findByUserAndStory);
+// CRITICAL FIX: Add optional auth for reading progress compatibility
+router.get('/user/:userId/story/:storyId', optionalAuth, controller.findByUserAndStory);
 
 // Cập nhật hoặc tạo mới lịch sử đọc (upsert pattern)
-router.post('/user/:userId/story/:storyId', controller.upsertReading);
+router.post('/user/:userId/story/:storyId', optionalAuth, controller.upsertReading);
 
 // Cập nhật trạng thái đọc
 router.put('/user/:userId/story/:storyId/status', controller.updateReadingStatus);

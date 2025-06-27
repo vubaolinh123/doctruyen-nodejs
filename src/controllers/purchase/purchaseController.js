@@ -113,10 +113,15 @@ class PurchaseController {
    */
   async checkAccess(req, res) {
     try {
-      const { storyId, chapterId } = req.query;
-      const userId = req.user ? (req.user.id || req.user._id) : null;
+      // CRITICAL FIX: Handle both GET (query) and POST (body) requests
+      const isPostRequest = req.method === 'POST';
+      const { storyId, chapterId, userId: bodyUserId } = isPostRequest ? req.body : req.query;
+
+      // Get user ID from request user, body, or query
+      const userId = bodyUserId || (req.user ? (req.user.id || req.user._id) : null);
 
       console.log(`[PurchaseController.checkAccess] 🔍 DEBUGGING ACCESS CHECK REQUEST`);
+      console.log(`[PurchaseController.checkAccess] Method: ${req.method}`);
       console.log(`[PurchaseController.checkAccess] req.user:`, req.user ? { id: req.user.id || req.user._id, email: req.user.email } : 'null');
       console.log(`[PurchaseController.checkAccess] userId: ${userId}`);
       console.log(`[PurchaseController.checkAccess] storyId: ${storyId}`);

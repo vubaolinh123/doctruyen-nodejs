@@ -7,10 +7,13 @@ const storiesReadingService = require('../../services/storiesReading/storiesRead
 class StoriesReadingSpecialController {
   /**
    * Tìm lịch sử đọc theo user_id và story_id
+   * CRITICAL FIX: Return empty object instead of 404 when no reading history exists
    */
   async findByUserAndStory(req, res) {
     try {
       const { userId, storyId } = req.params;
+
+      console.log('[StoriesReading] findByUserAndStory request:', { userId, storyId });
 
       if (!userId || !storyId) {
         return res.status(400).json({
@@ -21,12 +24,22 @@ class StoriesReadingSpecialController {
 
       const item = await storiesReadingService.findByUserAndStory(userId, storyId);
 
+      // CRITICAL FIX: Return empty object instead of 404 for reading progress compatibility
       if (!item) {
-        return res.status(404).json({
-          success: false,
-          message: 'Reading history not found'
+        console.log('[StoriesReading] No reading history found, returning empty object');
+        return res.json({
+          success: true,
+          data: null,
+          message: 'No reading history found - this is normal for new readers'
         });
       }
+
+      console.log('[StoriesReading] Reading history found:', {
+        userId,
+        storyId,
+        hasData: !!item,
+        currentChapter: item.current_chapter?.chapter_id || null
+      });
 
       res.json({
         success: true,

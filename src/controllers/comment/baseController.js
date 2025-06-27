@@ -12,15 +12,15 @@ class BaseCommentController {
    */
   async getComments(req, res) {
     try {
-      const {
-        story_id,
-        chapter_id,
-        parent_id,
-        page = 1,
-        limit = 10,
-        sort = 'newest',
-        include_replies = true
-      } = req.query;
+      // FIXED: Handle null prototype req.query by checking both req.params and req.query
+      // req.params takes precedence for chapter_id and story_id (set by route middleware)
+      const story_id = req.params['story_id'] || req.query['story_id'];
+      const chapter_id = req.params['chapter_id'] || req.query['chapter_id'];
+      const parent_id = req.query['parent_id'];
+      const page = req.query['page'] || 1;
+      const limit = req.query['limit'] || 10;
+      const sort = req.query['sort'] || 'newest';
+      const include_replies = req.query['include_replies'] || true;
 
       const options = {
         story_id,
@@ -34,7 +34,8 @@ class BaseCommentController {
         user_role: req.user?.role
       };
 
-      // Check cache first (only for non-authenticated requests to avoid userReaction issues)
+      // CRITICAL FIX: Disable caching for authenticated users to ensure real-time userReaction updates
+      // For authenticated users, always fetch fresh data to get correct userReaction status
       const cachedResult = !options.user_id ? cacheService.getCachedComments(options) : null;
       if (cachedResult) {
         // Get story metadata for cached results too
@@ -125,8 +126,11 @@ class BaseCommentController {
         }
       }
 
-      // Cache result
-      cacheService.cacheComments(options, result, 300); // 5 minutes
+      // CRITICAL FIX: Only cache results for non-authenticated users
+      // Authenticated users need fresh data for correct userReaction status
+      if (!options.user_id) {
+        cacheService.cacheComments(options, result, 300); // 5 minutes
+      }
 
       res.json({
         success: true,
@@ -313,8 +317,40 @@ class BaseCommentController {
 
       const result = await commentService.toggleReaction(id, userId, action);
 
-      // Invalidate related cache
-      cacheService.invalidateThreadCache(id);
+      // CRITICAL FIX: Invalidate ALL related caches for real-time updates
+      // Get the comment to find its story_id and chapter_id for proper cache invalidation
+      const Comment = require('../../models/comment');
+      const comment = await Comment.findById(id).select('target hierarchy').lean();
+
+      if (comment) {
+        // Invalidate thread cache for the specific comment
+        cacheService.invalidateThreadCache(id);
+
+        // CRITICAL: Invalidate story/chapter comment list caches
+        if (comment.target.story_id) {
+          cacheService.invalidateStoryCache(comment.target.story_id);
+        }
+        if (comment.target.chapter_id) {
+          cacheService.invalidateChapterCache(comment.target.chapter_id);
+        }
+
+        // If this is a reply, also invalidate the root comment thread
+        if (comment.hierarchy.root_id) {
+          cacheService.invalidateThreadCache(comment.hierarchy.root_id);
+        }
+      } else {
+        // Fallback: just invalidate the thread cache
+        cacheService.invalidateThreadCache(id);
+      }
+
+      // Check if the operation was successful
+      if (result.success === false) {
+        // Return error response for failed operations (like duplicate likes)
+        return res.status(400).json({
+          success: false,
+          message: result.message
+        });
+      }
 
       res.json(result);
     } catch (error) {

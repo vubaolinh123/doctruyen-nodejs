@@ -47,6 +47,52 @@ router.get('/search',
   commentController.searchComments
 );
 
+// CRITICAL FIX: Move chapter route BEFORE /:id/thread to prevent route conflicts
+// Get comments by chapter ID
+router.get('/chapter/:chapterId',
+  optional,
+  commentRateLimit,
+  async (req, res, next) => {
+    try {
+      // CRITICAL FIX: Fetch story_id from chapter_id to satisfy service requirements
+      const chapterId = req.params.chapterId;
+
+      // Validate chapter ID format
+      const mongoose = require('mongoose');
+      if (!mongoose.Types.ObjectId.isValid(chapterId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID chương không hợp lệ'
+        });
+      }
+
+      // Fetch chapter to get story_id
+      const Chapter = require('../models/chapter');
+      const chapter = await Chapter.findById(chapterId).select('story_id').lean();
+
+      if (!chapter) {
+        return res.status(404).json({
+          success: false,
+          message: 'Chương không tồn tại'
+        });
+      }
+
+      // FIXED: Pass chapter and story IDs via req.params to handle null prototype req.query
+      req.params.chapter_id = chapterId;
+      req.params.story_id = chapter.story_id.toString();
+
+      next();
+    } catch (error) {
+      console.error('[CommentRoute] Error fetching chapter:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Lỗi khi tải thông tin chương'
+      });
+    }
+  },
+  commentController.getComments
+);
+
 // Get comment thread
 router.get('/:id/thread',
   optional,
