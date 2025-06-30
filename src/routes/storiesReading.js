@@ -43,7 +43,7 @@ router.get('/user/:userId/recent', controller.getRecentlyRead);
 router.get('/user/:userId/search', controller.searchReadingHistory);
 
 // Lấy tất cả bookmarks của user từ tất cả stories
-router.get('/user/:userId/bookmarks', controller.getAllUserBookmarks);
+router.get('/user/:userId/bookmarks', optionalAuth, controller.getAllUserBookmarks);
 
 // ============================================
 // ROUTES THEO USER VÀ STORY

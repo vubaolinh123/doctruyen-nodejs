@@ -22,11 +22,16 @@ module.exports = {
   autoModeration: moderationController.autoModeration,
   analyzeComment: moderationController.analyzeComment,
   getModerationStats: moderationController.getModerationStats,
+  getCommentsDashboard: moderationController.getCommentsDashboard,
   getHighlyFlaggedComments: moderationController.getHighlyFlaggedComments,
   getSuspiciousComments: moderationController.getSuspiciousComments,
   getModerationHistory: moderationController.getModerationHistory,
   resetFlags: moderationController.resetFlags,
   getCommentAnalytics: moderationController.getCommentAnalytics,
+
+  // Hard delete operations
+  hardDeleteComment: moderationController.hardDeleteComment,
+  bulkHardDeleteComments: moderationController.bulkHardDeleteComments,
   getStoriesWithComments: moderationController.getStoriesWithComments,
   getStoryCommentStats: moderationController.getStoryCommentStats,
   getChaptersWithComments: moderationController.getChaptersWithComments,

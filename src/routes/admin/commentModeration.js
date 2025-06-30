@@ -96,6 +96,13 @@ router.get('/stats',
   commentController.getModerationStats
 );
 
+// Get unified dashboard data
+router.get('/dashboard',
+  authenticateToken,
+  checkAdminPermission,
+  commentController.getCommentsDashboard
+);
+
 // Get comment analytics
 router.get('/analytics',
   authenticateToken,
@@ -187,6 +194,33 @@ router.post('/:id/reset-flags',
   authenticateToken,
   checkAdminPermission,
   commentController.resetFlags
+);
+
+// Hard delete single comment (permanent removal)
+router.delete('/:id/permanent',
+  authenticateToken,
+  checkAdminPermission,
+  commentController.hardDeleteComment
+);
+
+// Bulk hard delete comments (permanent removal)
+router.post('/bulk-permanent-delete',
+  authenticateToken,
+  checkAdminPermission,
+  (req, res, next) => {
+    // Validate bulk hard delete data
+    const { comment_ids, reason } = req.body;
+
+    if (!Array.isArray(comment_ids) || comment_ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'comment_ids phải là array không rỗng'
+      });
+    }
+
+    next();
+  },
+  commentController.bulkHardDeleteComments
 );
 
 module.exports = router;

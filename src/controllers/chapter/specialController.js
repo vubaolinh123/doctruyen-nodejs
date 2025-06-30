@@ -157,21 +157,32 @@ exports.getChaptersByStorySlug = async (req, res) => {
   try {
     const storySlug = req.params.storySlug;
 
+    // Extract pagination parameters from query string
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 1000; // Default to all chapters for backward compatibility
+
     // SERVER-SIDE ACCESS CONTROL: Extract user ID from session/token/headers
     const userId = req.user?.id || req.user?._id || req.headers['x-user-id'] || null;
 
-    console.log(`[API] Getting chapters for story: ${storySlug}, user: ${userId || 'anonymous'}`);
+    console.log(`[API] Getting chapters for story: ${storySlug}, user: ${userId || 'anonymous'}, page: ${page}, limit: ${limit}`);
 
-    // FREEMIUM MODEL: Get chapters with access control validation
-    const result = await chapterService.getChaptersByStorySlug(storySlug, userId);
+    // FREEMIUM MODEL: Get chapters with access control validation and pagination
+    const result = await chapterService.getChaptersByStorySlug(storySlug, userId, {
+      page,
+      limit
+    });
 
     res.json({
       success: true,
       chapters: result.chapters,
       story: result.story,
+      // Add pagination metadata
+      totalChapters: result.totalChapters || result.chapters.length,
+      totalPages: result.totalPages || Math.ceil((result.totalChapters || result.chapters.length) / limit),
+      currentPage: page,
       accessInfo: {
         isAuthenticated: !!userId,
-        totalChapters: result.chapters.length,
+        totalChapters: result.totalChapters || result.chapters.length,
         accessibleChapters: result.chapters.filter(ch => ch.hasAccess).length,
         paidChapters: result.chapters.filter(ch => ch.isPaid).length
       }

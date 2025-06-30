@@ -69,6 +69,7 @@ if (process.env.NODE_ENV === 'production') {
       'Pragma',
       'Expires',
       'X-File-Name',
+      'X-Admin-Request', // ADMIN FIX: Allow admin request header
       // REAL-TIME COMMENT FIX: Add cache-control headers for no-cache functionality
       'If-None-Match',
       'If-Modified-Since'
@@ -95,6 +96,7 @@ if (process.env.NODE_ENV === 'production') {
       'Pragma',
       'Expires',
       'X-File-Name',
+      'X-Admin-Request', // ADMIN FIX: Allow admin request header
       // REAL-TIME COMMENT FIX: Add cache-control headers for no-cache functionality
       'If-None-Match',
       'If-Modified-Since'

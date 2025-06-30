@@ -686,8 +686,11 @@ module.exports = function(schema) {
    * Lấy thống kê đọc của user
    */
   schema.statics.getUserReadingStats = async function(userId) {
+    const mongoose = require('mongoose');
+    const userObjectId = typeof userId === 'string' ? new mongoose.Types.ObjectId(userId) : userId;
+
     const pipeline = [
-      { $match: { user_id: userId } },
+      { $match: { user_id: userObjectId } },
       {
         $group: {
           _id: '$reading_status',

@@ -480,11 +480,12 @@ class ChapterService {
       }
     ];
 
-    // Add pagination for very large datasets
-    if (story.chapter_count > 2000) {
+    // Add pagination when limit is specified (not default 1000)
+    if (limit < 1000) {
       const skip = (page - 1) * limit;
       aggregationPipeline.push({ $skip: skip });
       aggregationPipeline.push({ $limit: limit });
+      console.log(`[ChapterService] Applying pagination: skip=${skip}, limit=${limit}`);
     }
 
     const chapters = await Chapter.aggregate(aggregationPipeline);
@@ -498,6 +499,9 @@ class ChapterService {
     // HIERARCHICAL ACCESS CONTROL: Apply proper business logic
     const chaptersWithAccess = this.mapChaptersWithHierarchicalAccess(chapters, userPurchases, story._id, story);
 
+    // Calculate total chapters for pagination
+    const totalChapters = story.chapter_count || chapters.length;
+
     const result = {
       story: {
         _id: story._id,
@@ -506,14 +510,18 @@ class ChapterService {
         isPaid: story.isPaid || false,
         price: story.price || 0,
         hasPaidChapters: story.hasPaidChapters || false,
-        totalChapters: story.chapter_count || chapters.length
+        totalChapters
       },
       chapters: chaptersWithAccess,
-      pagination: story.chapter_count > 2000 ? {
+      // Add pagination metadata when pagination is applied
+      totalChapters,
+      totalPages: Math.ceil(totalChapters / limit),
+      currentPage: page,
+      pagination: limit < 1000 ? {
         page,
         limit,
-        total: story.chapter_count,
-        hasMore: (page * limit) < story.chapter_count
+        total: totalChapters,
+        hasMore: (page * limit) < totalChapters
       } : null
     };
 

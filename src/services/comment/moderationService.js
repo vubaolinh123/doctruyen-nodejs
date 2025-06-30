@@ -406,6 +406,111 @@ class ModerationService {
     
     return messages[action] || 'xử lý';
   }
+
+  /**
+   * Hard delete a comment (permanent removal from database)
+   * @param {ObjectId} commentId - ID của comment
+   * @param {ObjectId} moderatorId - ID của moderator
+   * @param {String} reason - Lý do xóa cứng
+   * @returns {Promise<Object>} - Kết quả xóa cứng
+   */
+  async hardDeleteComment(commentId, moderatorId, reason = '') {
+    try {
+      const comment = await Comment.findById(commentId);
+      if (!comment) {
+        throw new Error('Bình luận không tồn tại');
+      }
+
+      // Store comment info for logging before deletion
+      const commentInfo = {
+        id: comment._id,
+        userId: comment.user_id,
+        content: comment.content.original,
+        target: comment.target,
+        createdAt: comment.createdAt
+      };
+
+      // Permanently remove the comment from database
+      await Comment.findByIdAndDelete(commentId);
+
+      // Log the hard deletion for audit trail
+      console.log(`[AUDIT] Hard Delete - Comment permanently removed:`, {
+        commentId: commentInfo.id,
+        moderatorId,
+        reason,
+        originalContent: commentInfo.content,
+        target: commentInfo.target,
+        timestamp: new Date().toISOString()
+      });
+
+      return {
+        success: true,
+        message: 'Bình luận đã được xóa cứng thành công',
+        data: {
+          deletedCommentId: commentId,
+          moderatorId,
+          reason,
+          deletedAt: new Date()
+        }
+      };
+    } catch (error) {
+      console.error('Error in hardDeleteComment:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Bulk hard delete comments (permanent removal from database)
+   * @param {Array} commentIds - Array of comment IDs
+   * @param {ObjectId} moderatorId - ID của moderator
+   * @param {String} reason - Lý do xóa cứng
+   * @returns {Promise<Object>} - Kết quả xóa cứng hàng loạt
+   */
+  async bulkHardDeleteComments(commentIds, moderatorId, reason = '') {
+    try {
+      // Get comment info before deletion for logging
+      const comments = await Comment.find({ _id: { $in: commentIds } });
+
+      if (comments.length === 0) {
+        throw new Error('Không tìm thấy bình luận nào để xóa');
+      }
+
+      const commentInfos = comments.map(comment => ({
+        id: comment._id,
+        userId: comment.user_id,
+        content: comment.content.original,
+        target: comment.target,
+        createdAt: comment.createdAt
+      }));
+
+      // Permanently remove all comments from database
+      const deleteResult = await Comment.deleteMany({ _id: { $in: commentIds } });
+
+      // Log the bulk hard deletion for audit trail
+      console.log(`[AUDIT] Bulk Hard Delete - ${deleteResult.deletedCount} comments permanently removed:`, {
+        commentIds,
+        moderatorId,
+        reason,
+        deletedCount: deleteResult.deletedCount,
+        timestamp: new Date().toISOString()
+      });
+
+      return {
+        success: true,
+        message: `Đã xóa cứng ${deleteResult.deletedCount} bình luận thành công`,
+        data: {
+          deletedCount: deleteResult.deletedCount,
+          deletedCommentIds: commentIds,
+          moderatorId,
+          reason,
+          deletedAt: new Date()
+        }
+      };
+    } catch (error) {
+      console.error('Error in bulkHardDeleteComments:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new ModerationService();

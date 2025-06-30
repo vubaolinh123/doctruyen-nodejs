@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const Comment = require('../../models/comment');
 const moderationService = require('../../services/comment/moderationService');
 const cacheService = require('../../services/comment/cacheService');
 
@@ -280,6 +281,264 @@ class ModerationController {
       res.status(500).json({
         success: false,
         message: error.message || 'Lỗi khi lấy thống kê kiểm duyệt'
+      });
+    }
+  }
+
+  /**
+   * Lấy tất cả dữ liệu dashboard cho admin comments
+   * @route GET /api/admin/comments/dashboard
+   */
+  async getCommentsDashboard(req, res) {
+    try {
+      const {
+        period = 'daily',
+        days = 30,
+        weeks = 12,
+        months = 12,
+        timeRange = '30d'
+      } = req.query;
+
+      const Comment = require('../../models/comment');
+      const Story = require('../../models/story');
+      const Chapter = require('../../models/chapter');
+      const User = require('../../models/user');
+
+      // Calculate consistent date range for all calculations
+      const now = new Date();
+      let startDate;
+
+      switch (timeRange) {
+        case '1d':
+          startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          break;
+        case '7d':
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case '30d':
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        case '90d':
+          startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+          break;
+        default:
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      }
+
+      // 1. Get overall comment statistics
+      const overallStats = await Comment.aggregate([
+        { $match: { createdAt: { $gte: startDate } } },
+        {
+          $group: {
+            _id: null,
+            totalComments: { $sum: 1 },
+            activeComments: {
+              $sum: { $cond: [{ $eq: ['$moderation.status', 'active'] }, 1, 0] }
+            },
+            pendingComments: {
+              $sum: { $cond: [{ $eq: ['$moderation.status', 'pending'] }, 1, 0] }
+            },
+            hiddenComments: {
+              $sum: { $cond: [{ $eq: ['$moderation.status', 'hidden'] }, 1, 0] }
+            },
+            deletedComments: {
+              $sum: { $cond: [{ $eq: ['$moderation.status', 'deleted'] }, 1, 0] }
+            },
+            spamComments: {
+              $sum: { $cond: [{ $eq: ['$moderation.status', 'spam'] }, 1, 0] }
+            },
+            flaggedComments: {
+              $sum: { $cond: [{ $gt: ['$moderation.flags.count', 0] }, 1, 0] }
+            },
+            avgSpamScore: { $avg: '$moderation.auto_moderation.spam_score' },
+            avgToxicityScore: { $avg: '$moderation.auto_moderation.toxicity_score' }
+          }
+        }
+      ]);
+
+      const stats = overallStats[0] || {
+        totalComments: 0,
+        activeComments: 0,
+        pendingComments: 0,
+        hiddenComments: 0,
+        deletedComments: 0,
+        spamComments: 0,
+        flaggedComments: 0,
+        avgSpamScore: 0,
+        avgToxicityScore: 0
+      };
+
+      // 2. Get analytics data for charts
+      const analyticsDateRange = period === 'daily' ?
+        new Date(now.getTime() - (parseInt(days) * 24 * 60 * 60 * 1000)) :
+        period === 'weekly' ?
+        new Date(now.getTime() - (parseInt(weeks) * 7 * 24 * 60 * 60 * 1000)) :
+        new Date(now.getTime() - (parseInt(months) * 30 * 24 * 60 * 60 * 1000));
+
+      const analyticsPipeline = [
+        { $match: { createdAt: { $gte: analyticsDateRange } } },
+        {
+          $group: {
+            _id: {
+              $dateToString: {
+                format: period === 'daily' ? '%Y-%m-%d' :
+                       period === 'weekly' ? '%Y-%U' : '%Y-%m',
+                date: '$createdAt',
+                timezone: 'Asia/Saigon'
+              }
+            },
+            totalComments: { $sum: 1 },
+            activeComments: {
+              $sum: { $cond: [{ $eq: ['$moderation.status', 'active'] }, 1, 0] }
+            },
+            pendingComments: {
+              $sum: { $cond: [{ $eq: ['$moderation.status', 'pending'] }, 1, 0] }
+            },
+            flaggedComments: {
+              $sum: { $cond: [{ $gt: ['$moderation.flags.count', 0] }, 1, 0] }
+            },
+            deletedComments: {
+              $sum: { $cond: [{ $eq: ['$moderation.status', 'deleted'] }, 1, 0] }
+            }
+          }
+        },
+        { $sort: { '_id': 1 } }
+      ];
+
+      const analyticsData = await Comment.aggregate(analyticsPipeline);
+
+      // Format analytics response
+      const formattedAnalytics = analyticsData.map(stat => ({
+        [period === 'daily' ? 'date' : period === 'weekly' ? 'week' : 'month']: stat._id,
+        totalComments: stat.totalComments,
+        activeComments: stat.activeComments,
+        pendingComments: stat.pendingComments,
+        flaggedComments: stat.flaggedComments,
+        deletedComments: stat.deletedComments
+      }));
+
+      // Calculate analytics summary
+      const analyticsTotalComments = formattedAnalytics.reduce((sum, stat) => sum + stat.totalComments, 0);
+      const analyticsAveragePerPeriod = formattedAnalytics.length > 0 ? Math.round(analyticsTotalComments / formattedAnalytics.length) : 0;
+      const analyticsPeakComments = formattedAnalytics.length > 0 ? Math.max(...formattedAnalytics.map(stat => stat.totalComments)) : 0;
+
+      const analytics = {
+        period,
+        timezone: 'Asia/Saigon',
+        stats: formattedAnalytics,
+        summary: {
+          totalComments: analyticsTotalComments,
+          averagePerPeriod: analyticsAveragePerPeriod,
+          peakComments: analyticsPeakComments,
+          dataPoints: formattedAnalytics.length
+        }
+      };
+
+      // 3. Get navigation data for cards
+      const [storiesWithComments, chaptersWithComments, usersWithComments] = await Promise.all([
+        // Stories with comments count
+        Comment.aggregate([
+          { $match: { createdAt: { $gte: startDate } } },
+          {
+            $group: {
+              _id: '$target.story_id',
+              commentCount: { $sum: 1 }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              storiesWithComments: { $sum: 1 },
+              totalComments: { $sum: '$commentCount' }
+            }
+          }
+        ]),
+
+        // Chapters with comments count
+        Comment.aggregate([
+          { $match: { createdAt: { $gte: startDate } } },
+          {
+            $group: {
+              _id: '$target.chapter_id',
+              commentCount: { $sum: 1 }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              chaptersWithComments: { $sum: 1 },
+              totalComments: { $sum: '$commentCount' }
+            }
+          }
+        ]),
+
+        // Users with comments count
+        Comment.aggregate([
+          { $match: { createdAt: { $gte: startDate } } },
+          {
+            $group: {
+              _id: '$user_id',
+              commentCount: { $sum: 1 }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              usersWithComments: { $sum: 1 },
+              totalComments: { $sum: '$commentCount' }
+            }
+          }
+        ])
+      ]);
+
+      const navigation = {
+        stories: {
+          count: storiesWithComments[0]?.storiesWithComments || 0,
+          totalComments: storiesWithComments[0]?.totalComments || 0
+        },
+        chapters: {
+          count: chaptersWithComments[0]?.chaptersWithComments || 0,
+          totalComments: chaptersWithComments[0]?.totalComments || 0
+        },
+        users: {
+          count: usersWithComments[0]?.usersWithComments || 0,
+          totalComments: usersWithComments[0]?.totalComments || 0
+        }
+      };
+
+      // 4. Build final response
+      const response = {
+        success: true,
+        data: {
+          // Overall statistics
+          stats,
+
+          // Analytics data for charts
+          analytics,
+
+          // Navigation data for cards
+          navigation,
+
+          // Meta information
+          meta: {
+            timeRange,
+            period,
+            calculatedAt: new Date().toISOString(),
+            dateRange: {
+              start: startDate.toISOString(),
+              end: now.toISOString()
+            }
+          }
+        }
+      };
+
+      res.json(response);
+
+    } catch (error) {
+      console.error('Error getting comments dashboard:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Lỗi khi lấy dữ liệu dashboard bình luận'
       });
     }
   }
@@ -1815,9 +2074,7 @@ class ModerationController {
         userId
       } = req.query;
 
-      console.log('🔍 [getCommentsByStory] Request params:', {
-        storyId, page, limit, search, sort, direction, status, dateFrom, dateTo, userId
-      });
+
 
       // Validate storyId
       if (!storyId || !storyId.match(/^[0-9a-fA-F]{24}$/)) {
@@ -1831,20 +2088,20 @@ class ModerationController {
       const limitNumber = parseInt(limit);
       const skipNumber = (pageNumber - 1) * limitNumber;
 
-      // Build match conditions
-      const matchConditions = {
-        story_id: new mongoose.Types.ObjectId(storyId),
-        type: 'story'
+      // Build query conditions with filters
+      const queryConditions = {
+        'target.story_id': new mongoose.Types.ObjectId(storyId),
+        'target.type': 'story'
       };
 
       // Add status filter
       if (status !== 'all') {
-        matchConditions.status = status;
+        queryConditions['moderation.status'] = status;
       }
 
       // Add search filter
       if (search) {
-        matchConditions.$or = [
+        queryConditions.$or = [
           { 'content.original': { $regex: search, $options: 'i' } },
           { 'content.processed': { $regex: search, $options: 'i' } }
         ];
@@ -1852,68 +2109,54 @@ class ModerationController {
 
       // Add date range filter
       if (dateFrom || dateTo) {
-        matchConditions.createdAt = {};
+        queryConditions.createdAt = {};
         if (dateFrom) {
-          matchConditions.createdAt.$gte = new Date(dateFrom);
+          queryConditions.createdAt.$gte = new Date(dateFrom);
         }
         if (dateTo) {
-          matchConditions.createdAt.$lte = new Date(dateTo);
+          queryConditions.createdAt.$lte = new Date(dateTo);
         }
       }
 
       // Add user filter
       if (userId) {
-        matchConditions.user_id = new mongoose.Types.ObjectId(userId);
+        queryConditions.user_id = new mongoose.Types.ObjectId(userId);
       }
 
-      // Build aggregation pipeline
-      const pipeline = [
-        { $match: matchConditions },
-        {
-          $lookup: {
-            from: 'users',
-            localField: 'user_id',
-            foreignField: '_id',
-            as: 'user'
-          }
-        },
-        {
-          $lookup: {
-            from: 'stories',
-            localField: 'story_id',
-            foreignField: '_id',
-            as: 'story'
-          }
-        },
-        {
-          $addFields: {
-            user: { $arrayElemAt: ['$user', 0] },
-            story: { $arrayElemAt: ['$story', 0] }
-          }
-        }
-      ];
-
-      // Add sorting
-      const sortStage = {};
-      if (sort === 'createdAt') {
-        sortStage.createdAt = direction === 'asc' ? 1 : -1;
-      } else if (sort === 'engagement.score') {
-        sortStage['engagement.score'] = direction === 'asc' ? 1 : -1;
+      // Build sort object
+      let sortObject = {};
+      switch (sort) {
+        case 'newest':
+        case 'createdAt':
+          sortObject.createdAt = -1; // Newest first
+          break;
+        case 'oldest':
+          sortObject.createdAt = 1; // Oldest first
+          break;
+        case 'engagement':
+        case 'engagement.score':
+          sortObject['engagement.score'] = direction === 'asc' ? 1 : -1;
+          break;
+        case 'likes':
+          sortObject['engagement.likes'] = direction === 'asc' ? 1 : -1;
+          break;
+        case 'replies':
+          sortObject['engagement.replies'] = direction === 'asc' ? 1 : -1;
+          break;
+        default:
+          sortObject.createdAt = -1; // Default: newest first
+          break;
       }
-      pipeline.push({ $sort: sortStage });
 
-      // Get total count
-      const countPipeline = [...pipeline, { $count: 'total' }];
-      const countResult = await Comment.aggregate(countPipeline);
-      const totalItems = countResult[0]?.total || 0;
+      // Execute query with all filters and sorting
+      const simpleComments = await Comment.find(queryConditions)
+        .limit(limitNumber)
+        .skip(skipNumber)
+        .sort(sortObject)
+        .populate('user_id', 'name email')
+        .lean();
 
-      // Add pagination
-      pipeline.push(
-        { $skip: skipNumber },
-        { $limit: limitNumber }
-      );
-
-      const comments = await Comment.aggregate(pipeline);
+      const totalItems = await Comment.countDocuments(queryConditions);
 
       // Calculate pagination
       const totalPages = Math.ceil(totalItems / limitNumber);
@@ -1923,13 +2166,13 @@ class ModerationController {
       // Get story metadata
       const Story = require('../../models/story');
       const story = await Story.findById(storyId)
-        .select('name slug image author')
-        .populate('author', 'name slug')
+        .select('name slug image author_id')
+        .populate('author_id', 'name slug')
         .lean();
 
       const response = {
         success: true,
-        data: comments,
+        data: simpleComments,
         pagination: {
           currentPage: pageNumber,
           totalPages,
@@ -1942,6 +2185,8 @@ class ModerationController {
           story
         }
       };
+
+
 
       res.json(response);
 
@@ -1989,22 +2234,22 @@ class ModerationController {
       const limitNumber = parseInt(limit);
       const skipNumber = (pageNumber - 1) * limitNumber;
 
-      // Build match conditions
+      // Build match conditions using correct schema structure
       const matchConditions = {
-        chapter_id: new mongoose.Types.ObjectId(chapterId),
-        type: 'chapter'
+        'target.chapter_id': new mongoose.Types.ObjectId(chapterId),
+        'target.type': 'chapter'
       };
 
-      // Add status filter
+      // Add status filter using correct schema path
       if (status !== 'all') {
-        matchConditions.status = status;
+        matchConditions['moderation.status'] = status;
       }
 
-      // Add search filter
+      // Add search filter using correct schema paths
       if (search) {
         matchConditions.$or = [
           { 'content.original': { $regex: search, $options: 'i' } },
-          { 'content.processed': { $regex: search, $options: 'i' } }
+          { 'content.sanitized': { $regex: search, $options: 'i' } }
         ];
       }
 
@@ -2064,13 +2309,39 @@ class ModerationController {
         }
       ];
 
-      // Add sorting
+      // Add sorting with proper field mapping
       const sortStage = {};
-      if (sort === 'createdAt') {
-        sortStage.createdAt = direction === 'asc' ? 1 : -1;
-      } else if (sort === 'engagement.score') {
-        sortStage['engagement.score'] = direction === 'asc' ? 1 : -1;
+      const sortDirection = direction === 'asc' ? 1 : -1;
+
+      // Map sort parameters to MongoDB fields
+      switch (sort) {
+        case 'newest':
+        case 'createdAt':
+          sortStage.createdAt = -1; // Always newest first for 'newest'
+          break;
+        case 'oldest':
+          sortStage.createdAt = 1; // Always oldest first for 'oldest'
+          break;
+        case 'popular':
+        case 'engagement.score':
+          sortStage['engagement.score'] = -1; // Highest score first
+          sortStage.createdAt = -1; // Secondary sort by newest
+          break;
+        case 'controversial':
+          sortStage['engagement.replies.count'] = -1; // Most replies first
+          sortStage.createdAt = -1; // Secondary sort by newest
+          break;
+        default:
+          // Fallback to newest if sort parameter is not recognized
+          sortStage.createdAt = -1;
+          break;
       }
+
+      // Ensure we always have at least one sort field
+      if (Object.keys(sortStage).length === 0) {
+        sortStage.createdAt = -1;
+      }
+
       pipeline.push({ $sort: sortStage });
 
       // Get total count
@@ -2097,9 +2368,9 @@ class ModerationController {
         .select('name chapter story_id')
         .populate({
           path: 'story_id',
-          select: 'name slug image author',
+          select: 'name slug image author_id',
           populate: {
-            path: 'author',
+            path: 'author_id',
             select: 'name slug'
           }
         })
@@ -2240,13 +2511,39 @@ class ModerationController {
         }
       ];
 
-      // Add sorting
+      // Add sorting with proper field mapping
       const sortStage = {};
-      if (sort === 'createdAt') {
-        sortStage.createdAt = direction === 'asc' ? 1 : -1;
-      } else if (sort === 'engagement.score') {
-        sortStage['engagement.score'] = direction === 'asc' ? 1 : -1;
+      const sortDirection = direction === 'asc' ? 1 : -1;
+
+      // Map sort parameters to MongoDB fields
+      switch (sort) {
+        case 'newest':
+        case 'createdAt':
+          sortStage.createdAt = -1; // Always newest first for 'newest'
+          break;
+        case 'oldest':
+          sortStage.createdAt = 1; // Always oldest first for 'oldest'
+          break;
+        case 'popular':
+        case 'engagement.score':
+          sortStage['engagement.score'] = -1; // Highest score first
+          sortStage.createdAt = -1; // Secondary sort by newest
+          break;
+        case 'controversial':
+          sortStage['engagement.replies.count'] = -1; // Most replies first
+          sortStage.createdAt = -1; // Secondary sort by newest
+          break;
+        default:
+          // Fallback to newest if sort parameter is not recognized
+          sortStage.createdAt = -1;
+          break;
       }
+
+      // Ensure we always have at least one sort field
+      if (Object.keys(sortStage).length === 0) {
+        sortStage.createdAt = -1;
+      }
+
       pipeline.push({ $sort: sortStage });
 
       // Get total count
@@ -2535,6 +2832,69 @@ class ModerationController {
     }
   }
 
+  /**
+   * Hard delete a comment (permanent removal)
+   * @route DELETE /api/admin/comments/:id/permanent
+   */
+  async hardDeleteComment(req, res) {
+    try {
+      const { id } = req.params;
+      const moderatorId = req.user._id || req.user.id;
+      const { reason = '' } = req.body;
+
+      console.log(`[Hard Delete] Admin ${moderatorId} permanently deleting comment ${id}, reason: ${reason}`);
+
+      const result = await moderationService.hardDeleteComment(id, moderatorId, reason);
+
+      // Invalidate cache
+      cacheService.invalidateOnCommentUpdate({ _id: id });
+
+      res.json(result);
+    } catch (error) {
+      console.error('Error hard deleting comment:', error);
+
+      if (error.message.includes('không tồn tại')) {
+        return res.status(404).json({
+          success: false,
+          message: error.message
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Lỗi khi xóa cứng bình luận'
+      });
+    }
+  }
+
+  /**
+   * Bulk hard delete comments (permanent removal)
+   * @route POST /api/admin/comments/bulk-permanent-delete
+   */
+  async bulkHardDeleteComments(req, res) {
+    try {
+      const { comment_ids, reason = '' } = req.body;
+      const moderatorId = req.user._id || req.user.id;
+
+      console.log(`[Bulk Hard Delete] Admin ${moderatorId} permanently deleting ${comment_ids.length} comments, reason: ${reason}`);
+
+      const result = await moderationService.bulkHardDeleteComments(comment_ids, moderatorId, reason);
+
+      // Invalidate cache for all affected comments
+      comment_ids.forEach(commentId => {
+        cacheService.invalidateOnCommentUpdate({ _id: commentId });
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error('Error bulk hard deleting comments:', error);
+
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Lỗi khi xóa cứng hàng loạt bình luận'
+      });
+    }
+  }
 
 }
 

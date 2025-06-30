@@ -212,7 +212,8 @@ class StoriesReadingSpecialController {
       const { storyId: bodyStoryId, chapterId, note = '' } = req.body;
 
       // Kiểm tra quyền truy cập - user chỉ có thể tạo bookmark cho chính mình
-      if (req.user.id !== userId) {
+      // Convert both to strings for proper comparison (req.user.id is ObjectId, userId is string)
+      if (req.user.id.toString() !== userId.toString()) {
         return res.status(403).json({
           success: false,
           message: 'Không có quyền tạo bookmark cho người dùng khác'
@@ -494,7 +495,9 @@ class StoriesReadingSpecialController {
       }
 
       // Kiểm tra quyền truy cập - user chỉ có thể xem bookmark của chính mình
-      if (req.user.id !== userId) {
+      // Allow access if user is authenticated and viewing their own bookmarks
+      // Convert both to strings for proper comparison (req.user.id is ObjectId, userId is string)
+      if (req.user && req.user.id.toString() !== userId.toString()) {
         return res.status(403).json({
           success: false,
           message: 'Không có quyền xem bookmark của người dùng khác'
