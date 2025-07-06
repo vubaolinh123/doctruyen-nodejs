@@ -30,10 +30,13 @@ exports.getAll = async (req, res) => {
       sort_order = 'desc',
       hot_day,
       hot_month,
-      hot_all_time
+      hot_all_time,
+      updated_at_start,
+      updated_at_end
     } = req.query;
 
     console.log(`[API] Lấy danh sách truyện - page: ${page}, limit: ${limit}, search: ${search}, categories: ${categories}`);
+    console.log(`[API] Sort parameters - sort: ${sort}, sort_by: ${sort_by}, sort_order: ${sort_order}`);
 
     // Kiểm tra quyền admin nếu có token
     const isAdmin = req.user && req.user.role === 'admin';
@@ -52,11 +55,32 @@ exports.getAll = async (req, res) => {
       });
     }
 
+    // Parse sort parameter to sort_by and sort_order if needed
+    let finalSortBy = sort_by;
+    let finalSortOrder = sort_order;
+
+    // If sort parameter is provided and different from default, parse it
+    if (sort && sort !== '-createdAt') {
+      console.log(`[API] Parsing sort parameter: ${sort}`);
+
+      if (sort.startsWith('-')) {
+        // Descending order (e.g., "-views" -> sort_by="views", sort_order="desc")
+        finalSortBy = sort.substring(1);
+        finalSortOrder = 'desc';
+      } else {
+        // Ascending order (e.g., "views" -> sort_by="views", sort_order="asc")
+        finalSortBy = sort;
+        finalSortOrder = 'asc';
+      }
+
+      console.log(`[API] Converted sort: ${sort} -> sort_by="${finalSortBy}", sort_order="${finalSortOrder}"`);
+    }
+
     // Xây dựng options
     const options = {
       page,
       limit,
-      sort,
+      // Remove original sort parameter to avoid conflicts
       search,
       status,
       is_hot,
@@ -68,18 +92,20 @@ exports.getAll = async (req, res) => {
       has_chapters,
       chapter_count,
       chapter_count_op,
-      sort_by,
-      sort_order,
+      sort_by: finalSortBy,
+      sort_order: finalSortOrder,
       hot_day,
       hot_month,
       hot_all_time,
+      updated_at_start,
+      updated_at_end,
       // Thêm flag để biết đây là request từ admin
       isAdminRequest: isAdmin
     };
 
     // Log để debug
     console.log(`[API] Chapter filters - chapter_count: ${chapter_count}, chapter_count_op: ${chapter_count_op}, has_chapters: ${has_chapters}`);
-    console.log(`[API] Sort params - sort_by: ${sort_by}, sort_order: ${sort_order}`);
+    console.log(`[API] Final sort params - sort_by: ${finalSortBy}, sort_order: ${finalSortOrder}`);
     console.log(`[API] Hot filters - hot_day: ${hot_day}, hot_month: ${hot_month}, hot_all_time: ${hot_all_time}`);
 
     const result = await storyService.getAllStories(options);

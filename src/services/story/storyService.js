@@ -15,7 +15,12 @@ const buildStoryQuery = async (filters) => {
   let query = {};
   // Filter by status if provided
   if (filters.status !== undefined) {
-    query.status = filters.status === 'true';
+    // Handle both string and boolean values
+    if (typeof filters.status === 'string') {
+      query.status = filters.status === 'true';
+    } else {
+      query.status = Boolean(filters.status);
+    }
   }
   // Filter by single category if provided
   if (filters.category) {
@@ -44,6 +49,20 @@ const buildStoryQuery = async (filters) => {
   if (filters.slug) {
     query.slug = filters.slug;
   }
+
+  // Filter by date range if provided
+  if (filters.updated_at_start || filters.updated_at_end) {
+    query.updatedAt = {};
+
+    if (filters.updated_at_start) {
+      query.updatedAt.$gte = new Date(filters.updated_at_start);
+    }
+
+    if (filters.updated_at_end) {
+      query.updatedAt.$lte = new Date(filters.updated_at_end);
+    }
+  }
+
   // Filter by flags if provided
   processFlagsFilters(query, filters);
   return query;
@@ -244,15 +263,30 @@ const processFlagsFilters = (query, filters) => {
 
   // Filter by flags
   if (filters.is_hot !== undefined) {
-    query.is_hot = filters.is_hot === 'true';
+    // Handle both string and boolean values
+    if (typeof filters.is_hot === 'string') {
+      query.is_hot = filters.is_hot === 'true';
+    } else {
+      query.is_hot = Boolean(filters.is_hot);
+    }
   }
 
   if (filters.is_new !== undefined) {
-    query.is_new = filters.is_new === 'true';
+    // Handle both string and boolean values
+    if (typeof filters.is_new === 'string') {
+      query.is_new = filters.is_new === 'true';
+    } else {
+      query.is_new = Boolean(filters.is_new);
+    }
   }
 
   if (filters.is_full !== undefined) {
-    query.is_full = filters.is_full === 'true';
+    // Handle both string and boolean values
+    if (typeof filters.is_full === 'string') {
+      query.is_full = filters.is_full === 'true';
+    } else {
+      query.is_full = Boolean(filters.is_full);
+    }
   }
 
   // Filter by hot_day, hot_month, hot_all_time
@@ -653,7 +687,13 @@ const getStoriesWithChapterFilters = async (query, sortOptions, page, limit, inc
 
     // Nếu có lọc theo has_chapters
     if (filters.has_chapters !== undefined && filters.has_chapters !== '') {
-      const hasChaptersBool = filters.has_chapters === 'true';
+      // Handle both string and boolean values
+      let hasChaptersBool;
+      if (typeof filters.has_chapters === 'string') {
+        hasChaptersBool = filters.has_chapters === 'true';
+      } else {
+        hasChaptersBool = Boolean(filters.has_chapters);
+      }
 
       if (hasChaptersBool) {
         // Lọc truyện có chapter (chapter_count > 0)
@@ -721,7 +761,13 @@ const processChapterCountFilters = (query, filters) => {
 
   // Nếu có lọc theo has_chapters
   if (filters.has_chapters !== undefined && filters.has_chapters !== '') {
-    const hasChaptersBool = filters.has_chapters === 'true';
+    // Handle both string and boolean values
+    let hasChaptersBool;
+    if (typeof filters.has_chapters === 'string') {
+      hasChaptersBool = filters.has_chapters === 'true';
+    } else {
+      hasChaptersBool = Boolean(filters.has_chapters);
+    }
 
     if (hasChaptersBool) {
       // Lọc truyện có chapter (chapter_count > 0)

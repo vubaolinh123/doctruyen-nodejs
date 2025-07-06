@@ -80,10 +80,10 @@ if (process.env.NODE_ENV === 'production') {
   }));
 } else {
   console.log('\x1b[36m%s\x1b[0m', `[${startupTimestamp}] ✓ Applying CORS for development environment`);
-  console.log('\x1b[36m%s\x1b[0m', `[${startupTimestamp}] ✓ Allowed origins: localhost:3000, localhost:3001`);
+  console.log('\x1b[36m%s\x1b[0m', `[${startupTimestamp}] ✓ Allowed origins: localhost:3000, localhost:3001, localhost:3002`);
 
   app.use(cors({
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'https://localhost:3000', 'https://localhost:3001'],
+    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'https://localhost:3000', 'https://localhost:3001', 'https://localhost:3002'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: [
