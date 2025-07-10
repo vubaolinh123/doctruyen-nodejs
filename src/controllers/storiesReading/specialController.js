@@ -133,17 +133,38 @@ class StoriesReadingSpecialController {
         markCompleted
       };
 
-      const item = await storiesReadingService.upsertReading(
+      const result = await storiesReadingService.upsertReading(
         userId,
         storyId,
         chapterData
       );
 
-      res.json({
+      // Prepare response with mission progress information
+      const response = {
         success: true,
-        data: item,
+        data: result,
         message: 'Reading progress updated successfully'
-      });
+      };
+
+      // Add mission progress information if available
+      if (result.missionProgress && result.missionProgress.length > 0) {
+        response.missionProgress = result.missionProgress;
+
+        // Add summary of mission updates
+        const completedMissions = result.missionProgress.filter(m => m.newly_completed);
+        if (completedMissions.length > 0) {
+          response.message += ` | ${completedMissions.length} nhiệm vụ đã hoàn thành!`;
+        }
+
+        console.log('[Reading API] Mission progress included in response:', {
+          userId,
+          storyId,
+          totalMissionUpdates: result.missionProgress.length,
+          newlyCompletedMissions: completedMissions.length
+        });
+      }
+
+      res.json(response);
     } catch (err) {
       console.error('Error in upsertReading:', err);
       res.status(400).json({

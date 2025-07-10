@@ -1,5 +1,8 @@
 const mongoose = require('mongoose');
 
+// Import UserLevel model to ensure it's registered
+require('../userLevel');
+
 /**
  * Định nghĩa các instance methods cho MissionProgress model
  * @param {Object} schema - Schema của MissionProgress model
@@ -114,6 +117,7 @@ const setupMethods = (schema) => {
         coin_change: reward.coins,
         reference_type: 'mission',
         reference_id: mission._id,
+        balance_after: user.coin,
         metadata: {
           mission_type: mission.type,
           mission_title: mission.title
@@ -123,13 +127,21 @@ const setupMethods = (schema) => {
     
     // Cập nhật kinh nghiệm
     if (reward.exp > 0) {
-      // Cập nhật kinh nghiệm và cấp độ
-      const UserLevel = mongoose.model('UserLevel');
-      await UserLevel.addExperience(user._id, reward.exp, {
-        source: 'mission',
-        mission_id: mission._id,
-        mission_title: mission.title
-      });
+      try {
+        // Cập nhật kinh nghiệm và cấp độ
+        const UserLevel = mongoose.model('UserLevel');
+        await UserLevel.addExperience(user._id, reward.exp, {
+          source: 'mission',
+          mission_id: mission._id,
+          mission_title: mission.title,
+          mission_type: mission.type
+        });
+        console.log(`[MissionProgress] Successfully added ${reward.exp} experience to user ${user._id}`);
+      } catch (expError) {
+        // Log error but don't fail the entire reward claiming process
+        console.error('[MissionProgress] Error adding experience:', expError.message);
+        console.log('[MissionProgress] Continuing with coin reward only...');
+      }
     }
     
     // Đánh dấu là đã nhận thưởng
@@ -137,8 +149,12 @@ const setupMethods = (schema) => {
     this.rewarded_at = new Date();
     
     await Promise.all([user.save(), this.save()]);
-    
-    return reward;
+
+    return {
+      coinChange: reward.coins,
+      expGained: reward.exp,
+      newBalance: user.coin
+    };
   };
 };
 

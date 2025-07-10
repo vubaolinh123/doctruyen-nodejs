@@ -121,8 +121,20 @@ exports.oath = async (req, res) => {
 
     // Sử dụng authService để xử lý logic đăng nhập OAuth
     const result = await authService.oauthLogin(req.body, clientInfo);
-    
-    res.json(result);
+
+    // Wrap result in success format for consistency
+    const response = {
+      success: true,
+      ...result,
+      data: {
+        token: result.accessToken,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        user: result.user
+      }
+    };
+
+    res.json(response);
   } catch (err) {
     console.error('❌ OAuth login error:', err);
 

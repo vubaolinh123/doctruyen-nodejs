@@ -211,12 +211,97 @@ const login = async (credentials, clientInfo) => {
 };
 
 /**
+ * Xử lý authorization code từ Google OAuth
+ * @param {Object} authData - Dữ liệu authorization code
+ * @param {Object} clientInfo - Thông tin client
+ * @returns {Promise<Object>} - Kết quả đăng nhập
+ */
+const handleGoogleAuthorizationCode = async (authData, clientInfo) => {
+  const { code, redirectUri } = authData;
+
+  if (!code) {
+    throw new Error('MISSING_AUTHORIZATION_CODE');
+  }
+
+  try {
+    const axios = require('axios');
+
+    // Exchange authorization code for access token
+    const tokenResponse = await axios.post('https://oauth2.googleapis.com/token', {
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      code: code,
+      grant_type: 'authorization_code',
+      redirect_uri: redirectUri,
+    }, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    });
+
+    const tokenData = tokenResponse.data;
+
+    if (!tokenData.access_token) {
+      console.error('Google token exchange error:', tokenData);
+      throw new Error(`Google token exchange failed: ${tokenData.error_description || tokenData.error || 'No access token received'}`);
+    }
+
+    // Get user profile from Google
+    const profileResponse = await axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: {
+        'Authorization': `Bearer ${tokenData.access_token}`,
+      },
+    });
+
+    const profile = profileResponse.data;
+
+    if (!profile.email) {
+      console.error('Google profile fetch error:', profile);
+      throw new Error('Failed to fetch user profile from Google');
+    }
+
+    // Process the user profile data using existing OAuth logic
+    const oauthUserData = {
+      email: profile.email,
+      name: profile.name,
+      avatar: profile.picture,
+      googleId: profile.id,
+      provider: 'google',
+      accountType: 'google'
+    };
+
+    // Call the existing OAuth login logic with profile data
+    return await processOAuthUser(oauthUserData, clientInfo);
+
+  } catch (error) {
+    console.error('Google OAuth authorization code error:', error);
+    throw new Error(`Google OAuth failed: ${error.message}`);
+  }
+};
+
+/**
  * Đăng nhập bằng OAuth (Google)
  * @param {Object} oauthData - Dữ liệu OAuth
  * @param {Object} clientInfo - Thông tin client
  * @returns {Promise<Object>} - Kết quả đăng nhập
  */
 const oauthLogin = async (oauthData, clientInfo) => {
+  // Handle authorization code flow
+  if (oauthData.code && oauthData.provider === 'google') {
+    return await handleGoogleAuthorizationCode(oauthData, clientInfo);
+  }
+
+  // Handle direct profile data flow (legacy)
+  return await processOAuthUser(oauthData, clientInfo);
+};
+
+/**
+ * Xử lý thông tin người dùng OAuth
+ * @param {Object} oauthData - Dữ liệu OAuth
+ * @param {Object} clientInfo - Thông tin client
+ * @returns {Promise<Object>} - Kết quả đăng nhập
+ */
+const processOAuthUser = async (oauthData, clientInfo) => {
   const { email, name, avatar, accountType, token: oauthToken, preserve_db_data, googleId } = oauthData;
   const { userAgent, ipAddress } = clientInfo;
 

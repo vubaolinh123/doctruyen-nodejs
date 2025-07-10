@@ -12,11 +12,12 @@ module.exports = {
   create: baseController.create,
   update: baseController.update,
   remove: baseController.remove,
-  
+
   // Special operations
   getDailyMissions: specialController.getDailyMissions,
   getWeeklyMissions: specialController.getWeeklyMissions,
   toggleStatus: specialController.toggleStatus,
   getMissionStats: specialController.getMissionStats,
-  getUserMissionProgress: specialController.getUserMissionProgress
+  getUserMissionProgress: specialController.getUserMissionProgress,
+  claimMissionReward: specialController.claimMissionReward
 };

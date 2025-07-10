@@ -4,6 +4,7 @@
  */
 const Mission = require('../../models/mission');
 const MissionProgress = require('../../models/missionProgress');
+const User = require('../../models/user');
 const { handleError } = require('../../utils/errorHandler');
 
 /**
@@ -191,10 +192,69 @@ const getUserMissionProgress = async (req, res) => {
   }
 };
 
+/**
+ * Nhận thưởng nhiệm vụ
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+const claimMissionReward = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { missionId } = req.params;
+
+    console.log(`[MissionController] Claiming reward for mission ${missionId} by user ${userId}`);
+
+    // Tìm mission progress của user cho mission này
+    const missionProgress = await MissionProgress.findOne({
+      user_id: userId,
+      mission_id: missionId
+    });
+
+    if (!missionProgress) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy tiến trình nhiệm vụ'
+      });
+    }
+
+    if (!missionProgress.completed) {
+      return res.status(400).json({
+        success: false,
+        message: 'Nhiệm vụ chưa hoàn thành'
+      });
+    }
+
+    if (missionProgress.rewarded) {
+      return res.status(400).json({
+        success: false,
+        message: 'Phần thưởng đã được nhận'
+      });
+    }
+
+    // Sử dụng method claimReward từ model
+    const rewardResult = await missionProgress.claimReward();
+
+    res.json({
+      success: true,
+      message: 'Nhận thưởng thành công!',
+      data: {
+        coinChange: rewardResult.coinChange,
+        expGained: rewardResult.expGained,
+        newBalance: rewardResult.newBalance
+      }
+    });
+
+  } catch (error) {
+    console.error('[MissionController] Error in claimMissionReward:', error);
+    handleError(res, error);
+  }
+};
+
 module.exports = {
   getDailyMissions,
   getWeeklyMissions,
   toggleStatus,
   getMissionStats,
-  getUserMissionProgress
+  getUserMissionProgress,
+  claimMissionReward
 };

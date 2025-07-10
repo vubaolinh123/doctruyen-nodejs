@@ -18,6 +18,9 @@ const swaggerUI = require('swagger-ui-express');
 const swaggerSpecs = require('./config/swagger');
 const { getLogTimestamp } = require('./utils/timezone');
 
+// Load all models to ensure they are registered with Mongoose
+require('./models');
+
 const app = express();
 
 // Log thông tin môi trường với timestamp

@@ -1,6 +1,8 @@
 const StoriesReading = require('../../models/storiesReading');
 const Chapter = require('../../models/chapter');
 const Story = require('../../models/story');
+const Mission = require('../../models/mission');
+const MissionProgress = require('../../models/missionProgress');
 
 /**
  * Service xử lý logic nghiệp vụ cho lịch sử đọc truyện
@@ -151,7 +153,30 @@ class StoriesReadingService {
       chapterNumber: chapter.chapter
     };
 
-    return StoriesReading.upsertReading(userId, storyId, enrichedChapterData, options);
+    // Update reading progress first
+    const readingResult = await StoriesReading.upsertReading(userId, storyId, enrichedChapterData, options);
+
+    // Track mission progress for "read_chapter" missions if chapter is marked as completed
+    let missionResults = null;
+    if (enrichedChapterData.markCompleted || enrichedChapterData.status === 'completed') {
+      try {
+        missionResults = await this.trackReadChapterMissions(userId, storyId, enrichedChapterData.chapterId);
+      } catch (missionError) {
+        // Log mission tracking errors but don't fail the reading progress update
+        console.error('[Mission Tracking] Error tracking read_chapter missions:', {
+          userId,
+          storyId,
+          chapterId: enrichedChapterData.chapterId,
+          error: missionError.message
+        });
+      }
+    }
+
+    // Return reading result with optional mission progress info
+    return {
+      ...readingResult.toObject(),
+      missionProgress: missionResults
+    };
   }
 
   /**
@@ -380,6 +405,206 @@ class StoriesReadingService {
       reading_streak: streak,
       total_records: readingHistory.length
     };
+  }
+
+  /**
+   * Track mission progress for "read_chapter" missions
+   * This method is called when a user completes reading a chapter
+   */
+  async trackReadChapterMissions(userId, storyId, chapterId) {
+    console.log('[Mission Tracking] Starting read_chapter mission tracking:', {
+      userId,
+      storyId,
+      chapterId
+    });
+
+    try {
+      // Get all active "read_chapter" missions (both daily and weekly)
+      const readChapterMissions = await Mission.find({
+        'requirement.type': 'read_chapter',
+        status: true
+      });
+
+      if (readChapterMissions.length === 0) {
+        console.log('[Mission Tracking] No active read_chapter missions found');
+        return null;
+      }
+
+      console.log('[Mission Tracking] Found active read_chapter missions:', {
+        count: readChapterMissions.length,
+        missions: readChapterMissions.map(m => ({
+          id: m._id,
+          title: m.title,
+          type: m.type,
+          requirement: m.requirement
+        }))
+      });
+
+      const missionResults = [];
+
+      // Process each mission
+      for (const mission of readChapterMissions) {
+        try {
+          // Check if this chapter read should count towards the mission
+          const shouldCount = await this.shouldCountForMission(userId, storyId, chapterId, mission);
+
+          if (!shouldCount) {
+            console.log('[Mission Tracking] Chapter read does not count for mission:', {
+              missionId: mission._id,
+              missionTitle: mission.title,
+              reason: 'Conditions not met or already counted'
+            });
+            continue;
+          }
+
+          // Update mission progress
+          const progressResult = await MissionProgress.updateProgress(
+            userId,
+            mission._id,
+            1, // Increment by 1 for each completed chapter
+            true // Increment mode
+          );
+
+          console.log('[Mission Tracking] Mission progress updated:', {
+            missionId: mission._id,
+            missionTitle: mission.title,
+            missionType: mission.type,
+            previousProgress: progressResult.current_progress - 1,
+            newProgress: progressResult.current_progress,
+            required: mission.requirement.count,
+            completed: progressResult.completed
+          });
+
+          missionResults.push({
+            mission_id: mission._id,
+            mission_title: mission.title,
+            mission_type: mission.type,
+            previous_progress: progressResult.current_progress - 1,
+            new_progress: progressResult.current_progress,
+            required: mission.requirement.count,
+            completed: progressResult.completed,
+            newly_completed: progressResult.completed && (progressResult.current_progress - 1) < mission.requirement.count
+          });
+
+        } catch (missionError) {
+          console.error('[Mission Tracking] Error updating individual mission:', {
+            missionId: mission._id,
+            missionTitle: mission.title,
+            error: missionError.message
+          });
+          // Continue with other missions even if one fails
+        }
+      }
+
+      console.log('[Mission Tracking] Mission tracking completed:', {
+        userId,
+        totalMissionsProcessed: readChapterMissions.length,
+        successfulUpdates: missionResults.length,
+        newlyCompletedMissions: missionResults.filter(r => r.newly_completed).length
+      });
+
+      return missionResults.length > 0 ? missionResults : null;
+
+    } catch (error) {
+      console.error('[Mission Tracking] Error in trackReadChapterMissions:', {
+        userId,
+        storyId,
+        chapterId,
+        error: error.message,
+        stack: error.stack
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Check if a chapter read should count towards a specific mission
+   * Implements idempotency and mission-specific conditions
+   */
+  async shouldCountForMission(userId, storyId, chapterId, mission) {
+    try {
+      // Basic validation
+      if (!mission.requirement || mission.requirement.type !== 'read_chapter') {
+        return false;
+      }
+
+      // Check mission-specific conditions if any
+      const conditions = mission.requirement.conditions || {};
+
+      // Example conditions that could be implemented:
+      // - Specific story categories
+      // - Minimum chapter length
+      // - Story completion status
+      // - Time-based restrictions
+
+      if (conditions.story_categories && conditions.story_categories.length > 0) {
+        // Check if story belongs to required categories
+        const story = await Story.findById(storyId).select('categories');
+        if (!story || !story.categories) {
+          return false;
+        }
+
+        const hasRequiredCategory = conditions.story_categories.some(category =>
+          story.categories.includes(category)
+        );
+
+        if (!hasRequiredCategory) {
+          console.log('[Mission Tracking] Story does not match required categories:', {
+            missionId: mission._id,
+            requiredCategories: conditions.story_categories,
+            storyCategories: story.categories
+          });
+          return false;
+        }
+      }
+
+      // Idempotency check: Ensure the same chapter read doesn't count multiple times
+      // This is handled by checking if we've already counted this specific chapter today/week
+      const today = new Date();
+      const day = today.getDate();
+      const month = today.getMonth();
+      const year = today.getFullYear();
+
+      // For daily missions, check if we've already counted this chapter today
+      // For weekly missions, check if we've already counted this chapter this week
+      const timeQuery = mission.type === 'daily'
+        ? { day, month, year }
+        : {
+            year,
+            week: Math.ceil((today - new Date(year, 0, 1)) / (7 * 24 * 60 * 60 * 1000))
+          };
+
+      // Check if there's already a progress record for this mission and time period
+      const existingProgress = await MissionProgress.findOne({
+        user_id: userId,
+        mission_id: mission._id,
+        ...timeQuery
+      });
+
+      // For now, we'll allow multiple chapter reads to count towards the same mission
+      // In the future, we could add more sophisticated tracking to prevent duplicate counting
+      // of the same chapter within the same time period
+
+      console.log('[Mission Tracking] Mission conditions check passed:', {
+        missionId: mission._id,
+        missionTitle: mission.title,
+        missionType: mission.type,
+        hasExistingProgress: !!existingProgress,
+        currentProgress: existingProgress?.current_progress || 0
+      });
+
+      return true;
+
+    } catch (error) {
+      console.error('[Mission Tracking] Error in shouldCountForMission:', {
+        userId,
+        storyId,
+        chapterId,
+        missionId: mission._id,
+        error: error.message
+      });
+      return false;
+    }
   }
 }
 

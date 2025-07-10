@@ -44,7 +44,17 @@ exports.getAll = async (req, res) => {
  */
 exports.getById = async (req, res) => {
   try {
-    const user = await userService.getUserById(req.params.id);
+    const { id } = req.params;
+
+    // Validate ObjectId format to prevent CastError
+    if (!require('mongoose').Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID người dùng không hợp lệ'
+      });
+    }
+
+    const user = await userService.getUserById(id);
 
     res.json({
       success: true,
@@ -108,7 +118,17 @@ exports.create = async (req, res) => {
  */
 exports.update = async (req, res) => {
   try {
-    const user = await userService.updateUser(req.params.id, req.body);
+    const { id } = req.params;
+
+    // Validate ObjectId format to prevent CastError
+    if (!require('mongoose').Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID người dùng không hợp lệ'
+      });
+    }
+
+    const user = await userService.updateUser(id, req.body);
 
     res.json({
       success: true,
@@ -191,7 +211,8 @@ exports.getBySlug = async (req, res) => {
     }
 
     // Xác định xem người dùng đang gọi API có đang xem profile của chính họ không
-    const isOwnProfile = req.user && req.user._id.toString() === user._id.toString();
+    // JWT token contains 'id' field, not '_id'
+    const isOwnProfile = req.user && req.user.id.toString() === user._id.toString();
 
     // Chuẩn bị dữ liệu trả về, ẩn các thông tin nhạy cảm
     const userData = {
@@ -199,11 +220,29 @@ exports.getBySlug = async (req, res) => {
       name: user.name,
       slug: user.slug,
       avatar: user.avatar,
+      banner: user.banner,
       level: user.level,
       exp: user.exp,
       joinDate: user.createdAt,
       bio: user.bio || '',
-      stats: user.stats || {}
+      stats: user.stats || {},
+      gender: user.gender || '',
+      // Include social media information
+      social: {
+        bio: user.social?.bio || '',
+        facebook: user.social?.facebook || '',
+        twitter: user.social?.twitter || '',
+        instagram: user.social?.instagram || '',
+        youtube: user.social?.youtube || '',
+        website: user.social?.website || ''
+      },
+      // Include attendance summary for level calculation
+      attendance_summary: user.attendance_summary || {
+        total_days: 0,
+        current_streak: 0,
+        longest_streak: 0,
+        last_attendance: null
+      }
     };
 
     // Nếu là profile của chính họ, trả về thêm thông tin
@@ -212,6 +251,15 @@ exports.getBySlug = async (req, res) => {
       userData.coin = user.coin;
       userData.phone = user.phone;
       userData.settings = user.settings;
+      userData.birthday = user.birthday; // Add birthday for own profile
+      userData.created_at = user.createdAt;
+      userData.accountType = user.accountType;
+      userData.role = user.role;
+      userData.isActive = user.isActive;
+      userData.email_verified_at = user.email_verified_at;
+      userData.coin_total = user.coin_total;
+      userData.coin_spent = user.coin_spent;
+      userData.diem_danh = user.diem_danh;
     }
 
     return res.json({

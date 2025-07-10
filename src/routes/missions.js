@@ -20,6 +20,9 @@ router.get('/weekly', controller.getWeeklyMissions);
 // Admin - Lấy danh sách nhiệm vụ có phân trang và lọc
 router.get('/admin', auth, controller.getAll);
 
+// Admin - Lấy thống kê về nhiệm vụ (PHẢI ĐẶT TRƯỚC ROUTE ĐỘNG /admin/:id)
+router.get('/admin/stats', auth, controller.getMissionStats);
+
 // Admin - Lấy chi tiết một nhiệm vụ
 router.get('/admin/:id', auth, controller.getById);
 
@@ -35,16 +38,14 @@ router.delete('/admin/:id', auth, controller.remove);
 // Admin - Bật/tắt trạng thái nhiệm vụ
 router.put('/admin/:id/toggle-status', auth, controller.toggleStatus);
 
-// Admin - Lấy thống kê về nhiệm vụ (đặt trước route động)
-router.get('/admin/stats', auth, controller.getMissionStats);
-// Thêm route thay thế để tương thích với frontend
-router.get('/stats', auth, controller.getMissionStats);
-
 // ==========================================================
 // CÁC ROUTE USER (CẦN XÁC THỰC)
 // ==========================================================
 
 // Lấy tiến trình nhiệm vụ của người dùng
 router.get('/progress/:userId', auth, controller.getUserMissionProgress);
+
+// Nhận thưởng nhiệm vụ
+router.post('/claim-reward/:missionId', auth, controller.claimMissionReward);
 
 module.exports = router;

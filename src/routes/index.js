@@ -23,6 +23,7 @@ router.get('/public/users/slug-only/:id', userController.getSlugById);
 
 // Các route cần xác thực
 router.use('/users', require('./users'));
+router.use('/user', require('./user')); // Add singular user route for profile operations
 router.use('/purchased-stories', auth, require('./purchasedStories'));
 // CRITICAL FIX: Change to optional auth for reading progress compatibility
 router.use('/stories-reading', require('./storiesReading'));
