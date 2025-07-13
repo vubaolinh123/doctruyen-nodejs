@@ -1,14 +1,16 @@
 const mongoose = require('mongoose');
 
 /**
- * AttendanceReward Schema
- * Định nghĩa các mốc phần thưởng điểm danh
+ * AttendanceMilestone Schema
+ * Định nghĩa các mốc phần thưởng điểm danh mới
+ * - monthly: Mốc theo tháng (reset hàng tháng)
+ * - lifetime: Mốc theo tổng số ngày (không reset)
  */
-const attendanceRewardSchema = new mongoose.Schema({
-  // Loại phần thưởng: 'consecutive' (theo chuỗi) hoặc 'total' (theo tổng số ngày)
+const attendanceMilestoneSchema = new mongoose.Schema({
+  // Loại mốc: 'monthly' (theo tháng) hoặc 'lifetime' (theo tổng số ngày)
   type: {
     type: String,
-    enum: ['consecutive', 'total'],
+    enum: ['monthly', 'lifetime'],
     required: true,
     index: true
   },
@@ -97,14 +99,14 @@ const attendanceRewardSchema = new mongoose.Schema({
   }
 }, {
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
-  collection: 'attendance_rewards'
+  collection: 'attendance_milestones'
 });
 
 // Compound index để đảm bảo không có 2 mốc cùng type và required_days
-attendanceRewardSchema.index({ type: 1, required_days: 1 }, { unique: true });
+attendanceMilestoneSchema.index({ type: 1, required_days: 1 }, { unique: true });
 
 // Index cho query performance
-attendanceRewardSchema.index({ is_active: 1, type: 1 });
-attendanceRewardSchema.index({ required_days: 1 });
+attendanceMilestoneSchema.index({ is_active: 1, type: 1 });
+attendanceMilestoneSchema.index({ required_days: 1 });
 
-module.exports = attendanceRewardSchema;
+module.exports = attendanceMilestoneSchema;

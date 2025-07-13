@@ -19,7 +19,7 @@ module.exports = function(schema) {
     // Kiểm tra duplicate claim
     const existingClaim = await this.findOne({
       user_id: userId,
-      reward_id: rewardId,
+      milestone_id: rewardId, // Updated field name
       month: currentMonth,
       year: currentYear
     });
@@ -30,16 +30,16 @@ module.exports = function(schema) {
 
     const claimData = {
       user_id: userId,
-      reward_id: rewardId,
+      milestone_id: rewardId, // Updated field name
       claimed_at: now,
       month: currentMonth,
       year: currentYear,
-      consecutive_days_at_claim: userStats.consecutiveDays || 0,
-      total_days_at_claim: userStats.totalDays || 0,
+      milestone_type: rewardData.milestone_type || 'monthly', // Required field
+      days_at_claim: rewardData.days_at_claim || userStats.totalDays || 0, // Required field
       reward_type: rewardData.reward_type,
       reward_value: rewardData.reward_value || 0,
       permission_id: rewardData.permission_id || null,
-      notes: `Nhận thưởng ${rewardData.title}`
+      notes: rewardData.notes || `Nhận thưởng ${rewardData.title}`
     };
 
     // ✅ Use new + save() to ensure hooks are triggered
@@ -59,11 +59,11 @@ module.exports = function(schema) {
   schema.statics.hasUserClaimed = async function(userId, rewardId, rewardType, month = null, year = null) {
     const query = {
       user_id: userId,
-      reward_id: rewardId
+      milestone_id: rewardId // Updated field name
     };
 
-    // Với consecutive rewards, kiểm tra theo tháng/năm
-    if (rewardType === 'consecutive' && month !== null && year !== null) {
+    // Với consecutive/monthly rewards, kiểm tra theo tháng/năm
+    if ((rewardType === 'consecutive' || rewardType === 'monthly') && month !== null && year !== null) {
       query.month = month;
       query.year = year;
     }
@@ -94,7 +94,7 @@ module.exports = function(schema) {
     if (rewardType) query.reward_type = rewardType;
 
     return this.find(query)
-      .populate('reward_id', 'title description type required_days')
+      .populate('milestone_id', 'title description type required_days') // Updated field name
       .populate('permission_id', 'name description')
       .sort({ claimed_at: -1 })
       .limit(limit)

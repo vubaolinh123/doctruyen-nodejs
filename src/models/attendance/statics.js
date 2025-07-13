@@ -26,37 +26,17 @@ const setupStatics = (schema) => {
   };
 
   /**
-   * Tạo bản ghi điểm danh mới
+   * Tạo bản ghi điểm danh mới (milestone-based system)
    * @param {String} userId - ID của người dùng
    * @param {Date} date - Ngày điểm danh
-   * @param {Number} streakCount - Số ngày điểm danh liên tiếp
+   * @param {Number} reward - Tổng phần thưởng
+   * @param {String} notes - Ghi chú
    * @returns {Promise<Object>} - Bản ghi điểm danh mới
    */
-  schema.statics.createAttendance = async function(userId, date, streakCount) {
+  schema.statics.createAttendance = async function(userId, date, reward = 10, notes = 'Điểm danh hàng ngày') {
     const day = date.getDate();
     const month = date.getMonth();
     const year = date.getFullYear();
-
-    // Tính toán phần thưởng
-    const baseReward = 10;
-    let bonusReward = 0;
-
-    // Thưởng thêm cho các mốc đặc biệt
-    if (streakCount === 7) {
-      bonusReward = 100;
-    } else if (streakCount === 15) {
-      bonusReward = 250;
-    } else if (streakCount === 30) {
-      bonusReward = 1000;
-    } else if (streakCount % 30 === 0 && streakCount > 30) {
-      bonusReward = 1000; // Thưởng thêm cho mỗi 30 ngày
-    }
-
-    // Tạo ghi chú
-    let notes = '';
-    if (bonusReward > 0) {
-      notes = `Điểm danh ${streakCount} ngày liên tiếp! Thưởng thêm ${bonusReward} xu.`;
-    }
 
     // Tạo bản ghi mới với thời gian hiện tại theo múi giờ Việt Nam
     const now = new Date(); // Sử dụng múi giờ đã thiết lập (Asia/Ho_Chi_Minh)
@@ -65,12 +45,10 @@ const setupStatics = (schema) => {
       user_id: userId,
       date,
       status: 'attended',
-      reward: baseReward + bonusReward,
+      reward,
       day,
       month,
       year,
-      streak_count: streakCount,
-      bonus_reward: bonusReward,
       notes,
       attendance_time: now
     });

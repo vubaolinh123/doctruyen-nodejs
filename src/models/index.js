@@ -25,8 +25,8 @@ require('./permissionTemplate');
 // User engagement models
 require('./userLevel');           // ✅ Now properly loaded
 require('./attendance');
-require('./userAttendanceReward');
-require('./attendanceReward');
+require('./userAttendanceReward'); // Now UserAttendanceMilestone
+require('./attendanceReward');     // Now AttendanceMilestone
 require('./comment');
 require('./notification');
 require('./storiesReading');

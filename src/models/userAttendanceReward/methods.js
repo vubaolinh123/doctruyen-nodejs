@@ -55,7 +55,7 @@ module.exports = function(schema) {
   schema.methods.getSummary = function() {
     return {
       id: this._id,
-      rewardTitle: this.reward_id?.title || 'Không xác định',
+      rewardTitle: this.milestone_id?.title || 'Không xác định', // Updated field name
       rewardType: this.reward_type,
       rewardValue: this.reward_value,
       claimedAt: this.claimed_at,
@@ -63,8 +63,8 @@ module.exports = function(schema) {
       rewardText: this.getRewardText(),
       isRecent: this.isRecent(),
       isCurrentMonth: this.isCurrentMonth(),
-      consecutiveDaysAtClaim: this.consecutive_days_at_claim,
-      totalDaysAtClaim: this.total_days_at_claim
+      milestoneType: this.milestone_type,
+      daysAtClaim: this.days_at_claim
     };
   };
 
@@ -74,26 +74,49 @@ module.exports = function(schema) {
   schema.methods.validateClaim = function() {
     const errors = [];
 
-    // Kiểm tra user_id và reward_id
+    // Kiểm tra user_id và milestone_id (updated field name)
     if (!this.user_id) {
       errors.push('User ID là bắt buộc');
     }
 
-    if (!this.reward_id) {
-      errors.push('Reward ID là bắt buộc');
+    if (!this.milestone_id) {
+      errors.push('Milestone ID là bắt buộc');
     }
 
-    // Kiểm tra month và year
-    if (this.month < 0 || this.month > 11) {
-      errors.push('Tháng phải từ 0 đến 11');
+    // Kiểm tra milestone_type (required field)
+    if (!this.milestone_type) {
+      errors.push('Milestone type là bắt buộc');
+    } else if (!['monthly', 'lifetime'].includes(this.milestone_type)) {
+      errors.push('Milestone type phải là monthly hoặc lifetime');
     }
 
-    if (this.year < 2020 || this.year > 2100) {
+    // Kiểm tra days_at_claim (required field)
+    if (this.days_at_claim === undefined || this.days_at_claim === null) {
+      errors.push('Days at claim là bắt buộc');
+    } else if (this.days_at_claim < 0) {
+      errors.push('Days at claim phải là số không âm');
+    }
+
+    // Kiểm tra month (conditionally required for monthly milestones)
+    if (this.milestone_type === 'monthly') {
+      if (this.month === undefined || this.month === null) {
+        errors.push('Tháng là bắt buộc cho milestone monthly');
+      } else if (this.month < 0 || this.month > 11) {
+        errors.push('Tháng phải từ 0 đến 11');
+      }
+    }
+
+    // Kiểm tra year
+    if (!this.year) {
+      errors.push('Năm là bắt buộc');
+    } else if (this.year < 2020 || this.year > 2100) {
       errors.push('Năm không hợp lệ');
     }
 
     // Kiểm tra reward_type
-    if (!['coin', 'permission'].includes(this.reward_type)) {
+    if (!this.reward_type) {
+      errors.push('Reward type là bắt buộc');
+    } else if (!['coin', 'permission'].includes(this.reward_type)) {
       errors.push('Loại phần thưởng không hợp lệ');
     }
 

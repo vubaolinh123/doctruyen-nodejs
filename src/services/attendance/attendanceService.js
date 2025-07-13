@@ -1,6 +1,8 @@
 const Attendance = require('../../models/attendance');
 const User = require('../../models/user');
 const Transaction = require('../../models/transaction');
+const Mission = require('../../models/mission');
+const MissionProgress = require('../../models/missionProgress');
 const mongoose = require('mongoose');
 
 /**
@@ -104,59 +106,26 @@ class AttendanceService {
       }
     }
 
-    // Tính toán số ngày điểm danh liên tiếp hiện tại
-    // Sử dụng trực tiếp current_streak từ user model vì nó đã được tính toán chính xác
-    let consecutiveDays = user.attendance_summary.current_streak || 0;
+    // Tính toán số ngày điểm danh trong tháng hiện tại
+    let monthlyDaysAttended = user.attendance_summary.monthly_days || 0;
 
-    // Nếu user chưa từng điểm danh, consecutiveDays = 0
-    if (!user.attendance_summary.last_attendance) {
-      consecutiveDays = 0;
-    } else {
-      // Kiểm tra xem chuỗi điểm danh có bị gián đoạn không dựa trên thời gian thực
-      const lastDate = new Date(user.attendance_summary.last_attendance);
-      lastDate.setHours(0, 0, 0, 0);
-
-      // Lấy ngày hôm nay thực tế (không phải ngày được query)
-      const realToday = new Date();
-      realToday.setHours(0, 0, 0, 0);
-
-      const realYesterday = new Date(realToday);
-      realYesterday.setDate(realYesterday.getDate() - 1);
-
-      // Nếu đang query tháng/năm hiện tại
-      const isCurrentMonth = (yearNum === realToday.getFullYear() && monthNum === realToday.getMonth());
-
-      if (isCurrentMonth) {
-        // ✅ Check if all attendance records are purchased (special handling)
-        const attendances = await Attendance.find({
-          user_id: user._id,
-          status: { $in: ['attended', 'purchased'] }
-        });
-        const allPurchased = attendances.length > 0 && attendances.every(att => att.status === 'purchased');
-
-        if (allPurchased) {
-          // ✅ For all purchased days: use current_streak directly (no gap penalty)
-          consecutiveDays = user.attendance_summary.current_streak || 0;
-          console.log(`[AttendanceService] All purchased days - using current_streak: ${consecutiveDays}`);
-        } else if (lastDate.getTime() === realToday.getTime() || lastDate.getTime() === realYesterday.getTime()) {
-          consecutiveDays = user.attendance_summary.current_streak || 0;
-        } else {
-          // Chuỗi điểm danh đã bị gián đoạn (only for non-purchased)
-          consecutiveDays = 0;
-        }
-      } else {
-        // Nếu đang xem tháng trong quá khứ, sử dụng current_streak trực tiếp
-        // vì đó là streak tại thời điểm đó
-        consecutiveDays = user.attendance_summary.current_streak || 0;
-      }
+    // Nếu đang xem tháng khác với tháng hiện tại, tính lại số ngày điểm danh cho tháng đó
+    if (monthNum !== currentMonth || yearNum !== currentYear) {
+      // Đếm số ngày điểm danh trong tháng được yêu cầu
+      const monthlyAttendances = await Attendance.find({
+        user_id: user._id,
+        year: yearNum,
+        month: monthNum,
+        status: { $in: ['attended', 'purchased'] }
+      });
+      monthlyDaysAttended = monthlyAttendances.length;
     }
 
     return {
       attendanceData,
       stats: {
         totalDaysAttended: user.attendance_summary.total_days || 0,
-        consecutiveDays: consecutiveDays,
-        maxConsecutiveDays: user.attendance_summary.longest_streak || 0
+        monthlyDaysAttended: monthlyDaysAttended
       }
     };
   }
@@ -171,8 +140,40 @@ class AttendanceService {
    * @returns {Object} Kết quả điểm danh và thông tin thưởng
    */
   async checkIn(userId, { date, timezone, timezoneOffset }) {
-    let userLocalTime;
-    let now = new Date();
+    // Check if transactions are supported by testing the MongoDB topology
+    let session = null;
+    let useTransaction = false;
+
+    try {
+      // Check if we're connected to a replica set or sharded cluster
+      const admin = mongoose.connection.db.admin();
+      const serverStatus = await admin.serverStatus();
+      const isReplicaSet = serverStatus.repl && serverStatus.repl.setName;
+      const isSharded = serverStatus.process === 'mongos';
+
+      if (isReplicaSet || isSharded) {
+        session = await mongoose.startSession();
+        await session.startTransaction();
+        useTransaction = true;
+        console.log('[AttendanceService] Using transaction for atomic operations');
+      } else {
+        console.log('[AttendanceService] Standalone MongoDB detected, using non-transactional operations');
+      }
+    } catch (transactionError) {
+      console.log('[AttendanceService] Transactions not supported, using non-transactional operations:', transactionError.message);
+      if (session) {
+        try {
+          await session.endSession();
+        } catch (endError) {
+          // Ignore session end errors
+        }
+        session = null;
+      }
+    }
+
+    try {
+      let userLocalTime;
+      let now = new Date();
 
     // Khai báo biến
     let vietnamToday;
@@ -232,11 +233,13 @@ class AttendanceService {
     const month = userLocalTime.getMonth();
     const year = userLocalTime.getFullYear();
 
-    // Lấy thông tin người dùng
-    const user = await User.findById(userId);
-    if (!user) {
-      throw new Error('Không tìm thấy người dùng');
-    }
+      // Lấy thông tin người dùng
+      const userQuery = User.findById(userId);
+      if (session) userQuery.session(session);
+      const user = await userQuery;
+      if (!user) {
+        throw new Error('Không tìm thấy người dùng');
+      }
 
     // Kiểm tra xem đã điểm danh hôm nay chưa
     if (user.attendance_summary.last_attendance) {
@@ -254,72 +257,130 @@ class AttendanceService {
       }
     }
 
-    // Tính toán số ngày liên tiếp
-    let streakCount = 0;
-
-    // Cập nhật thông tin điểm danh
-    const attendanceResult = await user.updateAttendance(vietnamToday);
+    // Cập nhật thông tin điểm danh với hệ thống milestone mới
+    const attendanceOptions = session ? { session } : {};
+    const attendanceResult = await user.updateAttendance(vietnamToday, attendanceOptions);
     if (!attendanceResult) {
       throw new Error('Bạn đã điểm danh hôm nay rồi');
     }
 
-    streakCount = user.attendance_summary.current_streak;
-
-    // Tính toán phần thưởng
+    // Tính toán phần thưởng cơ bản
     const baseReward = 10;
     let bonusReward = 0;
-
-    // Tính toán phần thưởng
-    if (streakCount === 7) {
-      bonusReward = 100;
-    } else if (streakCount === 15) {
-      bonusReward = 250;
-    } else if (streakCount === 30) {
-      bonusReward = 1000;
-    } else if (streakCount % 30 === 0 && streakCount > 30) {
-      bonusReward = 1000;
-    }
-
-    // Tạo ghi chú
     let notes = 'Điểm danh hàng ngày';
-    if (bonusReward > 0) {
-      notes = `Điểm danh ${streakCount} ngày liên tiếp! Thưởng thêm ${bonusReward} xu.`;
+
+    // Kiểm tra milestone rewards (sẽ được implement sau)
+    // TODO: Implement milestone checking logic here
+    const milestoneRewards = await this.checkMilestoneRewards(userId, session);
+    if (milestoneRewards.length > 0) {
+      bonusReward = milestoneRewards.reduce((total, reward) => total + reward.reward_value, 0);
+      notes = `Điểm danh hàng ngày! Đạt được ${milestoneRewards.length} mốc thưởng.`;
     }
 
-    // Tạo bản ghi điểm danh
-    const attendance = await Attendance.createAttendance(
-      userId,
-      vietnamToday,
-      streakCount
-    );
+      // Tạo bản ghi điểm danh với hệ thống milestone mới
+      const attendanceCreateOptions = session ? { session } : {};
+      const attendance = await this.createAttendanceRecord(
+        userId,
+        vietnamToday,
+        baseReward + bonusReward,
+        notes,
+        attendanceCreateOptions
+      );
 
-    // Cộng xu cho người dùng
-    const totalReward = baseReward + bonusReward;
-    const coinResult = await user.addCoins(totalReward, 'Điểm danh hàng ngày');
+      // Cộng xu cho người dùng
+      const totalReward = baseReward + bonusReward;
+      const coinOptions = session ? { session } : {};
+      const coinResult = await user.addCoins(totalReward, 'Điểm danh hàng ngày', coinOptions);
 
-    // Tạo giao dịch
-    await Transaction.createTransaction({
-      user_id: userId,
-      description: notes,
-      type: 'attendance',
-      coin_change: totalReward,
-      reference_type: 'attendance',
-      reference_id: attendance._id,
-      balance_after: user.coin
-    });
+      // Tạo giao dịch
+      const transactionData = {
+        user_id: userId,
+        description: notes,
+        type: 'attendance',
+        coin_change: totalReward,
+        reference_type: 'attendance',
+        reference_id: attendance._id,
+        balance_after: user.coin
+      };
 
-    return {
-      status: 'success',
-      message: 'Điểm danh thành công',
-      reward: {
-        base: baseReward,
-        bonus: bonusReward,
-        total: totalReward
-      },
-      streak: streakCount,
-      coin: user.coin,
-      attendance: attendance
-    };
+      if (session) {
+        await Transaction.createTransaction(transactionData, { session });
+      } else {
+        await Transaction.createTransaction(transactionData);
+      }
+
+      // Update user attendance summary and calculate streak
+      await user.updateAttendanceSummary();
+
+      // Reload user to get updated attendance summary with current streak
+      const updatedUser = await User.findById(userId);
+      const streakCount = updatedUser.attendance_summary?.current_streak || 0;
+
+      console.log('[AttendanceService] Updated attendance summary:', {
+        userId,
+        totalDays: updatedUser.attendance_summary?.total_days || 0,
+        monthlyDays: updatedUser.attendance_summary?.monthly_days || 0,
+        currentStreak: streakCount,
+        lastAttendance: updatedUser.attendance_summary?.last_attendance
+      });
+
+      // Track attendance missions within the same transaction/session
+      let missionResults = null;
+      try {
+        missionResults = await this.trackAttendanceMissions(userId, session);
+        console.log('[AttendanceService] Mission tracking completed:', {
+          userId,
+          trackedMissions: missionResults.tracked,
+          hasError: !!missionResults.error
+        });
+      } catch (missionError) {
+        // Log mission tracking errors but don't fail the attendance process
+        console.error('[AttendanceService] Error tracking attendance missions:', {
+          userId,
+          error: missionError.message
+        });
+        // For atomic transactions, we might want to rollback if mission tracking fails
+        // But for now, we'll continue with attendance success
+      }
+
+      // Commit the transaction if using transactions
+      if (useTransaction && session) {
+        await session.commitTransaction();
+        console.log('[AttendanceService] Transaction committed successfully');
+      }
+
+      return {
+        status: 'success',
+        message: 'Điểm danh thành công',
+        reward: {
+          base: baseReward,
+          bonus: bonusReward,
+          total: totalReward
+        },
+        streak: streakCount,
+        coin: user.coin,
+        attendance: attendance,
+        missions: missionResults // Include mission tracking results
+      };
+
+    } catch (error) {
+      // Rollback the transaction on any error if using transactions
+      if (useTransaction && session) {
+        try {
+          await session.abortTransaction();
+          console.log('[AttendanceService] Transaction aborted due to error');
+        } catch (abortError) {
+          console.error('[AttendanceService] Error aborting transaction:', abortError);
+        }
+      }
+      console.error('[AttendanceService] Error in checkIn:', error);
+      throw error;
+    } finally {
+      // End the session if it exists
+      if (session) {
+        await session.endSession();
+      }
+    }
   }
 
   /**
@@ -653,6 +714,283 @@ class AttendanceService {
     yesterday.setHours(0, 0, 0, 0);
 
     return yesterday;
+  }
+
+  /**
+   * Track attendance missions for user
+   * @param {string} userId - ID của người dùng
+   * @param {Object} session - MongoDB session for transaction
+   * @returns {Promise<Object>} - Kết quả tracking missions
+   */
+  async trackAttendanceMissions(userId, session = null) {
+    try {
+      console.log('[Attendance Mission Tracking] Starting attendance mission tracking for user:', userId);
+
+      // Get all active attendance missions
+      const missionQuery = Mission.find({
+        status: true,
+        $or: [
+          { 'requirement.type': 'attendance' },
+          { 'subMissions.requirement.type': 'attendance' }
+        ]
+      }).lean();
+
+      if (session) {
+        missionQuery.session(session);
+      }
+
+      const attendanceMissions = await missionQuery;
+
+      if (!attendanceMissions.length) {
+        console.log('[Attendance Mission Tracking] No active attendance missions found');
+        return { tracked: 0, results: [] };
+      }
+
+      console.log('[Attendance Mission Tracking] Found attendance missions:', {
+        count: attendanceMissions.length,
+        missions: attendanceMissions.map(m => ({ id: m._id, title: m.title, type: m.type }))
+      });
+
+      const missionResults = [];
+
+      // Process each mission
+      for (const mission of attendanceMissions) {
+        try {
+          console.log('[Attendance Mission Tracking] Processing mission:', {
+            missionId: mission._id,
+            missionTitle: mission.title,
+            missionType: mission.type,
+            requirementType: mission.requirement.type
+          });
+
+          // Check if this mission should be tracked for this user
+          const shouldTrack = await this.shouldTrackAttendanceMission(userId, mission, session);
+          if (!shouldTrack) {
+            console.log('[Attendance Mission Tracking] Mission should not be tracked for this user:', {
+              missionId: mission._id,
+              reason: 'Mission conditions not met'
+            });
+            continue;
+          }
+
+          // Track main mission progress if it's attendance type
+          let progressResult = null;
+          if (mission.requirement.type === 'attendance') {
+            progressResult = await MissionProgress.updateProgress(
+              userId,
+              mission._id,
+              1, // Increment by 1 for each attendance
+              true // Increment mode
+            );
+          } else {
+            // If main mission is not attendance type, get existing progress without updating
+            const date = new Date();
+            progressResult = await MissionProgress.findOne({
+              user_id: userId,
+              mission_id: mission._id,
+              year: date.getFullYear(),
+              month: date.getMonth(),
+              day: date.getDate()
+            }) || {
+              current_progress: 0,
+              completed: false
+            };
+          }
+
+          // Track sub-missions if any
+          const subMissionResults = [];
+          if (mission.subMissions && mission.subMissions.length > 0) {
+            for (let subIndex = 0; subIndex < mission.subMissions.length; subIndex++) {
+              const subMission = mission.subMissions[subIndex];
+
+              // Check if this sub-mission should count for attendance
+              if (subMission.requirement.type === 'attendance') {
+                try {
+                  const subProgressResult = await MissionProgress.updateSubMissionProgress(
+                    userId,
+                    mission._id,
+                    subIndex,
+                    1, // Increment by 1 for each attendance
+                    true // Increment mode
+                  );
+
+                  subMissionResults.push({
+                    sub_mission_index: subIndex,
+                    sub_mission_title: subMission.title,
+                    sub_mission_type: subMission.requirement.type,
+                    sub_mission_progress: subProgressResult.sub_progress.find(sp => sp.sub_mission_index === subIndex)
+                  });
+
+                  console.log('[Attendance Mission Tracking] Sub-mission progress updated:', {
+                    missionId: mission._id,
+                    subMissionIndex: subIndex,
+                    subMissionTitle: subMission.title,
+                    subMissionType: subMission.requirement.type
+                  });
+                } catch (subError) {
+                  console.error('[Attendance Mission Tracking] Error updating sub-mission progress:', {
+                    missionId: mission._id,
+                    subMissionIndex: subIndex,
+                    error: subError.message
+                  });
+                }
+              }
+            }
+          }
+
+          missionResults.push({
+            mission_id: mission._id,
+            mission_title: mission.title,
+            mission_type: mission.type,
+            main_progress: progressResult,
+            sub_missions: subMissionResults
+          });
+
+          console.log('[Attendance Mission Tracking] Mission tracking completed:', {
+            missionId: mission._id,
+            missionTitle: mission.title,
+            mainProgress: progressResult?.current_progress || 0,
+            subMissionsCount: subMissionResults.length
+          });
+
+        } catch (missionError) {
+          console.error('[Attendance Mission Tracking] Error processing mission:', {
+            missionId: mission._id,
+            error: missionError.message
+          });
+          // Continue with other missions even if one fails
+        }
+      }
+
+      console.log('[Attendance Mission Tracking] Attendance mission tracking completed:', {
+        userId,
+        totalMissions: attendanceMissions.length,
+        trackedMissions: missionResults.length
+      });
+
+      return {
+        tracked: missionResults.length,
+        results: missionResults
+      };
+
+    } catch (error) {
+      console.error('[Attendance Mission Tracking] Error in trackAttendanceMissions:', error);
+      // Don't throw error to prevent attendance from failing
+      return { tracked: 0, results: [], error: error.message };
+    }
+  }
+
+  /**
+   * Check if attendance mission should be tracked for user
+   * @param {string} userId - ID của người dùng
+   * @param {Object} mission - Mission object
+   * @param {Object} session - MongoDB session for transaction
+   * @returns {Promise<boolean>} - Should track or not
+   */
+  async shouldTrackAttendanceMission(userId, mission, session = null) {
+    try {
+      // Get current time info
+      const today = new Date();
+      const currentDay = today.getDate();
+      const currentMonth = today.getMonth();
+      const currentYear = today.getFullYear();
+
+      const firstDayOfYear = new Date(currentYear, 0, 1);
+      const pastDaysOfYear = (today - firstDayOfYear) / 86400000;
+      const currentWeek = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+
+      // Build time query based on mission type
+      let timeQuery = {};
+      if (mission.type === 'daily') {
+        timeQuery = { day: currentDay, month: currentMonth, year: currentYear };
+      } else if (mission.type === 'weekly') {
+        timeQuery = { week: currentWeek, year: currentYear };
+      }
+
+      // Check if there's already a progress record for this mission and time period
+      const progressQuery = MissionProgress.findOne({
+        user_id: userId,
+        mission_id: mission._id,
+        ...timeQuery
+      });
+
+      if (session) {
+        progressQuery.session(session);
+      }
+
+      const existingProgress = await progressQuery;
+
+      // For attendance missions, we typically allow only one attendance per day
+      // So we check if the mission is already completed for this time period
+      if (existingProgress && existingProgress.completed) {
+        console.log('[Attendance Mission Tracking] Mission already completed for this period:', {
+          missionId: mission._id,
+          missionTitle: mission.title,
+          missionType: mission.type,
+          timeQuery
+        });
+        return false;
+      }
+
+      console.log('[Attendance Mission Tracking] Mission conditions check passed:', {
+        missionId: mission._id,
+        missionTitle: mission.title,
+        missionType: mission.type,
+        hasExistingProgress: !!existingProgress,
+        currentProgress: existingProgress?.current_progress || 0
+      });
+
+      return true;
+
+    } catch (error) {
+      console.error('[Attendance Mission Tracking] Error in shouldTrackAttendanceMission:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Tạo bản ghi điểm danh mới (milestone-based system)
+   * @param {string} userId - ID của người dùng
+   * @param {Date} date - Ngày điểm danh
+   * @param {number} reward - Tổng phần thưởng
+   * @param {string} notes - Ghi chú
+   * @param {Object} options - Tùy chọn (session, etc.)
+   * @returns {Promise<Object>} - Bản ghi điểm danh mới
+   */
+  async createAttendanceRecord(userId, date, reward, notes, options = {}) {
+    const day = date.getDate();
+    const month = date.getMonth();
+    const year = date.getFullYear();
+
+    const attendanceData = {
+      user_id: userId,
+      date,
+      status: 'attended',
+      reward,
+      day,
+      month,
+      year,
+      notes,
+      attendance_time: new Date()
+    };
+
+    if (options.session) {
+      return await Attendance.create([attendanceData], { session: options.session });
+    } else {
+      return await Attendance.create(attendanceData);
+    }
+  }
+
+  /**
+   * Kiểm tra và trả về các milestone rewards đã đạt được
+   * @param {string} userId - ID của người dùng
+   * @param {Object} session - MongoDB session (optional)
+   * @returns {Promise<Array>} - Danh sách milestone rewards
+   */
+  async checkMilestoneRewards(userId, session = null) {
+    // TODO: Implement milestone checking logic
+    // This will be implemented when we create the milestone management system
+    return [];
   }
 }
 

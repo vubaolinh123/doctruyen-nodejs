@@ -86,7 +86,7 @@ const setupMethods = (schema) => {
   };
 
   /**
-   * Cập nhật thông tin điểm danh
+   * Cập nhật thông tin điểm danh mới (milestone-based system)
    * @param {Date} date - Ngày điểm danh
    * @returns {boolean} - Kết quả điểm danh (thành công/thất bại)
    */
@@ -98,43 +98,30 @@ const setupMethods = (schema) => {
       return false;
     }
 
-    // Kiểm tra xem ngày cuối cùng điểm danh có phải là ngày hôm qua không
-    const yesterday = new Date(date);
-    yesterday.setDate(yesterday.getDate() - 1);
-    yesterday.setHours(0, 0, 0, 0);
+    const currentMonth = date.getMonth();
+    const currentYear = date.getFullYear();
 
-    // Chuẩn hóa lastDate để so sánh
-    let isConsecutive = false;
-    if (lastDate) {
-      const normalizedLastDate = new Date(lastDate);
-      normalizedLastDate.setHours(0, 0, 0, 0);
-      isConsecutive = normalizedLastDate.getTime() === yesterday.getTime();
+    // Kiểm tra xem có phải tháng mới không
+    if (this.attendance_summary.current_month !== currentMonth ||
+        this.attendance_summary.current_year !== currentYear) {
+      // Reset monthly attendance cho tháng mới
+      this.attendance_summary.monthly_days = 0;
+      this.attendance_summary.current_month = currentMonth;
+      this.attendance_summary.current_year = currentYear;
     }
 
     // Cập nhật thông tin điểm danh
     this.attendance_summary.last_attendance = date;
     this.attendance_summary.total_days += 1;
-
-    if (isConsecutive) {
-      // Nếu ngày liên tiếp, tăng số ngày liên tiếp lên 1
-      this.attendance_summary.current_streak += 1;
-    } else {
-      // Nếu không liên tiếp hoặc lần đầu điểm danh, set về 1
-      this.attendance_summary.current_streak = 1;
-    }
-
-    // Cập nhật số ngày liên tiếp dài nhất
-    if (this.attendance_summary.current_streak > this.attendance_summary.longest_streak) {
-      this.attendance_summary.longest_streak = this.attendance_summary.current_streak;
-    }
+    this.attendance_summary.monthly_days += 1;
 
     await this.save();
     return true;
   };
 
   /**
-   * ✅ Recalculate attendance summary from all attendance records
-   * This method properly handles purchased attendance for consecutive streaks
+   * ✅ Recalculate attendance summary for milestone-based system
+   * This method calculates total lifetime days and current month days
    */
   schema.methods.updateAttendanceSummary = async function() {
     try {
@@ -151,128 +138,48 @@ const setupMethods = (schema) => {
       if (attendances.length === 0) {
         // Reset stats to 0 if no attendance
         this.attendance_summary.total_days = 0;
-        this.attendance_summary.current_streak = 0;
-        this.attendance_summary.longest_streak = 0;
+        this.attendance_summary.monthly_days = 0;
+        this.attendance_summary.current_month = new Date().getMonth();
+        this.attendance_summary.current_year = new Date().getFullYear();
         this.attendance_summary.last_attendance = null;
         await this.save();
         return;
       }
 
-      // Calculate stats
+      // Calculate milestone-based stats
       const totalDays = attendances.length;
-      let longestStreak = 0;
-      let tempStreak = 0;
-      let currentStreak = 0;
-      let lastDate = null;
       let lastAttendanceDate = null;
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const currentDate = new Date();
+      const currentMonth = currentDate.getMonth();
+      const currentYear = currentDate.getFullYear();
 
-      // ✅ CORRECT LOGIC: Purchased = cumulative, Regular = consecutive + cumulative với purchased
-      const purchasedAttendances = attendances.filter(att => att.status === 'purchased');
-      const regularAttendances = attendances.filter(att => att.status === 'attended');
+      // Calculate monthly attendance for current month
+      const currentMonthAttendances = attendances.filter(att =>
+        att.month === currentMonth && att.year === currentYear
+      );
 
-      console.log(`[User.updateAttendanceSummary] Found ${purchasedAttendances.length} purchased + ${regularAttendances.length} regular attendances`);
+      console.log(`[User.updateAttendanceSummary] Total: ${totalDays}, Current month (${currentMonth}/${currentYear}): ${currentMonthAttendances.length}`);
 
-      // ✅ STEP 1: Calculate purchased streak (cumulative - mỗi purchased day +1 bất kể gaps)
-      let purchasedStreak = purchasedAttendances.length;
-      console.log(`[User.updateAttendanceSummary] Purchased streak: ${purchasedStreak} (cumulative)`);
-
-      // ✅ STEP 2: Calculate regular streak (consecutive rules)
-      let regularCurrentStreak = 0;
-      let regularLongestStreak = 0;
-
-      if (regularAttendances.length > 0) {
-        let tempRegularStreak = 0;
-        let lastRegularDate = null;
-
-        // Process regular attendances to find consecutive streaks
-        for (const attendance of regularAttendances) {
-          const attendanceDate = new Date(attendance.year, attendance.month, attendance.day);
-          attendanceDate.setHours(0, 0, 0, 0);
-
-          if (lastRegularDate) {
-            const dayDiff = (attendanceDate - lastRegularDate) / (1000 * 60 * 60 * 24);
-
-            if (dayDiff === 1) {
-              // Consecutive day
-              tempRegularStreak++;
-            } else if (dayDiff > 1) {
-              // Gap found - update longest and reset temp
-              regularLongestStreak = Math.max(regularLongestStreak, tempRegularStreak);
-              tempRegularStreak = 1;
-            }
-          } else {
-            tempRegularStreak = 1;
-          }
-
-          lastRegularDate = attendanceDate;
-        }
-
-        // Update longest streak with final temp streak
-        regularLongestStreak = Math.max(regularLongestStreak, tempRegularStreak);
-
-        // Check if regular streak is still active (within 1 day of today)
-        if (lastRegularDate) {
-          const daysSinceLastRegular = (today - lastRegularDate) / (1000 * 60 * 60 * 24);
-          if (daysSinceLastRegular <= 1) {
-            regularCurrentStreak = tempRegularStreak;
-          } else {
-            regularCurrentStreak = 0; // Regular streak expired
-          }
-        }
-
-        console.log(`[User.updateAttendanceSummary] Regular streak: current=${regularCurrentStreak}, longest=${regularLongestStreak}`);
-
-        // Update last attendance date
-        if (lastRegularDate) {
-          lastAttendanceDate = lastRegularDate;
-        }
+      // Find the most recent attendance date
+      if (attendances.length > 0) {
+        const lastAttendance = attendances[attendances.length - 1];
+        lastAttendanceDate = new Date(lastAttendance.year, lastAttendance.month, lastAttendance.day);
       }
 
-      // ✅ STEP 3: Set last attendance date from purchased if more recent
-      if (purchasedAttendances.length > 0) {
-        const lastPurchased = purchasedAttendances[purchasedAttendances.length - 1];
-        const lastPurchasedDate = new Date(lastPurchased.year, lastPurchased.month, lastPurchased.day);
-        lastPurchasedDate.setHours(0, 0, 0, 0);
-
-        if (!lastAttendanceDate || lastPurchasedDate > lastAttendanceDate) {
-          lastAttendanceDate = lastPurchasedDate;
-        }
-      }
-
-      // ✅ STEP 4: Combine results - purchased (cumulative) + regular (consecutive)
-      currentStreak = purchasedStreak + regularCurrentStreak;
-      longestStreak = purchasedStreak + regularLongestStreak;
-      tempStreak = currentStreak;
-
-      console.log(`[User.updateAttendanceSummary] Final cumulative results:`);
-      console.log(`[User.updateAttendanceSummary] - Purchased streak: ${purchasedStreak} (cumulative)`);
-      console.log(`[User.updateAttendanceSummary] - Regular current: ${regularCurrentStreak}, longest: ${regularLongestStreak}`);
-      console.log(`[User.updateAttendanceSummary] - Combined current: ${currentStreak} (${purchasedStreak}+${regularCurrentStreak})`);
-      console.log(`[User.updateAttendanceSummary] - Combined longest: ${longestStreak} (${purchasedStreak}+${regularLongestStreak})`);
-      console.log(`[User.updateAttendanceSummary] - Total days: ${attendances.length}`);
-      console.log(`[User.updateAttendanceSummary] - Last attendance: ${lastAttendanceDate?.toISOString().split('T')[0]}`);
-
-      // Update longest streak with final temp streak
-      longestStreak = Math.max(longestStreak, tempStreak);
-
-      // ✅ Current streak already calculated above in the new logic
-      // No additional calculation needed as we've already combined purchased + regular streaks
-
-      // Update user stats
+      // Update user stats with milestone-based system
       this.attendance_summary.total_days = totalDays;
-      this.attendance_summary.current_streak = currentStreak;
-      this.attendance_summary.longest_streak = longestStreak;
+      this.attendance_summary.monthly_days = currentMonthAttendances.length;
+      this.attendance_summary.current_month = currentMonth;
+      this.attendance_summary.current_year = currentYear;
       this.attendance_summary.last_attendance = lastAttendanceDate;
 
       await this.save();
 
       console.log(`[User.updateAttendanceSummary] ✅ Updated for user ${this._id}:`);
       console.log(`  - Total days: ${totalDays}`);
-      console.log(`  - Current streak: ${currentStreak}`);
-      console.log(`  - Longest streak: ${longestStreak}`);
+      console.log(`  - Monthly days: ${currentMonthAttendances.length}`);
+      console.log(`  - Current month/year: ${currentMonth}/${currentYear}`);
       console.log(`  - Last attendance: ${lastAttendanceDate?.toISOString().split('T')[0]}`);
 
     } catch (error) {
@@ -299,11 +206,11 @@ const setupMethods = (schema) => {
     await this.save();
 
     // Check if we should create transaction automatically
-    // Only create transaction for attendance rewards, not for admin actions
+    // Create transaction for attendance rewards, milestone rewards, and admin actions
     const shouldCreateTransaction = typeof options === 'object' && options.createTransaction !== false;
-    const isAttendanceReward = typeof options === 'object' && options.type === 'attendance';
+    const isRewardTransaction = typeof options === 'object' && (options.type === 'attendance' || options.type === 'reward' || options.type === 'admin');
 
-    if (shouldCreateTransaction && isAttendanceReward) {
+    if (shouldCreateTransaction && isRewardTransaction) {
       // ✅ Create transaction record for attendance rewards only
       try {
         const Transaction = require('../transaction');
@@ -319,12 +226,41 @@ const setupMethods = (schema) => {
           metadata = options.metadata || {};
         }
 
+        // Determine transaction type and reference type based on options (declare early)
+        const transactionType = options.type || 'attendance';
+
+        // Determine reference type based on transaction type
+        let referenceType = 'attendance'; // default
+        if (transactionType === 'reward') {
+          referenceType = 'milestone';
+        } else if (transactionType === 'admin') {
+          // For admin actions, check metadata for more specific reference type
+          referenceType = metadata.admin_action === 'force_claim_milestone' ? 'milestone' : 'other';
+        }
+
+        // Determine transaction type label
+        let transactionTypeLabel = 'attendance_reward'; // default
+        if (transactionType === 'reward') {
+          transactionTypeLabel = 'milestone_reward';
+        } else if (transactionType === 'admin') {
+          transactionTypeLabel = 'admin_action';
+        }
+
         // ✅ Generate unique transaction ID với timestamp và random
         const timestamp = Date.now();
         const random = Math.floor(Math.random() * 1000);
-        const transactionId = `REWARD_${this._id}_${timestamp}_${random}`;
 
-        console.log(`[User.addCoins] Creating attendance transaction: ${transactionId}`);
+        // Use appropriate prefix based on transaction type
+        let transactionPrefix = 'REWARD';
+        if (transactionType === 'admin') {
+          transactionPrefix = 'ADMIN';
+        } else if (transactionType === 'attendance') {
+          transactionPrefix = 'ATTEND';
+        }
+
+        const transactionId = `${transactionPrefix}_${this._id}_${timestamp}_${random}`;
+
+        console.log(`[User.addCoins] Creating ${transactionType} transaction: ${transactionId}`);
         console.log(`[User.addCoins] Description: ${description}`);
         console.log(`[User.addCoins] Amount: +${amount} xu`);
 
@@ -333,14 +269,14 @@ const setupMethods = (schema) => {
           transaction_id: transactionId,
           description: description,
           coin_change: amount, // Positive for reward
-          type: 'attendance', // ✅ Use 'attendance' type for consistency
+          type: transactionType, // Use the type from options ('attendance' or 'reward')
           direction: 'in',
           status: 'completed',
-          reference_type: 'attendance',
+          reference_type: referenceType, // 'milestone' for rewards, 'attendance' for attendance
           balance_after: this.coin, // ✅ Add balance_after field
           metadata: {
             ...metadata,
-            transaction_type: 'attendance_reward',
+            transaction_type: transactionTypeLabel,
             user_coin_before: this.coin - amount,
             user_coin_after: this.coin
           }
@@ -350,7 +286,7 @@ const setupMethods = (schema) => {
 
         const transaction = await Transaction.create(transactionData);
 
-        console.log(`[User.addCoins] ✅ Created attendance transaction record: ${transaction._id} (+${amount} xu for user ${this._id})`);
+        console.log(`[User.addCoins] ✅ Created ${transactionType} transaction record: ${transaction._id} (+${amount} xu for user ${this._id})`);
 
       } catch (transactionError) {
         console.error(`[User.addCoins] ❌ Error creating transaction record:`, transactionError);

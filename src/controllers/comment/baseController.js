@@ -195,7 +195,33 @@ class BaseCommentController {
       // Invalidate cache
       cacheService.invalidateOnNewComment(result.data);
 
-      res.status(201).json(result);
+      // Prepare response with mission progress information
+      const response = {
+        success: result.success,
+        message: result.message,
+        data: result.data,
+        quote_info: result.quote_info
+      };
+
+      // Add mission progress information if available
+      if (result.missionProgress && result.missionProgress.length > 0) {
+        response.missionProgress = result.missionProgress;
+
+        // Add summary of mission updates
+        const completedMissions = result.missionProgress.filter(m => m.newly_completed);
+        if (completedMissions.length > 0) {
+          response.message += ` | ${completedMissions.length} nhiệm vụ đã hoàn thành!`;
+        }
+
+        console.log('[Comment API] Mission progress included in response:', {
+          userId,
+          commentId: result.data._id,
+          totalMissionUpdates: result.missionProgress.length,
+          newlyCompletedMissions: completedMissions.length
+        });
+      }
+
+      res.status(201).json(response);
     } catch (error) {
       console.error('[Comment Controller] Error creating comment:', error);
       res.status(500).json({

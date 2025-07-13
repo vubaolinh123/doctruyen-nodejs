@@ -11,7 +11,7 @@ methods(schema);
 hooks(schema);
 virtuals(schema);
 
-// Tạo model
-const UserAttendanceReward = mongoose.model('UserAttendanceReward', schema);
+// Tạo model với tên mới
+const UserAttendanceMilestone = mongoose.model('UserAttendanceMilestone', schema);
 
-module.exports = UserAttendanceReward;
+module.exports = UserAttendanceMilestone;

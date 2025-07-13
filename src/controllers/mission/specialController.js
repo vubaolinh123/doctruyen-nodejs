@@ -204,18 +204,60 @@ const claimMissionReward = async (req, res) => {
 
     console.log(`[MissionController] Claiming reward for mission ${missionId} by user ${userId}`);
 
-    // Tìm mission progress của user cho mission này
-    const missionProgress = await MissionProgress.findOne({
+    // Lấy thông tin nhiệm vụ để xác định loại (daily/weekly)
+    const mission = await Mission.findById(missionId);
+    if (!mission) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy nhiệm vụ'
+      });
+    }
+
+    // Tính toán thời gian hiện tại
+    const today = new Date();
+    const currentDay = today.getDate();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+
+    // Tạo query filter dựa trên loại nhiệm vụ
+    let queryFilter = {
       user_id: userId,
       mission_id: missionId
-    });
+    };
+
+    if (mission.type === 'daily') {
+      // Nhiệm vụ hàng ngày: filter theo ngày hiện tại
+      queryFilter.day = currentDay;
+      queryFilter.month = currentMonth;
+      queryFilter.year = currentYear;
+    } else if (mission.type === 'weekly') {
+      // Nhiệm vụ hàng tuần: filter theo tuần hiện tại
+      const firstDayOfYear = new Date(currentYear, 0, 1);
+      const pastDaysOfYear = (today - firstDayOfYear) / 86400000;
+      const currentWeek = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+
+      queryFilter.year = currentYear;
+      queryFilter.week = currentWeek;
+    }
+
+    console.log(`[MissionController] Query filter for ${mission.type} mission:`, queryFilter);
+
+    // Tìm mission progress với filter chính xác
+    const missionProgress = await MissionProgress.findOne(queryFilter);
 
     if (!missionProgress) {
       return res.status(404).json({
         success: false,
-        message: 'Không tìm thấy tiến trình nhiệm vụ'
+        message: 'Không tìm thấy tiến trình nhiệm vụ cho thời gian hiện tại'
       });
     }
+
+    console.log(`[MissionController] Found mission progress:`, {
+      id: missionProgress._id,
+      completed: missionProgress.completed,
+      rewarded: missionProgress.rewarded,
+      current_progress: missionProgress.current_progress
+    });
 
     if (!missionProgress.completed) {
       return res.status(400).json({
@@ -233,6 +275,12 @@ const claimMissionReward = async (req, res) => {
 
     // Sử dụng method claimReward từ model
     const rewardResult = await missionProgress.claimReward();
+
+    console.log(`[MissionController] Reward claimed successfully:`, {
+      coinChange: rewardResult.coinChange,
+      expGained: rewardResult.expGained,
+      newBalance: rewardResult.newBalance
+    });
 
     res.json({
       success: true,

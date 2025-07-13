@@ -41,7 +41,11 @@ const transactionSchema = new Schema({
   // Ngày giao dịch
   transaction_date: {
     type: Date,
-    default: Date.now,
+    default: () => {
+      // Use Vietnam timezone utility
+      const { getVietnamNowForAPI } = require('../../utils/timezone');
+      return new Date(getVietnamNowForAPI());
+    },
     index: true
   },
 
@@ -86,7 +90,7 @@ const transactionSchema = new Schema({
   // Tham chiếu đến đối tượng liên quan (nếu có)
   reference_type: {
     type: String,
-    enum: ['story', 'chapter', 'attendance', 'mission', 'achievement', 'other', ''],
+    enum: ['story', 'chapter', 'attendance', 'mission', 'achievement', 'milestone', 'other', ''],
     default: ''
   },
 

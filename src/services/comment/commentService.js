@@ -284,6 +284,19 @@ class CommentService {
       // Populate user info
       await comment.populate('user_id', 'name avatar slug level');
 
+      // Track mission progress for comment-type missions
+      let missionResults = null;
+      try {
+        missionResults = await this.trackCommentMissions(validUserId, comment);
+      } catch (missionError) {
+        // Log mission tracking errors but don't fail the comment creation
+        console.error('[Mission Tracking] Error tracking comment missions:', {
+          userId: validUserId,
+          commentId: comment._id,
+          error: missionError.message
+        });
+      }
+
       return {
         success: true,
         message: quoteData ?
@@ -294,7 +307,8 @@ class CommentService {
           is_quoted_reply: true,
           quoted_comment_id: quoteData.quoted_comment_id,
           quoted_username: quoteData.quoted_username
-        } : null
+        } : null,
+        missionProgress: missionResults
       };
     } catch (error) {
       throw error;
@@ -800,6 +814,328 @@ class CommentService {
       };
     } catch (error) {
       throw error;
+    }
+  }
+
+  /**
+   * Track mission progress for comment-type missions
+   * @param {ObjectId} userId - ID của user
+   * @param {Object} comment - Comment object
+   * @returns {Promise<Array>} - Mission progress results
+   */
+  async trackCommentMissions(userId, comment) {
+    try {
+      console.log('[Mission Tracking] Starting comment mission tracking:', {
+        userId,
+        commentId: comment._id,
+        storyId: comment.target.story_id,
+        chapterId: comment.target.chapter_id
+      });
+
+      // Get all active missions that have comment requirements (main or sub-missions)
+      const Mission = require('../../models/mission');
+      const commentMissions = await Mission.find({
+        $or: [
+          { 'requirement.type': 'comment' }, // Main mission is comment type
+          { 'subMissions.requirement.type': 'comment' } // Has comment sub-missions
+        ],
+        status: true
+      });
+
+      if (!commentMissions || commentMissions.length === 0) {
+        console.log('[Mission Tracking] No active comment missions found');
+        return [];
+      }
+
+      console.log('[Mission Tracking] Found comment missions:', {
+        count: commentMissions.length,
+        missions: commentMissions.map(m => ({ id: m._id, title: m.title, type: m.type }))
+      });
+
+      const missionResults = [];
+      const MissionProgress = require('../../models/missionProgress');
+
+      // Process each mission
+      for (const mission of commentMissions) {
+        try {
+          // Check if this comment should count towards the mission
+          const shouldCount = await this.shouldCountForCommentMission(userId, comment, mission);
+
+          if (!shouldCount) {
+            console.log('[Mission Tracking] Comment does not count for mission:', {
+              missionId: mission._id,
+              missionTitle: mission.title,
+              reason: 'Conditions not met or already counted'
+            });
+            continue;
+          }
+
+          // Update main mission progress only if main requirement is comment type
+          let progressResult = null;
+          if (mission.requirement.type === 'comment') {
+            progressResult = await MissionProgress.updateProgress(
+              userId,
+              mission._id,
+              1, // Increment by 1 for each comment
+              true // Increment mode
+            );
+          } else {
+            // If main mission is not comment type, get existing progress without updating
+            const date = new Date();
+            progressResult = await MissionProgress.findOne({
+              user_id: userId,
+              mission_id: mission._id,
+              year: date.getFullYear(),
+              month: date.getMonth(),
+              day: date.getDate()
+            }) || {
+              current_progress: 0,
+              completed: false
+            };
+          }
+
+          // Update sub-mission progress if applicable
+          let subMissionResults = [];
+          if (mission.subMissions && mission.subMissions.length > 0) {
+            for (let subIndex = 0; subIndex < mission.subMissions.length; subIndex++) {
+              const subMission = mission.subMissions[subIndex];
+
+              // Check if this comment action should count for this sub-mission
+              if (subMission.requirement.type === 'comment') {
+                try {
+                  const subProgressResult = await MissionProgress.updateSubMissionProgress(
+                    userId,
+                    mission._id,
+                    subIndex,
+                    1, // Increment by 1 for each comment
+                    true // Increment mode
+                  );
+
+                  subMissionResults.push({
+                    sub_mission_index: subIndex,
+                    sub_mission_title: subMission.title,
+                    sub_mission_type: subMission.requirement.type,
+                    sub_mission_progress: subProgressResult.sub_progress.find(sp => sp.sub_mission_index === subIndex)
+                  });
+
+                  console.log('[Mission Tracking] Sub-mission progress updated:', {
+                    missionId: mission._id,
+                    subMissionIndex: subIndex,
+                    subMissionTitle: subMission.title,
+                    subMissionType: subMission.requirement.type
+                  });
+                } catch (subMissionError) {
+                  console.error('[Mission Tracking] Error updating sub-mission progress:', {
+                    missionId: mission._id,
+                    subMissionIndex: subIndex,
+                    error: subMissionError.message
+                  });
+                }
+              }
+            }
+          }
+
+          // CROSS-SERVICE SUB-MISSION TRACKING: Update sub-missions for other mission types
+          // For example, if this is a read_chapter-type mission with comment sub-missions
+          if (mission.requirement.type !== 'comment' && mission.subMissions && mission.subMissions.length > 0) {
+            for (let subIndex = 0; subIndex < mission.subMissions.length; subIndex++) {
+              const subMission = mission.subMissions[subIndex];
+
+              // If this is a non-comment mission (e.g., read_chapter) with comment sub-missions
+              if (subMission.requirement.type === 'comment') {
+                try {
+                  const subProgressResult = await MissionProgress.updateSubMissionProgress(
+                    userId,
+                    mission._id,
+                    subIndex,
+                    1, // Increment by 1 for each comment
+                    true // Increment mode
+                  );
+
+                  subMissionResults.push({
+                    sub_mission_index: subIndex,
+                    sub_mission_title: subMission.title,
+                    sub_mission_type: subMission.requirement.type,
+                    sub_mission_progress: subProgressResult.sub_progress.find(sp => sp.sub_mission_index === subIndex)
+                  });
+
+                  console.log('[Mission Tracking] Cross-service sub-mission progress updated:', {
+                    missionId: mission._id,
+                    missionType: mission.requirement.type,
+                    subMissionIndex: subIndex,
+                    subMissionTitle: subMission.title,
+                    subMissionType: subMission.requirement.type
+                  });
+                } catch (subMissionError) {
+                  console.error('[Mission Tracking] Error updating cross-service sub-mission progress:', {
+                    missionId: mission._id,
+                    subMissionIndex: subIndex,
+                    error: subMissionError.message
+                  });
+                }
+              }
+            }
+          }
+
+          console.log('[Mission Tracking] Mission progress updated:', {
+            missionId: mission._id,
+            missionTitle: mission.title,
+            missionType: mission.type,
+            previousProgress: progressResult.current_progress - 1,
+            newProgress: progressResult.current_progress,
+            required: mission.requirement.count,
+            completed: progressResult.completed,
+            subMissionsUpdated: subMissionResults.length
+          });
+
+          missionResults.push({
+            mission_id: mission._id,
+            mission_title: mission.title,
+            mission_type: mission.type,
+            previous_progress: progressResult.current_progress - 1,
+            new_progress: progressResult.current_progress,
+            required: mission.requirement.count,
+            completed: progressResult.completed,
+            newly_completed: progressResult.completed && (progressResult.current_progress - 1) < mission.requirement.count,
+            sub_missions: subMissionResults
+          });
+
+        } catch (missionError) {
+          console.error('[Mission Tracking] Error processing mission:', {
+            missionId: mission._id,
+            missionTitle: mission.title,
+            error: missionError.message
+          });
+          // Continue with other missions even if one fails
+        }
+      }
+
+      console.log('[Mission Tracking] Comment mission tracking completed:', {
+        userId,
+        commentId: comment._id,
+        totalMissionUpdates: missionResults.length,
+        newlyCompletedMissions: missionResults.filter(m => m.newly_completed).length
+      });
+
+      return missionResults;
+
+    } catch (error) {
+      console.error('[Mission Tracking] Error in trackCommentMissions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if a comment should count towards a specific mission
+   * @param {ObjectId} userId - ID của user
+   * @param {Object} comment - Comment object
+   * @param {Object} mission - Mission object
+   * @returns {Promise<boolean>} - Whether the comment should count
+   */
+  async shouldCountForCommentMission(userId, comment, mission) {
+    try {
+      // Basic validation
+      if (!userId || !comment || !mission) {
+        return false;
+      }
+
+      // Check if mission is active
+      if (!mission.status) {
+        return false;
+      }
+
+      // Check if mission type is comment
+      if (mission.requirement.type !== 'comment') {
+        return false;
+      }
+
+      // Check if comment is active (not deleted/hidden)
+      if (comment.moderation.status !== 'active') {
+        return false;
+      }
+
+      // Check mission conditions if any
+      const conditions = mission.requirement.conditions || {};
+
+      // Example condition checks (can be extended based on requirements):
+      // - Minimum comment length
+      if (conditions.min_length && comment.content.original.length < conditions.min_length) {
+        console.log('[Mission Tracking] Comment too short for mission:', {
+          missionId: mission._id,
+          commentLength: comment.content.original.length,
+          requiredLength: conditions.min_length
+        });
+        return false;
+      }
+
+      // - Specific story/chapter restrictions
+      if (conditions.story_ids && conditions.story_ids.length > 0) {
+        if (!conditions.story_ids.includes(comment.target.story_id.toString())) {
+          console.log('[Mission Tracking] Comment not on required story for mission:', {
+            missionId: mission._id,
+            commentStoryId: comment.target.story_id,
+            requiredStoryIds: conditions.story_ids
+          });
+          return false;
+        }
+      }
+
+      // - Comment type restrictions (story vs chapter comments)
+      if (conditions.comment_type && conditions.comment_type !== comment.target.type) {
+        console.log('[Mission Tracking] Comment type mismatch for mission:', {
+          missionId: mission._id,
+          commentType: comment.target.type,
+          requiredType: conditions.comment_type
+        });
+        return false;
+      }
+
+      // Check time-based restrictions for mission progress
+      const today = new Date();
+      const MissionProgress = require('../../models/missionProgress');
+
+      // Build time query based on mission type
+      let timeQuery = {};
+      if (mission.type === 'daily') {
+        timeQuery = {
+          day: today.getDate(),
+          month: today.getMonth(),
+          year: today.getFullYear()
+        };
+      } else if (mission.type === 'weekly') {
+        const firstDayOfYear = new Date(today.getFullYear(), 0, 1);
+        const pastDaysOfYear = (today - firstDayOfYear) / 86400000;
+        const week = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+        timeQuery = {
+          week: week,
+          year: today.getFullYear()
+        };
+      }
+
+      // Check if there's already a progress record for this mission and time period
+      const existingProgress = await MissionProgress.findOne({
+        user_id: userId,
+        mission_id: mission._id,
+        ...timeQuery
+      });
+
+      // For comment missions, we allow multiple comments to count towards the same mission
+      // This is different from reading missions where we might want to prevent duplicate counting
+      // of the same chapter within the same time period
+
+      console.log('[Mission Tracking] Mission conditions check passed:', {
+        missionId: mission._id,
+        missionTitle: mission.title,
+        missionType: mission.type,
+        hasExistingProgress: !!existingProgress,
+        currentProgress: existingProgress?.current_progress || 0
+      });
+
+      return true;
+
+    } catch (error) {
+      console.error('[Mission Tracking] Error in shouldCountForCommentMission:', error);
+      return false;
     }
   }
 }

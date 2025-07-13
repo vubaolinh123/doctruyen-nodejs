@@ -419,9 +419,12 @@ class StoriesReadingService {
     });
 
     try {
-      // Get all active "read_chapter" missions (both daily and weekly)
+      // Get all active missions that have read_chapter requirements (main or sub-missions)
       const readChapterMissions = await Mission.find({
-        'requirement.type': 'read_chapter',
+        $or: [
+          { 'requirement.type': 'read_chapter' }, // Main mission is read_chapter type
+          { 'subMissions.requirement.type': 'read_chapter' } // Has read_chapter sub-missions
+        ],
         status: true
       });
 
@@ -457,13 +460,112 @@ class StoriesReadingService {
             continue;
           }
 
-          // Update mission progress
-          const progressResult = await MissionProgress.updateProgress(
-            userId,
-            mission._id,
-            1, // Increment by 1 for each completed chapter
-            true // Increment mode
-          );
+          // Update main mission progress only if main requirement is read_chapter type
+          let progressResult = null;
+          if (mission.requirement.type === 'read_chapter') {
+            progressResult = await MissionProgress.updateProgress(
+              userId,
+              mission._id,
+              1, // Increment by 1 for each completed chapter
+              true // Increment mode
+            );
+          } else {
+            // If main mission is not read_chapter type, get existing progress without updating
+            const date = new Date();
+            progressResult = await MissionProgress.findOne({
+              user_id: userId,
+              mission_id: mission._id,
+              year: date.getFullYear(),
+              month: date.getMonth(),
+              day: date.getDate()
+            }) || {
+              current_progress: 0,
+              completed: false
+            };
+          }
+
+          // Update sub-mission progress if applicable
+          let subMissionResults = [];
+          if (mission.subMissions && mission.subMissions.length > 0) {
+            for (let subIndex = 0; subIndex < mission.subMissions.length; subIndex++) {
+              const subMission = mission.subMissions[subIndex];
+
+              // Check if this reading action should count for this sub-mission
+              if (subMission.requirement.type === 'read_chapter') {
+                try {
+                  const subProgressResult = await MissionProgress.updateSubMissionProgress(
+                    userId,
+                    mission._id,
+                    subIndex,
+                    1, // Increment by 1 for each chapter read
+                    true // Increment mode
+                  );
+
+                  subMissionResults.push({
+                    sub_mission_index: subIndex,
+                    sub_mission_title: subMission.title,
+                    sub_mission_type: subMission.requirement.type,
+                    sub_mission_progress: subProgressResult.sub_progress.find(sp => sp.sub_mission_index === subIndex)
+                  });
+
+                  console.log('[Mission Tracking] Sub-mission progress updated:', {
+                    missionId: mission._id,
+                    subMissionIndex: subIndex,
+                    subMissionTitle: subMission.title,
+                    subMissionType: subMission.requirement.type
+                  });
+                } catch (subMissionError) {
+                  console.error('[Mission Tracking] Error updating sub-mission progress:', {
+                    missionId: mission._id,
+                    subMissionIndex: subIndex,
+                    error: subMissionError.message
+                  });
+                }
+              }
+            }
+          }
+
+          // CROSS-SERVICE SUB-MISSION TRACKING: Update sub-missions for other mission types
+          // For example, if this is a comment-type mission with read_chapter sub-missions
+          if (mission.requirement.type !== 'read_chapter' && mission.subMissions && mission.subMissions.length > 0) {
+            for (let subIndex = 0; subIndex < mission.subMissions.length; subIndex++) {
+              const subMission = mission.subMissions[subIndex];
+
+              // If this is a non-read_chapter mission (e.g., comment) with read_chapter sub-missions
+              if (subMission.requirement.type === 'read_chapter') {
+                try {
+                  const subProgressResult = await MissionProgress.updateSubMissionProgress(
+                    userId,
+                    mission._id,
+                    subIndex,
+                    1, // Increment by 1 for each chapter read
+                    true // Increment mode
+                  );
+
+                  subMissionResults.push({
+                    sub_mission_index: subIndex,
+                    sub_mission_title: subMission.title,
+                    sub_mission_type: subMission.requirement.type,
+                    sub_mission_progress: subProgressResult.sub_progress.find(sp => sp.sub_mission_index === subIndex)
+                  });
+
+                  console.log('[Mission Tracking] Cross-service sub-mission progress updated:', {
+                    missionId: mission._id,
+                    missionType: mission.requirement.type,
+                    subMissionIndex: subIndex,
+                    subMissionTitle: subMission.title,
+                    subMissionType: subMission.requirement.type
+                  });
+                } catch (subMissionError) {
+                  console.error('[Mission Tracking] Error updating cross-service sub-mission progress:', {
+                    missionId: mission._id,
+                    subMissionIndex: subIndex,
+                    error: subMissionError.message
+                  });
+                }
+              }
+            }
+          }
 
           console.log('[Mission Tracking] Mission progress updated:', {
             missionId: mission._id,
@@ -472,7 +574,8 @@ class StoriesReadingService {
             previousProgress: progressResult.current_progress - 1,
             newProgress: progressResult.current_progress,
             required: mission.requirement.count,
-            completed: progressResult.completed
+            completed: progressResult.completed,
+            subMissionsUpdated: subMissionResults.length
           });
 
           missionResults.push({
@@ -483,7 +586,8 @@ class StoriesReadingService {
             new_progress: progressResult.current_progress,
             required: mission.requirement.count,
             completed: progressResult.completed,
-            newly_completed: progressResult.completed && (progressResult.current_progress - 1) < mission.requirement.count
+            newly_completed: progressResult.completed && (progressResult.current_progress - 1) < mission.requirement.count,
+            sub_missions: subMissionResults
           });
 
         } catch (missionError) {

@@ -109,6 +109,45 @@ const formatDuration = (milliseconds) => {
   }
 };
 
+/**
+ * Convert UTC date to Vietnam timezone for API response (without Z suffix)
+ * @param {Date|string} date - UTC date object or ISO string
+ * @returns {string} - Vietnam timezone string without Z suffix
+ */
+const toVietnamTimezoneForAPI = (date) => {
+  if (!date) return null;
+
+  // Use moment to convert to Vietnam timezone and format as ISO string
+  const vietnamTime = moment.utc(date).tz(VIETNAM_TIMEZONE);
+
+  // Format as ISO string but without Z suffix to indicate local time
+  return vietnamTime.format('YYYY-MM-DDTHH:mm:ss.SSS');
+};
+
+/**
+ * Get current Vietnam time for API response
+ * @returns {string} - Current Vietnam timezone string without Z suffix
+ */
+const getVietnamNowForAPI = () => {
+  return toVietnamTimezoneForAPI(new Date());
+};
+
+/**
+ * Convert any date input to Vietnam timezone for API response
+ * @param {Date|string} input - Date input
+ * @returns {string} - Vietnam timezone string without Z suffix
+ */
+const convertToVietnamTimezoneForAPI = (input) => {
+  if (!input) return null;
+
+  try {
+    return toVietnamTimezoneForAPI(input);
+  } catch (error) {
+    console.error('Error converting to Vietnam timezone:', error);
+    return null;
+  }
+};
+
 module.exports = {
   VIETNAM_TIMEZONE,
   getVietnamTimestamp,
@@ -120,5 +159,9 @@ module.exports = {
   isSameDayVietnam,
   getStartOfDayVietnam,
   getEndOfDayVietnam,
-  formatDuration
+  formatDuration,
+  // New API response formatting functions
+  toVietnamTimezoneForAPI,
+  getVietnamNowForAPI,
+  convertToVietnamTimezoneForAPI
 };

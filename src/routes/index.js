@@ -42,8 +42,9 @@ router.use('/images', require('./images'));
 router.use('/admin/coins', auth, require('./coins'));
 router.use('/admin/users', auth, require('./admin/users'));
 router.use('/admin/permission-templates', require('./admin/permissionTemplates'));
-router.use('/admin/attendance-rewards', require('./admin/attendanceRewards'));
+router.use('/admin/attendance', require('./admin/attendanceRewards'));
 router.use('/admin/comments', require('./admin/commentModeration'));
+router.use('/admin/missions', require('./admin/missions'));
 router.use('/admin/chapters', auth, require('./admin/bulkChapters'));
 router.use('/admin/comments/reported', require('./admin/reportedComments'));
 // router.use('/admin/business-logic', require('./admin/businessLogic')); // Temporarily disabled

@@ -56,20 +56,7 @@ const attendanceSchema = new Schema({
     min: 2000
   },
 
-  // Thông tin bổ sung
-  streak_count: {
-    type: Number,
-    default: 0,
-    min: 0,
-    description: 'Số ngày điểm danh liên tiếp tại thời điểm điểm danh'
-  },
-
-  bonus_reward: {
-    type: Number,
-    default: 0,
-    min: 0,
-    description: 'Phần thưởng bổ sung cho các mốc đặc biệt'
-  },
+  // Thông tin bổ sung (milestone-based system)
 
   notes: {
     type: String,

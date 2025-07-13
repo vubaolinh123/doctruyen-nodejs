@@ -357,23 +357,34 @@ const userSchema = new Schema({
     }
   },
 
-  // Thông tin điểm danh (đã được tối ưu)
+  // Thông tin điểm danh mới (milestone-based system)
   attendance_summary: {
+    // Tổng số ngày điểm danh (lifetime)
     total_days: {
       type: Number,
       default: 0,
       min: 0
     },
-    current_streak: {
+    // Số ngày điểm danh trong tháng hiện tại
+    monthly_days: {
       type: Number,
       default: 0,
       min: 0
     },
-    longest_streak: {
+    // Tháng hiện tại đang theo dõi (0-11)
+    current_month: {
       type: Number,
-      default: 0,
-      min: 0
+      default: () => new Date().getMonth(),
+      min: 0,
+      max: 11
     },
+    // Năm hiện tại đang theo dõi
+    current_year: {
+      type: Number,
+      default: () => new Date().getFullYear(),
+      min: 2020
+    },
+    // Ngày điểm danh cuối cùng
     last_attendance: {
       type: Date,
       default: null

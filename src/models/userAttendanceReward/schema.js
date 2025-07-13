@@ -1,10 +1,12 @@
 const mongoose = require('mongoose');
 
 /**
- * UserAttendanceReward Schema
- * Lưu trữ thông tin phần thưởng điểm danh mà user đã nhận
+ * UserAttendanceMilestone Schema
+ * Lưu trữ thông tin mốc điểm danh mà user đã đạt được
+ * - monthly: Mốc theo tháng (có thể đạt lại mỗi tháng)
+ * - lifetime: Mốc theo tổng số ngày (chỉ đạt một lần)
  */
-const userAttendanceRewardSchema = new mongoose.Schema({
+const userAttendanceMilestoneSchema = new mongoose.Schema({
   // ID user nhận thưởng
   user_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -14,9 +16,9 @@ const userAttendanceRewardSchema = new mongoose.Schema({
   },
 
   // ID mốc phần thưởng
-  reward_id: {
+  milestone_id: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'AttendanceReward',
+    ref: 'AttendanceMilestone',
     required: true,
     index: true
   },
@@ -28,12 +30,15 @@ const userAttendanceRewardSchema = new mongoose.Schema({
     required: true
   },
 
-  // Tháng nhận thưởng (cho consecutive rewards - reset hàng tháng)
+  // Tháng nhận thưởng (chỉ cho monthly milestones)
   month: {
     type: Number,
     min: 0,
     max: 11,
-    required: true,
+    required: function() {
+      // Chỉ required cho monthly milestones
+      return this.milestone_type === 'monthly';
+    },
     index: true
   },
 
@@ -46,18 +51,20 @@ const userAttendanceRewardSchema = new mongoose.Schema({
     index: true
   },
 
-  // Số ngày điểm danh tại thời điểm nhận thưởng (để tracking)
-  consecutive_days_at_claim: {
-    type: Number,
-    min: 0,
-    default: 0
+  // Loại mốc (snapshot để tránh thay đổi sau này)
+  milestone_type: {
+    type: String,
+    enum: ['monthly', 'lifetime'],
+    required: true,
+    index: true
   },
 
-  // Tổng số ngày điểm danh tại thời điểm nhận thưởng (để tracking)
-  total_days_at_claim: {
+  // Số ngày điểm danh tại thời điểm nhận thưởng
+  days_at_claim: {
     type: Number,
     min: 0,
-    default: 0
+    required: true,
+    description: 'Số ngày điểm danh trong tháng (monthly) hoặc tổng số ngày (lifetime) tại thời điểm nhận thưởng'
   },
 
   // Loại phần thưởng đã nhận (snapshot để tránh thay đổi sau này)
@@ -89,22 +96,24 @@ const userAttendanceRewardSchema = new mongoose.Schema({
   }
 }, {
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
-  collection: 'user_attendance_rewards'
+  collection: 'user_attendance_milestones'
 });
 
 // Compound indexes
-// Index cho user và reward (không unique vì total rewards có thể nhận 1 lần, consecutive có thể nhận nhiều tháng)
-userAttendanceRewardSchema.index({
+// Index cho user và milestone - unique cho lifetime, không unique cho monthly (có thể nhận lại mỗi tháng)
+userAttendanceMilestoneSchema.index({
   user_id: 1,
-  reward_id: 1,
+  milestone_id: 1,
+  milestone_type: 1,
   month: 1,
   year: 1
 });
 
 // Index cho query performance
-userAttendanceRewardSchema.index({ user_id: 1, claimed_at: -1 });
-userAttendanceRewardSchema.index({ reward_id: 1, claimed_at: -1 });
-userAttendanceRewardSchema.index({ user_id: 1, year: 1, month: 1 });
-userAttendanceRewardSchema.index({ claimed_at: -1 });
+userAttendanceMilestoneSchema.index({ user_id: 1, claimed_at: -1 });
+userAttendanceMilestoneSchema.index({ milestone_id: 1, claimed_at: -1 });
+userAttendanceMilestoneSchema.index({ user_id: 1, year: 1, month: 1 });
+userAttendanceMilestoneSchema.index({ user_id: 1, milestone_type: 1 });
+userAttendanceMilestoneSchema.index({ claimed_at: -1 });
 
-module.exports = userAttendanceRewardSchema;
+module.exports = userAttendanceMilestoneSchema;

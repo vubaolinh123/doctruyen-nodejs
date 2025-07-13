@@ -7,6 +7,8 @@
 const User = require('../models/user');
 const Attendance = require('../models/attendance');
 const SystemSettings = require('../models/systemSettings');
+const Mission = require('../models/mission');
+const MissionProgress = require('../models/missionProgress');
 const { ApiError } = require('../utils/errorHandler');
 
 /**
@@ -74,6 +76,23 @@ const checkIn = async (userId) => {
 
   console.log(`[AttendanceService] Check-in successful. New stats: streak=${stats.current_streak}, total=${stats.total_days}`);
 
+  // Track attendance missions (don't let mission tracking errors fail attendance)
+  let missionResults = null;
+  try {
+    missionResults = await trackAttendanceMissions(userId);
+    console.log('[AttendanceService] Mission tracking completed:', {
+      userId,
+      trackedMissions: missionResults.tracked,
+      hasError: !!missionResults.error
+    });
+  } catch (missionError) {
+    // Log mission tracking errors but don't fail the attendance process
+    console.error('[AttendanceService] Error tracking attendance missions:', {
+      userId,
+      error: missionError.message
+    });
+  }
+
   return {
     attendance,
     coinsEarned: dailyCoins,
@@ -82,7 +101,8 @@ const checkIn = async (userId) => {
       currentStreak: stats.current_streak,
       longestStreak: stats.longest_streak
     },
-    userCoin: updatedUser.coin
+    userCoin: updatedUser.coin,
+    missions: missionResults // Include mission tracking results
   };
 };
 
@@ -461,6 +481,224 @@ const buyMissedDays = async (userId, dates) => {
   };
 };
 
+/**
+ * Track attendance missions for user
+ * @param {string} userId - ID của người dùng
+ * @returns {Promise<Object>} - Kết quả tracking missions
+ */
+const trackAttendanceMissions = async (userId) => {
+  try {
+    console.log('[Attendance Mission Tracking] Starting attendance mission tracking for user:', userId);
+
+    // Get all active attendance missions
+    const attendanceMissions = await Mission.find({
+      status: true,
+      $or: [
+        { 'requirement.type': 'attendance' },
+        { 'subMissions.requirement.type': 'attendance' }
+      ]
+    }).lean();
+
+    if (!attendanceMissions.length) {
+      console.log('[Attendance Mission Tracking] No active attendance missions found');
+      return { tracked: 0, results: [] };
+    }
+
+    console.log('[Attendance Mission Tracking] Found attendance missions:', {
+      count: attendanceMissions.length,
+      missions: attendanceMissions.map(m => ({ id: m._id, title: m.title, type: m.type }))
+    });
+
+    const missionResults = [];
+
+    // Process each mission
+    for (const mission of attendanceMissions) {
+      try {
+        console.log('[Attendance Mission Tracking] Processing mission:', {
+          missionId: mission._id,
+          missionTitle: mission.title,
+          missionType: mission.type,
+          requirementType: mission.requirement.type
+        });
+
+        // Check if this mission should be tracked for this user
+        const shouldTrack = await shouldTrackAttendanceMission(userId, mission);
+        if (!shouldTrack) {
+          console.log('[Attendance Mission Tracking] Mission should not be tracked for this user:', {
+            missionId: mission._id,
+            reason: 'Mission conditions not met'
+          });
+          continue;
+        }
+
+        // Track main mission progress if it's attendance type
+        let progressResult = null;
+        if (mission.requirement.type === 'attendance') {
+          progressResult = await MissionProgress.updateProgress(
+            userId,
+            mission._id,
+            1, // Increment by 1 for each attendance
+            true // Increment mode
+          );
+        } else {
+          // If main mission is not attendance type, get existing progress without updating
+          const date = new Date();
+          progressResult = await MissionProgress.findOne({
+            user_id: userId,
+            mission_id: mission._id,
+            year: date.getFullYear(),
+            month: date.getMonth(),
+            day: date.getDate()
+          }) || {
+            current_progress: 0,
+            completed: false
+          };
+        }
+
+        // Track sub-missions if any
+        const subMissionResults = [];
+        if (mission.subMissions && mission.subMissions.length > 0) {
+          for (let subIndex = 0; subIndex < mission.subMissions.length; subIndex++) {
+            const subMission = mission.subMissions[subIndex];
+
+            // Check if this sub-mission should count for attendance
+            if (subMission.requirement.type === 'attendance') {
+              try {
+                const subProgressResult = await MissionProgress.updateSubMissionProgress(
+                  userId,
+                  mission._id,
+                  subIndex,
+                  1, // Increment by 1 for each attendance
+                  true // Increment mode
+                );
+
+                subMissionResults.push({
+                  sub_mission_index: subIndex,
+                  sub_mission_title: subMission.title,
+                  sub_mission_type: subMission.requirement.type,
+                  sub_mission_progress: subProgressResult.sub_progress.find(sp => sp.sub_mission_index === subIndex)
+                });
+
+                console.log('[Attendance Mission Tracking] Sub-mission progress updated:', {
+                  missionId: mission._id,
+                  subMissionIndex: subIndex,
+                  subMissionTitle: subMission.title,
+                  subMissionType: subMission.requirement.type
+                });
+              } catch (subError) {
+                console.error('[Attendance Mission Tracking] Error updating sub-mission progress:', {
+                  missionId: mission._id,
+                  subMissionIndex: subIndex,
+                  error: subError.message
+                });
+              }
+            }
+          }
+        }
+
+        missionResults.push({
+          mission_id: mission._id,
+          mission_title: mission.title,
+          mission_type: mission.type,
+          main_progress: progressResult,
+          sub_missions: subMissionResults
+        });
+
+        console.log('[Attendance Mission Tracking] Mission tracking completed:', {
+          missionId: mission._id,
+          missionTitle: mission.title,
+          mainProgress: progressResult?.current_progress || 0,
+          subMissionsCount: subMissionResults.length
+        });
+
+      } catch (missionError) {
+        console.error('[Attendance Mission Tracking] Error processing mission:', {
+          missionId: mission._id,
+          error: missionError.message
+        });
+        // Continue with other missions even if one fails
+      }
+    }
+
+    console.log('[Attendance Mission Tracking] Attendance mission tracking completed:', {
+      userId,
+      totalMissions: attendanceMissions.length,
+      trackedMissions: missionResults.length
+    });
+
+    return {
+      tracked: missionResults.length,
+      results: missionResults
+    };
+
+  } catch (error) {
+    console.error('[Attendance Mission Tracking] Error in trackAttendanceMissions:', error);
+    // Don't throw error to prevent attendance from failing
+    return { tracked: 0, results: [], error: error.message };
+  }
+};
+
+/**
+ * Check if attendance mission should be tracked for user
+ * @param {string} userId - ID của người dùng
+ * @param {Object} mission - Mission object
+ * @returns {Promise<boolean>} - Should track or not
+ */
+const shouldTrackAttendanceMission = async (userId, mission) => {
+  try {
+    // Get current time info
+    const today = new Date();
+    const currentDay = today.getDate();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+
+    const firstDayOfYear = new Date(currentYear, 0, 1);
+    const pastDaysOfYear = (today - firstDayOfYear) / 86400000;
+    const currentWeek = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+
+    // Build time query based on mission type
+    let timeQuery = {};
+    if (mission.type === 'daily') {
+      timeQuery = { day: currentDay, month: currentMonth, year: currentYear };
+    } else if (mission.type === 'weekly') {
+      timeQuery = { week: currentWeek, year: currentYear };
+    }
+
+    // Check if there's already a progress record for this mission and time period
+    const existingProgress = await MissionProgress.findOne({
+      user_id: userId,
+      mission_id: mission._id,
+      ...timeQuery
+    });
+
+    // For attendance missions, we typically allow only one attendance per day
+    // So we check if the mission is already completed for this time period
+    if (existingProgress && existingProgress.completed) {
+      console.log('[Attendance Mission Tracking] Mission already completed for this period:', {
+        missionId: mission._id,
+        missionTitle: mission.title,
+        missionType: mission.type,
+        timeQuery
+      });
+      return false;
+    }
+
+    console.log('[Attendance Mission Tracking] Mission conditions check passed:', {
+      missionId: mission._id,
+      missionTitle: mission.title,
+      missionType: mission.type,
+      hasExistingProgress: !!existingProgress,
+      currentProgress: existingProgress?.current_progress || 0
+    });
+
+    return true;
+
+  } catch (error) {
+    console.error('[Attendance Mission Tracking] Error in shouldTrackAttendanceMission:', error);
+    return false;
+  }
+};
+
 module.exports = {
   checkIn,
   getAttendanceStatus,
@@ -469,5 +707,6 @@ module.exports = {
   getAttendanceCalendar,
   getAttendanceSummary,
   getAvailableMissedDays,
-  buyMissedDays
+  buyMissedDays,
+  trackAttendanceMissions
 };

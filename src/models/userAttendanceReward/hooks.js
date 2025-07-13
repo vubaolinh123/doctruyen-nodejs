@@ -37,7 +37,7 @@ module.exports = function(schema) {
     console.log(`[UserAttendanceReward] ✅ POST-SAVE HOOK TRIGGERED! isNew: ${this.isNew}, doc: ${doc._id}`);
 
     if (this.isNew) {
-      console.log(`[UserAttendanceReward] 🎯 Processing new claim: User ${doc.user_id} claimed reward ${doc.reward_id} (${doc.reward_type}: ${doc.reward_value})`);
+      console.log(`[UserAttendanceReward] 🎯 Processing new claim: User ${doc.user_id} claimed milestone ${doc.milestone_id} (${doc.reward_type}: ${doc.reward_value})`);
 
       try {
         // Nếu là coin reward, cập nhật coin cho user
@@ -129,7 +129,7 @@ module.exports = function(schema) {
     const update = this.getUpdate();
 
     // Không cho phép update các trường quan trọng
-    const protectedFields = ['user_id', 'reward_id', 'claimed_at', 'month', 'year', 'reward_type', 'reward_value', 'permission_id'];
+    const protectedFields = ['user_id', 'milestone_id', 'claimed_at', 'month', 'year', 'milestone_type', 'days_at_claim', 'reward_type', 'reward_value', 'permission_id'];
 
     for (const field of protectedFields) {
       if (update[field] !== undefined) {
@@ -150,7 +150,7 @@ module.exports = function(schema) {
    */
   schema.post('findOneAndDelete', function(doc) {
     if (doc) {
-      console.log(`[UserAttendanceReward] Deleted claim: User ${doc.user_id}, Reward ${doc.reward_id}, ${doc.getClaimedTimeText()}`);
+      console.log(`[UserAttendanceReward] Deleted claim: User ${doc.user_id}, Milestone ${doc.milestone_id}, ${doc.getClaimedTimeText()}`);
     }
   });
 

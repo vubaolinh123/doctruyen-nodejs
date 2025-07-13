@@ -7,7 +7,7 @@
 
 const User = require('../models/user');
 const AttendanceReward = require('../models/attendanceReward');
-const UserAttendanceReward = require('../models/userAttendanceReward');
+const UserAttendanceMilestone = require('../models/userAttendanceReward'); // This is actually UserAttendanceMilestone
 const Attendance = require('../models/attendance');
 const Transaction = require('../models/transaction');
 const SystemSettings = require('../models/systemSettings');
@@ -43,39 +43,39 @@ const getRewardsList = async (userId) => {
   const currentYear = now.getFullYear();
 
   // Get user's claimed rewards
-  const claimedRewardsCurrentMonth = await UserAttendanceReward.getUserClaims(userId, {
+  const claimedRewardsCurrentMonth = await UserAttendanceMilestone.getUserClaims(userId, {
     month: currentMonth,
     year: currentYear
   });
 
-  const claimedRewardsAllTime = await UserAttendanceReward.getUserClaims(userId, {
+  const claimedRewardsAllTime = await UserAttendanceMilestone.getUserClaims(userId, {
     // No year filter for total rewards
   });
 
   // Create maps for quick lookup
-  const claimedConsecutiveMap = new Map();
-  const claimedTotalSet = new Set();
+  const claimedMonthlyMap = new Map();
+  const claimedLifetimeSet = new Set();
 
-  // Process current month claims for consecutive rewards
+  // Process current month claims for monthly rewards
   claimedRewardsCurrentMonth.forEach(claim => {
-    if (claim.reward_id) {
-      const rewardId = typeof claim.reward_id === 'object' ? claim.reward_id._id : claim.reward_id;
-      const key = `${rewardId}_${claim.month}_${claim.year}`;
-      claimedConsecutiveMap.set(key, claim);
+    if (claim.milestone_id) {
+      const milestoneId = typeof claim.milestone_id === 'object' ? claim.milestone_id._id : claim.milestone_id;
+      const key = `${milestoneId}_${claim.month}_${claim.year}`;
+      claimedMonthlyMap.set(key, claim);
     }
   });
 
-  // Process all-time claims for total rewards
+  // Process all-time claims for lifetime rewards
   claimedRewardsAllTime.forEach(claim => {
-    if (claim.reward_id) {
-      const rewardId = typeof claim.reward_id === 'object' ? claim.reward_id._id : claim.reward_id;
-      claimedTotalSet.add(rewardId.toString());
+    if (claim.milestone_id) {
+      const milestoneId = typeof claim.milestone_id === 'object' ? claim.milestone_id._id : claim.milestone_id;
+      claimedLifetimeSet.add(milestoneId.toString());
     }
   });
 
   // Process rewards
-  const consecutiveRewards = [];
-  const totalRewards = [];
+  const monthlyRewards = [];
+  const lifetimeRewards = [];
 
   rewards.forEach(reward => {
     const rewardObj = {
@@ -87,6 +87,7 @@ const getRewardsList = async (userId) => {
       reward_type: reward.reward_type,
       reward_value: reward.reward_value,
       permission_id: reward.permission_id,
+      is_active: reward.is_active,
       canClaim: false,
       claimed: false,
       claimedAt: null,
@@ -94,30 +95,32 @@ const getRewardsList = async (userId) => {
     };
 
     // Calculate progress and claim status
-    if (reward.type === 'consecutive') {
-      rewardObj.progress = Math.min((userStats.current_streak / reward.required_days) * 100, 100);
-      rewardObj.canClaim = userStats.current_streak >= reward.required_days;
+    if (reward.type === 'consecutive' || reward.type === 'monthly') {
+      // For monthly rewards, use current month attendance
+      const currentProgress = userStats.monthly_days || 0;
+      rewardObj.progress = Math.min((currentProgress / reward.required_days) * 100, 100);
+      rewardObj.canClaim = currentProgress >= reward.required_days;
 
       // Check if claimed in current month
       const claimKey = `${reward._id}_${currentMonth}_${currentYear}`;
-      const claimed = claimedConsecutiveMap.get(claimKey);
+      const claimed = claimedMonthlyMap.get(claimKey);
       if (claimed) {
         rewardObj.claimed = true;
         rewardObj.claimedAt = claimed.claimed_at;
         rewardObj.canClaim = false;
       }
 
-      consecutiveRewards.push(rewardObj);
-    } else if (reward.type === 'total') {
+      monthlyRewards.push(rewardObj);
+    } else if (reward.type === 'total' || reward.type === 'lifetime') {
       rewardObj.progress = Math.min((userStats.total_days / reward.required_days) * 100, 100);
       rewardObj.canClaim = userStats.total_days >= reward.required_days;
 
       // Check if claimed lifetime
-      const rewardIdStr = reward._id.toString();
-      if (claimedTotalSet.has(rewardIdStr)) {
+      const milestoneIdStr = reward._id.toString();
+      if (claimedLifetimeSet.has(milestoneIdStr)) {
         const claimed = claimedRewardsAllTime.find(claim => {
-          const claimRewardId = typeof claim.reward_id === 'object' ? claim.reward_id._id : claim.reward_id;
-          return claimRewardId.toString() === rewardIdStr;
+          const claimMilestoneId = typeof claim.milestone_id === 'object' ? claim.milestone_id._id : claim.milestone_id;
+          return claimMilestoneId.toString() === milestoneIdStr;
         });
 
         rewardObj.claimed = true;
@@ -125,15 +128,15 @@ const getRewardsList = async (userId) => {
         rewardObj.canClaim = false;
       }
 
-      totalRewards.push(rewardObj);
+      lifetimeRewards.push(rewardObj);
     }
   });
 
   return {
     userStats,
     rewards: {
-      consecutive: consecutiveRewards,
-      total: totalRewards
+      monthly: monthlyRewards,
+      lifetime: lifetimeRewards
     }
   };
 };
@@ -162,12 +165,13 @@ const claimReward = async (userId, rewardId) => {
   };
 
   // Check eligibility
-  const isEligible = reward.type === 'consecutive'
-    ? userStats.current_streak >= reward.required_days
+  const isEligible = (reward.type === 'consecutive' || reward.type === 'monthly')
+    ? (userStats.monthly_days || 0) >= reward.required_days
     : userStats.total_days >= reward.required_days;
 
   if (!isEligible) {
-    throw new ApiError(400, `Bạn chưa đủ điều kiện nhận thưởng này. Cần ${reward.required_days} ngày ${reward.type === 'consecutive' ? 'liên tiếp' : 'tổng cộng'}`);
+    const typeText = (reward.type === 'consecutive' || reward.type === 'monthly') ? 'trong tháng' : 'tổng cộng';
+    throw new ApiError(400, `Bạn chưa đủ điều kiện nhận thưởng này. Cần ${reward.required_days} ngày ${typeText}`);
   }
 
   // Check if already claimed
@@ -175,89 +179,164 @@ const claimReward = async (userId, rewardId) => {
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
 
-  const hasAlreadyClaimed = await UserAttendanceReward.hasUserClaimed(
+  const hasAlreadyClaimed = await UserAttendanceMilestone.hasUserClaimed(
     userId,
     rewardId,
     reward.type,
-    reward.type === 'consecutive' ? currentMonth : null,
-    reward.type === 'consecutive' ? currentYear : null
+    (reward.type === 'consecutive' || reward.type === 'monthly') ? currentMonth : null,
+    (reward.type === 'consecutive' || reward.type === 'monthly') ? currentYear : null
   );
 
   if (hasAlreadyClaimed) {
-    const timeframe = reward.type === 'consecutive' ? 'trong tháng này' : 'rồi';
+    const timeframe = (reward.type === 'consecutive' || reward.type === 'monthly') ? 'trong tháng này' : 'rồi';
     throw new ApiError(400, `Bạn đã nhận thưởng này ${timeframe}`);
   }
 
-  // Create claim data
+  // Create claim data with all required fields
   const claimData = {
-    month: currentMonth,
+    user_id: userId,
+    milestone_id: rewardId, // Required field
+    claimed_at: now,
+    month: (reward.type === 'consecutive' || reward.type === 'monthly') ? currentMonth : undefined,
     year: currentYear,
-    consecutive_days_at_claim: userStats.current_streak,
-    total_days_at_claim: userStats.total_days,
+    milestone_type: reward.type === 'consecutive' ? 'monthly' : reward.type, // Required field: 'monthly' or 'lifetime'
+    days_at_claim: (reward.type === 'consecutive' || reward.type === 'monthly')
+      ? (userStats.monthly_days || 0)
+      : userStats.total_days, // Required field
     reward_type: reward.reward_type,
     reward_value: reward.reward_value,
+    permission_id: reward.permission_id || null,
     notes: `Nhận thưởng: ${reward.title}`
   };
 
-  const userStatsForClaim = {
-    current_streak: userStats.current_streak,
-    total_days: userStats.total_days
-  };
+  // Use database transaction for data consistency
+  const mongoose = require('mongoose');
+  const session = await mongoose.startSession();
 
-  // Create claim
-  const claim = await UserAttendanceReward.createClaim(
-    userId,
-    rewardId,
-    claimData,
-    userStatsForClaim
-  );
+  let claim;
+  try {
+    await session.withTransaction(async () => {
+      // Create claim record
+      claim = new UserAttendanceMilestone(claimData);
+      await claim.save({ session });
 
-  // Manual coin update (since hook is not working reliably)
-  if (reward.reward_type === 'coin' && reward.reward_value > 0) {
-    console.log(`[AttendanceRewardService] Manual coin update: Adding ${reward.reward_value} coins to user ${userId}`);
+      // Handle coin rewards with proper transaction logging
+      if (reward.reward_type === 'coin' && reward.reward_value > 0) {
+        console.log(`[AttendanceRewardService] Processing coin reward: Adding ${reward.reward_value} coins to user ${userId}`);
 
-    const userForUpdate = await User.findById(userId);
-    if (userForUpdate) {
-      const description = `Phần thưởng điểm danh: ${reward.title}`;
-      const metadata = {
-        reward_claim_id: claim._id,
-        reward_type: reward.reward_type,
-        reward_value: reward.reward_value,
-        claimed_at: claim.claimed_at,
-        month: claim.month,
-        year: claim.year
-      };
+        const userForUpdate = await User.findById(userId).session(session);
+        if (!userForUpdate) {
+          throw new Error('User not found during coin update');
+        }
 
-      await userForUpdate.addCoins(reward.reward_value, {
-        description: description,
-        metadata: metadata
-      });
-    }
+        // Prepare transaction metadata
+        const description = `Phần thưởng điểm danh: ${reward.title}`;
+        const metadata = {
+          milestone_claim_id: claim._id,
+          milestone_id: reward._id,
+          milestone_type: reward.type,
+          reward_type: reward.reward_type,
+          reward_value: reward.reward_value,
+          claimed_at: claim.claimed_at,
+          month: claim.month,
+          year: claim.year,
+          milestone_title: reward.title
+        };
+
+        // Add coins with transaction logging
+        await userForUpdate.addCoins(reward.reward_value, {
+          description: description,
+          metadata: metadata,
+          type: 'attendance',
+          createTransaction: true
+        });
+
+        console.log(`[AttendanceRewardService] ✅ Successfully added ${reward.reward_value} coins to user ${userId}`);
+      }
+
+      // Handle permission rewards
+      if (reward.reward_type === 'permission' && reward.permission_id) {
+        console.log(`[AttendanceRewardService] Processing permission reward for user ${userId}`);
+
+        const UserPermission = require('../models/userPermission');
+
+        // Check if user already has this permission
+        const existingPermission = await UserPermission.findOne({
+          user_id: userId,
+          template_id: reward.permission_id
+        }).session(session);
+
+        if (!existingPermission) {
+          await UserPermission.create([{
+            user_id: userId,
+            template_id: reward.permission_id,
+            granted_at: claim.claimed_at,
+            granted_by: 'system',
+            reason: `Phần thưởng điểm danh: ${reward.title}`,
+            metadata: {
+              milestone_claim_id: claim._id,
+              milestone_id: reward._id,
+              milestone_type: reward.type
+            }
+          }], { session });
+
+          console.log(`[AttendanceRewardService] ✅ Granted permission ${reward.permission_id} to user ${userId}`);
+        }
+      }
+    });
+
+    console.log(`[AttendanceRewardService] ✅ Successfully completed milestone claim transaction for user ${userId}`);
+  } catch (error) {
+    console.error(`[AttendanceRewardService] ❌ Transaction failed for milestone claim:`, error);
+    throw new ApiError(500, `Lỗi khi xử lý phần thưởng: ${error.message}`);
+  } finally {
+    await session.endSession();
   }
 
   // Get populated claim for response
-  const populatedClaim = await UserAttendanceReward.findById(claim._id)
-    .populate('reward_id', 'title description type required_days')
+  const populatedClaim = await UserAttendanceMilestone.findById(claim._id)
+    .populate('milestone_id', 'title description type required_days')
     .populate('permission_id', 'name description');
 
-  // Get updated user coin
-  const updatedUser = await User.findById(userId).select('coin');
+  // Get updated user data
+  const updatedUser = await User.findById(userId).select('coin coin_total');
 
   // Create summary
   const claimSummary = populatedClaim.getSummary();
 
-  return {
+  // Prepare detailed response
+  const response = {
     claim: populatedClaim,
     summary: claimSummary,
     reward: {
       title: reward.title,
       type: reward.type,
+      reward_type: reward.reward_type,
+      reward_value: reward.reward_value,
       rewardText: reward.reward_type === 'coin'
-        ? `${reward.reward_value} xu`
+        ? `${reward.reward_value.toLocaleString()} xu`
         : `Quyền: ${reward.permission_id?.name || 'Đặc biệt'}`
     },
-    userCoin: updatedUser.coin
+    user: {
+      coin: updatedUser.coin,
+      coin_total: updatedUser.coin_total
+    },
+    transaction: {
+      completed: true,
+      timestamp: claim.claimed_at,
+      milestone_type: reward.type
+    }
   };
+
+  console.log(`[AttendanceRewardService] ✅ Claim completed successfully:`, {
+    userId,
+    milestoneId: reward._id,
+    rewardType: reward.reward_type,
+    rewardValue: reward.reward_value,
+    newCoinBalance: updatedUser.coin
+  });
+
+  return response;
 };
 
 /**
@@ -540,8 +619,15 @@ const recalculateAttendanceStats = async (userId) => {
 
     if (attendances.length === 0) {
       // Reset stats to 0 if no attendance
+      const currentDate = new Date();
+      const currentMonth = currentDate.getMonth();
+      const currentYear = currentDate.getFullYear();
+
       await User.findByIdAndUpdate(userId, {
         'attendance_summary.total_days': 0,
+        'attendance_summary.monthly_days': 0,
+        'attendance_summary.current_month': currentMonth,
+        'attendance_summary.current_year': currentYear,
         'attendance_summary.current_streak': 0,
         'attendance_summary.longest_streak': 0,
         'attendance_summary.last_attendance': null
@@ -650,12 +736,29 @@ const recalculateAttendanceStats = async (userId) => {
     // Update longest streak with final temp streak
     longestStreak = Math.max(longestStreak, tempStreak);
 
-    // ✅ Current streak already calculated above in the new logic
-    // No additional calculation needed as we've already combined purchased + regular streaks
+    // ✅ STEP 5: Calculate monthly attendance for current month
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth();
+    const currentYear = currentDate.getFullYear();
 
-    // Update user stats
+    const currentMonthAttendances = attendances.filter(att =>
+      att.month === currentMonth && att.year === currentYear
+    );
+
+    const monthlyDays = currentMonthAttendances.length;
+
+    console.log(`[AttendanceStats] Monthly calculation for ${currentMonth}/${currentYear}:`);
+    console.log(`  - Found ${monthlyDays} attendance days in current month`);
+    console.log(`  - Monthly attendances:`, currentMonthAttendances.map(att =>
+      `${att.day}/${att.month + 1}/${att.year} (${att.status})`
+    ));
+
+    // Update user stats with monthly attendance included
     await User.findByIdAndUpdate(userId, {
       'attendance_summary.total_days': totalDays,
+      'attendance_summary.monthly_days': monthlyDays,
+      'attendance_summary.current_month': currentMonth,
+      'attendance_summary.current_year': currentYear,
       'attendance_summary.current_streak': currentStreak,
       'attendance_summary.longest_streak': longestStreak,
       'attendance_summary.last_attendance': lastAttendanceDate
@@ -663,6 +766,8 @@ const recalculateAttendanceStats = async (userId) => {
 
     console.log(`[AttendanceStats] ✅ Recalculated for user ${userId}:`);
     console.log(`  - Total days: ${totalDays}`);
+    console.log(`  - Monthly days: ${monthlyDays}`);
+    console.log(`  - Current month/year: ${currentMonth}/${currentYear}`);
     console.log(`  - Current streak: ${currentStreak}`);
     console.log(`  - Longest streak: ${longestStreak}`);
     console.log(`  - Last attendance: ${lastAttendanceDate?.toISOString().split('T')[0]}`);
