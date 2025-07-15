@@ -13,10 +13,12 @@ class CategoryService {
    * @param {number} options.limit - Số lượng trên mỗi trang
    * @param {string} options.sort - Trường để sắp xếp
    * @param {string} options.order - Thứ tự sắp xếp (asc hoặc desc)
+   * @param {boolean} options.all - Lấy tất cả không phân trang
+   * @param {string} options.fields - Các fields cần trả về
    * @param {Object} options.filters - Các điều kiện lọc
    * @returns {Object} Danh sách thể loại và thông tin phân trang
    */
-  async getAllCategories({ page = 1, limit = 10, sort = 'createdAt', order = 'desc', ...filters }) {
+  async getAllCategories({ page = 1, limit = 10, sort = 'createdAt', order = 'desc', all = false, fields = '', ...filters }) {
     try {
       const query = {};
 
@@ -35,8 +37,35 @@ class CategoryService {
         query.slug = filters.slug;
       }
 
-      // Lấy tất cả thể loại phù hợp
-      let items = await Category.find(query).populate('stories');
+      // Xử lý fields selection
+      let selectFields = '';
+      if (fields) {
+        selectFields = fields.split(',').join(' ');
+      }
+
+      // Tạo query builder
+      let queryBuilder = Category.find(query);
+
+      // Áp dụng field selection nếu có
+      if (selectFields) {
+        queryBuilder = queryBuilder.select(selectFields);
+      }
+
+      // Nếu all=true, lấy tất cả không phân trang
+      if (all === 'true' || all === true) {
+        const items = await queryBuilder
+          .sort({ [sort]: order === 'desc' ? -1 : 1 })
+          .lean(); // Sử dụng lean() để tăng hiệu suất
+
+        return {
+          success: true,
+          categories: items,
+          total: items.length
+        };
+      }
+
+      // Lấy tất cả thể loại phù hợp với phân trang
+      let items = await queryBuilder.populate('stories');
 
       // Format response và thêm comicCount
       const formattedItems = items.map(item => {

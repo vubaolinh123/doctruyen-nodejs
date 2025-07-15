@@ -8,14 +8,26 @@ const authorService = require('../../services/author/authorService');
  */
 exports.getAll = async (req, res) => {
   try {
-    const { page, limit, ...filters } = req.query;
-    const result = await authorService.getAllAuthors({ page, limit, ...filters });
+    const { page, limit, all, fields, search, ids, ...filters } = req.query;
+
+    console.log(`[Authors API] Query params:`, { page, limit, all, fields, search, ids, filters });
+
+    const result = await authorService.getAllAuthors({
+      page,
+      limit,
+      all,
+      fields,
+      search,
+      ids,
+      ...filters
+    });
+
     return res.json(result);
   } catch (error) {
     console.error('Lỗi khi lấy danh sách tác giả:', error);
-    return res.status(500).json({ 
-      success: false, 
-      message: 'Lỗi máy chủ nội bộ' 
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ nội bộ'
     });
   }
 };

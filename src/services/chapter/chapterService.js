@@ -1206,16 +1206,70 @@ class ChapterService {
   }
 
   /**
-   * Lấy danh sách truyện cho dropdown
-   * @returns {Promise<Array>} - Danh sách truyện
+   * Lấy danh sách truyện cho dropdown với phân trang và tìm kiếm
+   * @param {Object} options - Các tùy chọn
+   * @returns {Promise<Object>} - Danh sách truyện và thông tin phân trang
    */
-  async getStoriesForDropdown() {
-    // Lấy danh sách truyện với các trường cần thiết
-    const stories = await Story.find({}, 'name slug')
-      .sort({ name: 1 }) // Sắp xếp theo tên
+  async getStoriesForDropdown(options = {}) {
+    const {
+      page = 1,
+      limit = 10,
+      search = ''
+    } = options;
+
+    // Xây dựng query tìm kiếm
+    const query = {};
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Đếm tổng số truyện
+    const totalRecords = await Story.countDocuments(query);
+
+    // Tính toán phân trang
+    const totalPages = Math.ceil(totalRecords / limit);
+    const skip = (page - 1) * limit;
+
+    // Lấy danh sách truyện với populate author_id và chapter count
+    const stories = await Story.find(query)
+      .select('name slug image status author_id updatedAt')
+      .populate('author_id', 'name')
+      .sort({ name: 1 })
+      .skip(skip)
+      .limit(limit)
       .lean();
 
-    return stories;
+    // Thêm chapter count cho mỗi truyện
+    const storiesWithChapterCount = await Promise.all(
+      stories.map(async (story) => {
+        const chapterCount = await Chapter.countDocuments({
+          story_id: story._id,
+          status: true
+        });
+
+        return {
+          ...story,
+          chapter_count: chapterCount
+        };
+      })
+    );
+
+    // Thông tin phân trang
+    const pagination = {
+      currentPage: page,
+      totalPages,
+      totalRecords,
+      pageSize: limit,
+      hasNextPage: page < totalPages,
+      hasPreviousPage: page > 1
+    };
+
+    return {
+      stories: storiesWithChapterCount,
+      pagination
+    };
   }
 }
 

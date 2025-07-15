@@ -346,17 +346,28 @@ exports.toggleFlag = async (req, res) => {
 };
 
 /**
- * Lấy danh sách truyện cho dropdown
+ * Lấy danh sách truyện cho dropdown với phân trang và tìm kiếm
  */
 exports.getStoriesForDropdown = async (req, res) => {
   try {
-    console.log('[API] Lấy danh sách truyện cho dropdown');
+    const {
+      page = 1,
+      limit = 10,
+      search = ''
+    } = req.query;
 
-    const stories = await chapterService.getStoriesForDropdown();
+    console.log(`[API] Lấy danh sách truyện cho dropdown - page: ${page}, limit: ${limit}, search: ${search}`);
+
+    const result = await chapterService.getStoriesForDropdown({
+      page: parseInt(page),
+      limit: parseInt(limit),
+      search
+    });
 
     return res.json({
       success: true,
-      stories
+      stories: result.stories,
+      pagination: result.pagination
     });
   } catch (error) {
     console.error('[API] Error:', error);

@@ -11,10 +11,14 @@ class AuthorService {
    * @param {Object} options - Các tùy chọn
    * @param {number} options.page - Trang hiện tại
    * @param {number} options.limit - Số lượng trên mỗi trang
+   * @param {boolean} options.all - Lấy tất cả không phân trang
+   * @param {string} options.fields - Các fields cần trả về
+   * @param {string} options.search - Tìm kiếm theo tên
+   * @param {string} options.ids - Danh sách IDs cách nhau bởi dấu phẩy
    * @param {Object} options.filters - Các điều kiện lọc
    * @returns {Object} Danh sách tác giả và thông tin phân trang
    */
-  async getAllAuthors({ page = 1, limit = 10, ...filters }) {
+  async getAllAuthors({ page = 1, limit = 10, all = false, fields = '', search = '', ids = '', ...filters }) {
     try {
       const query = {};
 
@@ -23,7 +27,12 @@ class AuthorService {
         query.status = filters.status === 'true';
       }
 
-      // Lọc theo tên nếu có
+      // Lọc theo tên nếu có (search parameter)
+      if (search) {
+        query.name = { $regex: search, $options: 'i' };
+      }
+
+      // Lọc theo tên nếu có (name parameter - backward compatibility)
       if (filters.name) {
         query.name = { $regex: filters.name, $options: 'i' };
       }
@@ -33,11 +42,46 @@ class AuthorService {
         query.slug = filters.slug;
       }
 
+      // Lọc theo danh sách IDs nếu có
+      if (ids) {
+        const idArray = ids.split(',').map(id => id.trim()).filter(id => id);
+        if (idArray.length > 0) {
+          query._id = { $in: idArray };
+        }
+      }
+
+      // Xử lý fields selection
+      let selectFields = '';
+      if (fields) {
+        selectFields = fields.split(',').join(' ');
+      }
+
+      // Tạo query builder
+      let queryBuilder = Author.find(query);
+
+      // Áp dụng field selection nếu có
+      if (selectFields) {
+        queryBuilder = queryBuilder.select(selectFields);
+      }
+
+      // Nếu all=true, lấy tất cả không phân trang
+      if (all === 'true' || all === true) {
+        const items = await queryBuilder
+          .sort({ createdAt: -1 })
+          .lean(); // Sử dụng lean() để tăng hiệu suất
+
+        return {
+          success: true,
+          authors: items,
+          total: items.length
+        };
+      }
+
       // Chuyển đổi trang và limit thành số
       const numPage = parseInt(page);
       const numLimit = parseInt(limit);
 
-      const items = await Author.find(query)
+      const items = await queryBuilder
         .sort({ createdAt: -1 })
         .skip((numPage - 1) * numLimit)
         .limit(numLimit);

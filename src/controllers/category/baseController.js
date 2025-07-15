@@ -8,14 +8,26 @@ const categoryService = require('../../services/category/categoryService');
  */
 exports.getAll = async (req, res) => {
   try {
-    const { page, limit, sort, order, ...filters } = req.query;
-    const result = await categoryService.getAllCategories({ page, limit, sort, order, ...filters });
+    const { page, limit, sort, order, all, fields, ...filters } = req.query;
+
+    console.log(`[Categories API] Query params:`, { page, limit, sort, order, all, fields, filters });
+
+    const result = await categoryService.getAllCategories({
+      page,
+      limit,
+      sort,
+      order,
+      all,
+      fields,
+      ...filters
+    });
+
     return res.json(result);
   } catch (error) {
     console.error('Lỗi khi lấy danh sách thể loại:', error);
-    return res.status(500).json({ 
-      success: false, 
-      message: 'Lỗi máy chủ nội bộ' 
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ nội bộ'
     });
   }
 };
