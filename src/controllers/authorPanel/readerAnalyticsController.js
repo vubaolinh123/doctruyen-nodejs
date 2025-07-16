@@ -1,9 +1,9 @@
 const mongoose = require('mongoose');
-const Author = require('../../models/Author');
-const Story = require('../../models/Story');
-const Comment = require('../../models/Comment');
+const Author = require('../../models/author');
+const Story = require('../../models/story');
+const Comment = require('../../models/comment');
 const Rating = require('../../models/userRating');
-const User = require('../../models/User');
+const User = require('../../models/user');
 const ReadingProgress = require('../../models/storiesReading');
 
 // Helper function to get date range
