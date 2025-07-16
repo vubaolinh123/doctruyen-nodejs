@@ -8,4 +8,4 @@ virtuals(schema);
 statics(schema);
 
 // Tạo và export model
-module.exports = mongoose.model('StoriesReading', schema); 
+module.exports = mongoose.models.StoriesReading || mongoose.model('StoriesReading', schema);

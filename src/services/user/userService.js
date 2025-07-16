@@ -399,101 +399,384 @@ class UserService {
    * @returns {boolean} Kết quả xóa
    */
   async deleteUser(id) {
-    const session = await mongoose.startSession();
-
     try {
-      await session.withTransaction(async () => {
-        // Kiểm tra user tồn tại
-        const user = await User.findById(id).session(session);
-        if (!user) {
-          throw new Error('Không tìm thấy người dùng');
-        }
+      // Kiểm tra user tồn tại
+      const user = await User.findById(id);
+      if (!user) {
+        throw new Error('Không tìm thấy người dùng');
+      }
 
-        console.log(`[UserService] Bắt đầu xóa user ${id} và tất cả dữ liệu liên quan`);
+      console.log(`[UserService] Bắt đầu xóa user ${id} và tất cả dữ liệu liên quan`);
 
-        // Import các models cần thiết
-        const Bookmark = require('../../models/bookmark');
-        const StoriesReading = require('../../models/storiesReading');
-        const Comment = require('../../models/comment');
-        const UserRating = require('../../models/userRating');
-        const Attendance = require('../../models/attendance');
-        const UserAttendanceReward = require('../../models/userAttendanceReward');
-        const UserPermission = require('../../models/userPermission');
+        // Helper function để import model an toàn
+        const safeRequireModel = (modelPath) => {
+          try {
+            return require(modelPath);
+          } catch (error) {
+            console.log(`[UserService] Model ${modelPath} không tồn tại, bỏ qua`);
+            return null;
+          }
+        };
 
-        // 1. Xóa bookmarks
-        const bookmarkResult = await Bookmark.deleteMany({ user_id: id }).session(session);
-        console.log(`[UserService] Đã xóa ${bookmarkResult.deletedCount} bookmarks`);
+        // Import các models cần thiết (chỉ những model thực sự tồn tại)
+        const StoriesReading = safeRequireModel('../../models/storiesReading');
+        const Comment = safeRequireModel('../../models/comment');
+        const UserRating = safeRequireModel('../../models/userRating');
+        const Attendance = safeRequireModel('../../models/attendance');
+        const UserAttendanceReward = safeRequireModel('../../models/userAttendanceReward');
+        const UserPermission = safeRequireModel('../../models/userPermission');
+        const Transaction = safeRequireModel('../../models/transaction');
+        const MissionProgress = safeRequireModel('../../models/missionProgress');
+        const AchievementProgress = safeRequireModel('../../models/achievementProgress');
+        const PurchasedStory = safeRequireModel('../../models/purchasedStory');
+        const UserPurchases = safeRequireModel('../../models/userPurchases');
+        const Notification = safeRequireModel('../../models/notification');
+        const Author = safeRequireModel('../../models/author');
+        const RefreshTokenModule = safeRequireModel('../../models/refreshToken');
+        const RefreshToken = RefreshTokenModule ? RefreshTokenModule.RefreshToken : null;
 
-        // 2. Xóa reading history
-        const readingResult = await StoriesReading.deleteMany({ user_id: id }).session(session);
+        let totalDeleted = 0;
+
+      // 1. Xóa reading history
+      if (StoriesReading) {
+        const readingResult = await StoriesReading.deleteMany({ user_id: id });
         console.log(`[UserService] Đã xóa ${readingResult.deletedCount} reading history records`);
+        totalDeleted += readingResult.deletedCount;
+      }
 
-        // 3. Xóa comments và cập nhật liked_by arrays
-        const commentResult = await Comment.deleteMany({ user_id: id }).session(session);
+      // 2. Xóa comments và cập nhật liked_by arrays
+      if (Comment) {
+        const commentResult = await Comment.deleteMany({ user_id: id });
         console.log(`[UserService] Đã xóa ${commentResult.deletedCount} comments`);
+        totalDeleted += commentResult.deletedCount;
 
         // Xóa user khỏi liked_by arrays trong comments khác
         const likedCommentsResult = await Comment.updateMany(
           { 'engagement.liked_by': id },
           { $pull: { 'engagement.liked_by': id } }
-        ).session(session);
+        );
         console.log(`[UserService] Đã xóa user khỏi ${likedCommentsResult.modifiedCount} liked comments`);
+      }
 
-        // 4. Xóa ratings
-        const ratingResult = await UserRating.deleteMany({ user_id: id }).session(session);
+      // 3. Xóa ratings
+      if (UserRating) {
+        const ratingResult = await UserRating.deleteMany({ user_id: id });
         console.log(`[UserService] Đã xóa ${ratingResult.deletedCount} ratings`);
+        totalDeleted += ratingResult.deletedCount;
+      }
 
-        // 5. Xóa attendance records
-        const attendanceResult = await Attendance.deleteMany({ user_id: id }).session(session);
+      // 4. Xóa attendance records
+      if (Attendance) {
+        const attendanceResult = await Attendance.deleteMany({ user_id: id });
         console.log(`[UserService] Đã xóa ${attendanceResult.deletedCount} attendance records`);
+        totalDeleted += attendanceResult.deletedCount;
+      }
 
-        // 6. Xóa attendance rewards
-        const attendanceRewardResult = await UserAttendanceReward.deleteMany({ user_id: id }).session(session);
+      // 5. Xóa attendance rewards
+      if (UserAttendanceReward) {
+        const attendanceRewardResult = await UserAttendanceReward.deleteMany({ user_id: id });
         console.log(`[UserService] Đã xóa ${attendanceRewardResult.deletedCount} attendance rewards`);
+        totalDeleted += attendanceRewardResult.deletedCount;
+      }
 
-        // 7. Xóa user permissions
-        const permissionResult = await UserPermission.deleteMany({ user_id: id }).session(session);
+      // 6. Xóa user permissions
+      if (UserPermission) {
+        const permissionResult = await UserPermission.deleteMany({ user_id: id });
         console.log(`[UserService] Đã xóa ${permissionResult.deletedCount} user permissions`);
+        totalDeleted += permissionResult.deletedCount;
+      }
 
-        // 8. Xóa các dữ liệu khác nếu có (transactions, purchased stories, etc.)
-        try {
-          const Transaction = require('../../models/transaction');
-          const transactionResult = await Transaction.deleteMany({ user_id: id }).session(session);
-          console.log(`[UserService] Đã xóa ${transactionResult.deletedCount} transactions`);
-        } catch (err) {
-          console.log(`[UserService] Transaction model không tồn tại hoặc lỗi: ${err.message}`);
-        }
+      // 7. Xóa transactions
+      if (Transaction) {
+        const transactionResult = await Transaction.deleteMany({ user_id: id });
+        console.log(`[UserService] Đã xóa ${transactionResult.deletedCount} transactions`);
+        totalDeleted += transactionResult.deletedCount;
+      }
 
-        try {
-          const PurchasedStory = require('../../models/purchasedStory');
-          const purchasedResult = await PurchasedStory.deleteMany({ user_id: id }).session(session);
-          console.log(`[UserService] Đã xóa ${purchasedResult.deletedCount} purchased stories`);
-        } catch (err) {
-          console.log(`[UserService] PurchasedStory model không tồn tại hoặc lỗi: ${err.message}`);
-        }
+      // 8. Xóa purchased stories
+      if (PurchasedStory) {
+        const purchasedResult = await PurchasedStory.deleteMany({ user_id: id });
+        console.log(`[UserService] Đã xóa ${purchasedResult.deletedCount} purchased stories`);
+        totalDeleted += purchasedResult.deletedCount;
+      }
 
-        // 9. Cuối cùng xóa user
-        await User.findByIdAndDelete(id).session(session);
-        console.log(`[UserService] Đã xóa user ${id} thành công`);
+      // 9. Xóa user purchases
+      if (UserPurchases) {
+        const userPurchasesResult = await UserPurchases.deleteMany({ user_id: id });
+        console.log(`[UserService] Đã xóa ${userPurchasesResult.deletedCount} user purchases`);
+        totalDeleted += userPurchasesResult.deletedCount;
+      }
 
-        // Log tổng kết
-        console.log(`[UserService] Hoàn thành xóa user ${id} và tất cả dữ liệu liên quan:
-          - Bookmarks: ${bookmarkResult.deletedCount}
-          - Reading History: ${readingResult.deletedCount}
-          - Comments: ${commentResult.deletedCount}
-          - Liked Comments Updated: ${likedCommentsResult.modifiedCount}
-          - Ratings: ${ratingResult.deletedCount}
-          - Attendance: ${attendanceResult.deletedCount}
-          - Attendance Rewards: ${attendanceRewardResult.deletedCount}
-          - Permissions: ${permissionResult.deletedCount}`);
-      });
+      // 10. Xóa notifications
+      if (Notification) {
+        const notificationResult = await Notification.deleteMany({ user_id: id });
+        console.log(`[UserService] Đã xóa ${notificationResult.deletedCount} notifications`);
+        totalDeleted += notificationResult.deletedCount;
+      }
 
-      return true;
+      // 11. Xóa mission progress
+      if (MissionProgress) {
+        const missionResult = await MissionProgress.deleteMany({ user_id: id });
+        console.log(`[UserService] Đã xóa ${missionResult.deletedCount} mission progress records`);
+        totalDeleted += missionResult.deletedCount;
+      }
+
+      // 12. Xóa achievement progress
+      if (AchievementProgress) {
+        const achievementResult = await AchievementProgress.deleteMany({ user_id: id });
+        console.log(`[UserService] Đã xóa ${achievementResult.deletedCount} achievement progress records`);
+        totalDeleted += achievementResult.deletedCount;
+      }
+
+      // 13. Xóa author records (nếu user là author)
+      if (Author) {
+        const authorResult = await Author.deleteMany({ user_id: id });
+        console.log(`[UserService] Đã xóa ${authorResult.deletedCount} author records`);
+        totalDeleted += authorResult.deletedCount;
+      }
+
+      // 14. Xóa refresh tokens
+      if (RefreshToken) {
+        const refreshTokenResult = await RefreshToken.deleteMany({ user_id: id });
+        console.log(`[UserService] Đã xóa ${refreshTokenResult.deletedCount} refresh tokens`);
+        totalDeleted += refreshTokenResult.deletedCount;
+      }
+
+
+
+      // 15. Cuối cùng xóa user
+      const deletedUser = await User.findByIdAndDelete(id);
+      console.log(`[UserService] Đã xóa user ${id} thành công`);
+      totalDeleted += 1; // User record itself
+
+      // Tạo summary chi tiết
+      const deletionSummary = {
+        user: {
+          id: deletedUser._id,
+          name: deletedUser.name,
+          email: deletedUser.email,
+          role: deletedUser.role
+        },
+        totalRecordsDeleted: totalDeleted,
+        success: true
+      };
+
+      // Log tổng kết chi tiết
+      console.log(`[UserService] Hoàn thành xóa user ${id} và tất cả dữ liệu liên quan:
+        - User: ${deletedUser.name} (${deletedUser.email})
+        - Total Records Deleted: ${deletionSummary.totalRecordsDeleted}`);
+
+      return deletionSummary;
     } catch (error) {
       console.error(`[UserService] Lỗi khi xóa user ${id}:`, error);
       throw error;
-    } finally {
-      await session.endSession();
+    }
+  }
+
+  /**
+   * Lấy thông tin preview về dữ liệu sẽ bị xóa khi xóa user
+   * @param {string} id - ID người dùng
+   * @returns {Object} Thông tin preview
+   */
+  async getUserDeletionPreview(id) {
+    try {
+      // Kiểm tra user tồn tại
+      const user = await User.findById(id).select('_id name email role status');
+      if (!user) {
+        throw new Error('Không tìm thấy người dùng');
+      }
+
+      console.log(`[UserService] Getting deletion preview for user ${id}`);
+
+      // Import các models và đếm records
+      const counts = {};
+
+      try {
+        const Bookmark = require('../../models/bookmark');
+        counts.bookmarks = await Bookmark.countDocuments({ user_id: id });
+      } catch (err) {
+        counts.bookmarks = 0;
+      }
+
+      try {
+        const StoriesReading = require('../../models/storiesReading');
+        counts.readingHistory = await StoriesReading.countDocuments({ user_id: id });
+      } catch (err) {
+        counts.readingHistory = 0;
+      }
+
+      try {
+        const Comment = require('../../models/comment');
+        counts.comments = await Comment.countDocuments({ user_id: id });
+        counts.likedComments = await Comment.countDocuments({ 'engagement.liked_by': id });
+      } catch (err) {
+        counts.comments = 0;
+        counts.likedComments = 0;
+      }
+
+      try {
+        const UserRating = require('../../models/userRating');
+        counts.ratings = await UserRating.countDocuments({ user_id: id });
+      } catch (err) {
+        counts.ratings = 0;
+      }
+
+      try {
+        const Attendance = require('../../models/attendance');
+        counts.attendance = await Attendance.countDocuments({ user_id: id });
+      } catch (err) {
+        counts.attendance = 0;
+      }
+
+      try {
+        const UserAttendanceReward = require('../../models/userAttendanceReward');
+        counts.attendanceRewards = await UserAttendanceReward.countDocuments({ user_id: id });
+      } catch (err) {
+        counts.attendanceRewards = 0;
+      }
+
+      try {
+        const UserPermission = require('../../models/userPermission');
+        counts.permissions = await UserPermission.countDocuments({ user_id: id });
+      } catch (err) {
+        counts.permissions = 0;
+      }
+
+      try {
+        const Transaction = require('../../models/transaction');
+        counts.transactions = await Transaction.countDocuments({ user_id: id });
+      } catch (err) {
+        counts.transactions = 0;
+      }
+
+      try {
+        const PurchasedStory = require('../../models/purchasedStory');
+        counts.purchasedStories = await PurchasedStory.countDocuments({ user_id: id });
+      } catch (err) {
+        counts.purchasedStories = 0;
+      }
+
+      try {
+        const UserPurchases = require('../../models/userPurchases');
+        counts.userPurchases = await UserPurchases.countDocuments({ user_id: id });
+      } catch (err) {
+        counts.userPurchases = 0;
+      }
+
+      try {
+        const Notification = require('../../models/notification');
+        counts.notifications = await Notification.countDocuments({ user_id: id });
+      } catch (err) {
+        counts.notifications = 0;
+      }
+
+      try {
+        const MissionProgress = require('../../models/missionProgress');
+        counts.missionProgress = await MissionProgress.countDocuments({ user_id: id });
+      } catch (err) {
+        counts.missionProgress = 0;
+      }
+
+      try {
+        const AchievementProgress = require('../../models/achievementProgress');
+        counts.achievementProgress = await AchievementProgress.countDocuments({ user_id: id });
+      } catch (err) {
+        counts.achievementProgress = 0;
+      }
+
+      try {
+        const Author = require('../../models/author');
+        counts.authorRecords = await Author.countDocuments({ userId: id });
+      } catch (err) {
+        counts.authorRecords = 0;
+      }
+
+      try {
+        const RefreshToken = require('../../models/refreshToken');
+        counts.refreshTokens = await RefreshToken.countDocuments({ user_id: id });
+      } catch (err) {
+        counts.refreshTokens = 0;
+      }
+
+      // Tính tổng số records sẽ bị xóa
+      const totalRecords = Object.values(counts).reduce((sum, count) => sum + count, 0) + 1; // +1 for user record
+
+      const preview = {
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          status: user.status
+        },
+        dataToDelete: counts,
+        totalRecordsToDelete: totalRecords,
+        warning: totalRecords > 0 ?
+          `Thao tác này sẽ xóa vĩnh viễn ${totalRecords} bản ghi dữ liệu và không thể hoàn tác.` :
+          'Người dùng này không có dữ liệu liên quan để xóa.'
+      };
+
+      console.log(`[UserService] Deletion preview for user ${id}: ${totalRecords} total records`);
+      return preview;
+    } catch (error) {
+      console.error(`[UserService] Error getting deletion preview for user ${id}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Xóa hàng loạt người dùng với cascade deletion
+   * @param {Array} userIds - Danh sách ID người dùng
+   * @returns {Object} Kết quả xóa chi tiết
+   */
+  async bulkDeleteUsers(userIds) {
+    try {
+      console.log(`[UserService] Starting bulk delete for ${userIds.length} users`);
+
+      if (!Array.isArray(userIds) || userIds.length === 0) {
+        throw new Error('Danh sách ID người dùng không hợp lệ');
+      }
+
+      // Check which users exist
+      const existingUsers = await User.find({ _id: { $in: userIds } }).select('_id name email role');
+      const existingUserIds = existingUsers.map(user => user._id.toString());
+      const notFoundIds = userIds.filter(id => !existingUserIds.includes(id.toString()));
+
+      let result = {
+        success: 0,
+        failed: notFoundIds.length,
+        total: userIds.length,
+        errors: [],
+        deletionSummaries: [],
+        totalRecordsDeleted: 0
+      };
+
+      // Add not found errors
+      notFoundIds.forEach(id => {
+        result.errors.push(`Không tìm thấy người dùng với ID: ${id}`);
+      });
+
+      // Delete each user individually to ensure proper cascade deletion
+      for (const user of existingUsers) {
+        try {
+          const deletionSummary = await this.deleteUser(user._id.toString());
+          result.success++;
+          result.deletionSummaries.push(deletionSummary);
+          result.totalRecordsDeleted += deletionSummary.totalRecordsDeleted || 1;
+
+          console.log(`[UserService] Successfully deleted user: ${user.name} (${user.email})`);
+        } catch (error) {
+          result.failed++;
+          result.errors.push(`Lỗi khi xóa người dùng ${user.name} (${user.email}): ${error.message}`);
+          console.error(`[UserService] Failed to delete user ${user._id}:`, error);
+        }
+      }
+
+      console.log(`[UserService] Bulk delete completed: ${result.success} success, ${result.failed} failed, ${result.totalRecordsDeleted} total records deleted`);
+      return result;
+    } catch (error) {
+      console.error(`[UserService] Bulk delete error:`, error);
+      throw error;
     }
   }
 
@@ -965,72 +1248,133 @@ class UserService {
   }
 
   /**
-   * Thực hiện thao tác hàng loạt trên người dùng
+   * Thực hiện thao tác hàng loạt trên người dùng với validation và error handling nâng cao
    * @param {Array} userIds - Danh sách ID người dùng
    * @param {string} operation - Thao tác cần thực hiện
    * @param {Object} data - Dữ liệu bổ sung
-   * @returns {Object} Kết quả thao tác
+   * @returns {Object} Kết quả thao tác chi tiết
    */
   async bulkUserOperations(userIds, operation, data = {}) {
     try {
-      let result = { success: 0, failed: 0, errors: [] };
+      console.log(`[UserService] Starting bulk operation: ${operation} for ${userIds.length} users`);
 
+      // Validate input
+      if (!Array.isArray(userIds) || userIds.length === 0) {
+        throw new Error('Danh sách ID người dùng không hợp lệ');
+      }
+
+      // Validate operation
+      const validOperations = ['delete', 'activate', 'deactivate', 'ban', 'setUser', 'setAuthor', 'setAdmin'];
+      if (!validOperations.includes(operation)) {
+        throw new Error(`Thao tác không hợp lệ. Các thao tác được hỗ trợ: ${validOperations.join(', ')}`);
+      }
+
+      // Check if users exist
+      const existingUsers = await User.find({ _id: { $in: userIds } }).select('_id name email role status');
+      const existingUserIds = existingUsers.map(user => user._id.toString());
+      const notFoundIds = userIds.filter(id => !existingUserIds.includes(id.toString()));
+
+      let result = {
+        success: 0,
+        failed: notFoundIds.length,
+        total: userIds.length,
+        errors: [],
+        details: {
+          processed: [],
+          notFound: notFoundIds,
+          summary: {}
+        }
+      };
+
+      // Add not found errors
+      notFoundIds.forEach(id => {
+        result.errors.push(`Không tìm thấy người dùng với ID: ${id}`);
+      });
+
+      if (existingUsers.length === 0) {
+        return result;
+      }
+
+      // Process bulk operation
       switch (operation) {
         case 'delete':
-          const deleteResult = await User.deleteMany({ _id: { $in: userIds } });
-          result.success = deleteResult.deletedCount;
+          // Use the comprehensive delete method for each user
+          for (const user of existingUsers) {
+            try {
+              await this.deleteUser(user._id.toString());
+              result.success++;
+              result.details.processed.push({
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                status: 'deleted'
+              });
+            } catch (error) {
+              result.failed++;
+              result.errors.push(`Lỗi khi xóa người dùng ${user.name} (${user.email}): ${error.message}`);
+            }
+          }
           break;
 
-        case 'ban':
-          const banResult = await User.updateMany(
-            { _id: { $in: userIds } },
-            { status: 'banned', updatedAt: new Date() }
-          );
-          result.success = banResult.modifiedCount;
-          break;
-
-        case 'unban':
         case 'activate':
           const activateResult = await User.updateMany(
-            { _id: { $in: userIds } },
+            { _id: { $in: existingUserIds } },
             { status: 'active', updatedAt: new Date() }
           );
           result.success = activateResult.modifiedCount;
+          result.details.summary = { operation: 'activate', modified: activateResult.modifiedCount };
           break;
 
         case 'deactivate':
           const deactivateResult = await User.updateMany(
-            { _id: { $in: userIds } },
+            { _id: { $in: existingUserIds } },
             { status: 'inactive', updatedAt: new Date() }
           );
           result.success = deactivateResult.modifiedCount;
+          result.details.summary = { operation: 'deactivate', modified: deactivateResult.modifiedCount };
           break;
 
-        case 'changeRole':
-          if (!data.role) {
-            throw new Error('Vai trò không được cung cấp');
-          }
-          const roleResult = await User.updateMany(
-            { _id: { $in: userIds } },
-            { role: data.role, updatedAt: new Date() }
+        case 'ban':
+          const banResult = await User.updateMany(
+            { _id: { $in: existingUserIds } },
+            { status: 'banned', updatedAt: new Date() }
           );
-          result.success = roleResult.modifiedCount;
+          result.success = banResult.modifiedCount;
+          result.details.summary = { operation: 'ban', modified: banResult.modifiedCount };
           break;
 
-        case 'verifyEmail':
-          const verifyResult = await User.updateMany(
-            { _id: { $in: userIds } },
-            { email_verified: true, email_verified_at: new Date(), updatedAt: new Date() }
+        case 'setUser':
+          const setUserResult = await User.updateMany(
+            { _id: { $in: existingUserIds } },
+            { role: 'user', updatedAt: new Date() }
           );
-          result.success = verifyResult.modifiedCount;
+          result.success = setUserResult.modifiedCount;
+          result.details.summary = { operation: 'setUser', modified: setUserResult.modifiedCount };
           break;
 
-        default:
-          throw new Error('Thao tác không hợp lệ');
+        case 'setAuthor':
+          const setAuthorResult = await User.updateMany(
+            { _id: { $in: existingUserIds } },
+            { role: 'author', updatedAt: new Date() }
+          );
+          result.success = setAuthorResult.modifiedCount;
+          result.details.summary = { operation: 'setAuthor', modified: setAuthorResult.modifiedCount };
+          break;
+
+        case 'setAdmin':
+          const setAdminResult = await User.updateMany(
+            { _id: { $in: existingUserIds } },
+            { role: 'admin', updatedAt: new Date() }
+          );
+          result.success = setAdminResult.modifiedCount;
+          result.details.summary = { operation: 'setAdmin', modified: setAdminResult.modifiedCount };
+          break;
       }
 
+      console.log(`[UserService] Bulk operation ${operation} completed: ${result.success} success, ${result.failed} failed`);
       return result;
     } catch (error) {
+      console.error(`[UserService] Bulk operation error:`, error);
       throw error;
     }
   }

@@ -178,7 +178,7 @@ exports.updateUserRole = async (req, res) => {
 
 /**
  * Thực hiện thao tác hàng loạt trên người dùng
- * @route POST /api/users/bulk
+ * @route POST /api/admin/users/bulk
  * @param {Object} req - Request object
  * @param {Object} res - Response object
  */
@@ -186,8 +186,9 @@ exports.bulkUserOperations = async (req, res) => {
   try {
     const { userIds, operation, data } = req.body;
 
+    console.log(`[AdminController] Bulk operation request: ${operation} for ${userIds?.length} users`);
 
-
+    // Validation
     if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
       return res.status(400).json({
         success: false,
@@ -195,10 +196,28 @@ exports.bulkUserOperations = async (req, res) => {
       });
     }
 
-    if (!['delete', 'ban', 'unban', 'activate', 'deactivate', 'changeRole', 'verifyEmail'].includes(operation)) {
+    // Validate operation
+    const validOperations = ['delete', 'activate', 'deactivate', 'ban', 'setUser', 'setAuthor', 'setAdmin'];
+    if (!validOperations.includes(operation)) {
       return res.status(400).json({
         success: false,
-        message: 'Thao tác không hợp lệ'
+        message: `Thao tác không hợp lệ. Các thao tác được hỗ trợ: ${validOperations.join(', ')}`
+      });
+    }
+
+    // Check admin permissions
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Chỉ admin mới có thể thực hiện thao tác này'
+      });
+    }
+
+    // Prevent admin from deleting themselves
+    if (operation === 'delete' && userIds.includes(req.user.id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Không thể xóa tài khoản của chính mình'
       });
     }
 
@@ -206,7 +225,7 @@ exports.bulkUserOperations = async (req, res) => {
 
     res.json({
       success: true,
-      message: `Thực hiện thao tác ${operation} thành công`,
+      message: `Thực hiện thao tác ${operation} thành công cho ${result.success}/${result.total} người dùng`,
       data: result
     });
   } catch (error) {
@@ -219,8 +238,52 @@ exports.bulkUserOperations = async (req, res) => {
 };
 
 /**
- * Xóa người dùng (admin)
- * @route DELETE /api/users/:id
+ * Lấy thông tin preview về dữ liệu sẽ bị xóa
+ * @route GET /api/admin/users/:id/deletion-preview
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+exports.getUserDeletionPreview = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    console.log(`[AdminController] Getting deletion preview for user ${id}`);
+
+    // Check admin permissions
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Chỉ admin mới có thể xem thông tin này'
+      });
+    }
+
+    const preview = await userService.getUserDeletionPreview(id);
+
+    res.json({
+      success: true,
+      message: 'Lấy thông tin preview thành công',
+      data: preview
+    });
+  } catch (error) {
+    console.error('Lỗi khi lấy thông tin preview:', error);
+
+    if (error.message === 'Không tìm thấy người dùng') {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy người dùng'
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ nội bộ'
+    });
+  }
+};
+
+/**
+ * Xóa người dùng (admin) với thông tin chi tiết
+ * @route DELETE /api/admin/users/:id
  * @param {Object} req - Request object
  * @param {Object} res - Response object
  */
@@ -228,13 +291,30 @@ exports.deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
 
+    console.log(`[AdminController] Delete user request for ${id}`);
 
+    // Check admin permissions
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Chỉ admin mới có thể xóa người dùng'
+      });
+    }
 
-    await userService.deleteUser(id);
+    // Prevent admin from deleting themselves
+    if (id === req.user.id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Không thể xóa tài khoản của chính mình'
+      });
+    }
+
+    const deletionSummary = await userService.deleteUser(id);
 
     res.json({
       success: true,
-      message: 'Xóa người dùng thành công'
+      message: 'Xóa người dùng thành công',
+      data: deletionSummary
     });
   } catch (error) {
     console.error('Lỗi khi xóa người dùng:', error);
@@ -249,6 +329,58 @@ exports.deleteUser = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Lỗi máy chủ nội bộ'
+    });
+  }
+};
+
+/**
+ * Xóa hàng loạt người dùng (admin)
+ * @route DELETE /api/admin/users/bulk
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+exports.bulkDeleteUsers = async (req, res) => {
+  try {
+    const { userIds } = req.body;
+
+    console.log(`[AdminController] Bulk delete request for ${userIds?.length} users`);
+
+    // Validation
+    if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Danh sách ID người dùng không hợp lệ'
+      });
+    }
+
+    // Check admin permissions
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Chỉ admin mới có thể xóa người dùng'
+      });
+    }
+
+    // Prevent admin from deleting themselves
+    if (userIds.includes(req.user.id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Không thể xóa tài khoản của chính mình'
+      });
+    }
+
+    const result = await userService.bulkDeleteUsers(userIds);
+
+    res.json({
+      success: true,
+      message: `Xóa hàng loạt hoàn thành: ${result.success}/${result.total} người dùng đã được xóa`,
+      data: result
+    });
+  } catch (error) {
+    console.error('Lỗi khi xóa hàng loạt người dùng:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Lỗi máy chủ nội bộ'
     });
   }
 };

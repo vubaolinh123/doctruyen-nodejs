@@ -823,7 +823,15 @@ const processChapterCountFilters = (query, filters) => {
  */
 const getStoryById = async (id) => {
   const story = await Story.findById(id)
-    .populate('authors', 'name slug')
+    .populate({
+      path: 'authors',
+      select: 'name slug userId',
+      populate: {
+        path: 'userId',
+        select: 'name email avatar',
+        model: 'User'
+      }
+    })
     .populate('categories', 'name slug');
 
   if (!story) {
@@ -832,7 +840,15 @@ const getStoryById = async (id) => {
 
   // Thêm thống kê từ storyStats
   const storiesWithStats = await addViewCountsToStories([story]);
-  return storiesWithStats[0];
+  const storyWithStats = storiesWithStats[0];
+
+  // Convert to plain object to modify
+  const storyObj = storyWithStats.toObject ? storyWithStats.toObject() : storyWithStats;
+
+  // Remove redundant author_id field for cleaner API response
+  delete storyObj.author_id;
+
+  return storyObj;
 };
 
 /**

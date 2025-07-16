@@ -21,6 +21,8 @@ module.exports = {
   updateUserStatus: adminController.updateUserStatus,
   updateUserRole: adminController.updateUserRole,
   bulkUserOperations: adminController.bulkUserOperations,
+  getUserDeletionPreview: adminController.getUserDeletionPreview,
+  bulkDeleteUsers: adminController.bulkDeleteUsers,
 
   // Analytics controllers
   getRegistrationStats: analyticsController.getRegistrationStats,

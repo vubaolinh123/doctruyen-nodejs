@@ -90,7 +90,7 @@ const transactionSchema = new Schema({
   // Tham chiếu đến đối tượng liên quan (nếu có)
   reference_type: {
     type: String,
-    enum: ['story', 'chapter', 'attendance', 'mission', 'achievement', 'milestone', 'other', ''],
+    enum: ['story', 'chapter', 'attendance', 'mission', 'achievement', 'milestone', 'author_registration', 'author_rejection', 'author_approval', 'other', ''],
     default: ''
   },
 

@@ -10,8 +10,6 @@ exports.getAll = async (req, res) => {
   try {
     const { page, limit, all, fields, search, ids, ...filters } = req.query;
 
-    console.log(`[Authors API] Query params:`, { page, limit, all, fields, search, ids, filters });
-
     const result = await authorService.getAllAuthors({
       page,
       limit,
@@ -41,20 +39,24 @@ exports.getAll = async (req, res) => {
 exports.getById = async (req, res) => {
   try {
     const author = await authorService.getAuthorById(req.params.id);
-    return res.json(author);
+    return res.json({
+      success: true,
+      message: 'Lấy thông tin tác giả thành công',
+      data: author
+    });
   } catch (error) {
     console.error('Lỗi khi lấy tác giả theo ID:', error);
-    
+
     if (error.message === 'Không tìm thấy tác giả') {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Không tìm thấy tác giả' 
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy tác giả'
       });
     }
-    
-    return res.status(500).json({ 
-      success: false, 
-      message: 'Lỗi máy chủ nội bộ' 
+
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ nội bộ'
     });
   }
 };

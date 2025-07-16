@@ -10,4 +10,4 @@ statics(schema);
 hooks(schema);
 
 // Tạo và export model
-module.exports = mongoose.model('Transaction', schema); 
+module.exports = mongoose.models.Transaction || mongoose.model('Transaction', schema);

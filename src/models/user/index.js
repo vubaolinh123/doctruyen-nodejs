@@ -20,6 +20,6 @@ setupStatics(userSchema);
 setupHooks(userSchema);
 
 // Tạo model
-const User = mongoose.model('User', userSchema);
+const User = mongoose.models.User || mongoose.model('User', userSchema);
 
 module.exports = User; 

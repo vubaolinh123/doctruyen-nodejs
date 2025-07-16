@@ -41,8 +41,12 @@ router.use('/images', require('./images'));
 // Admin routes
 router.use('/admin/coins', auth, require('./coins'));
 router.use('/admin/users', auth, require('./admin/users'));
+router.use('/admin/authors', require('./admin/authors'));
 router.use('/admin/permission-templates', require('./admin/permissionTemplates'));
 router.use('/admin/attendance', require('./admin/attendanceRewards'));
+
+// Author Panel routes - require author role authentication
+router.use('/author-panel', require('./authorPanel'));
 router.use('/admin/comments', require('./admin/commentModeration'));
 router.use('/admin/missions', require('./admin/missions'));
 router.use('/admin/chapters', auth, require('./admin/bulkChapters'));

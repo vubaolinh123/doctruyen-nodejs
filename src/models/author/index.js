@@ -19,7 +19,7 @@ setupStatics(authorSchema);
 // Thiết lập hooks
 setupHooks(authorSchema);
 
-// Tạo model
-const Author = mongoose.model('Author', authorSchema);
+// Tạo model (check if already exists to avoid overwrite error)
+const Author = mongoose.models.Author || mongoose.model('Author', authorSchema);
 
 module.exports = Author;

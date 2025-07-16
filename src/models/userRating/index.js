@@ -8,4 +8,4 @@ applyVirtuals(userRatingSchema);
 applyStatics(userRatingSchema);
 
 // Create and export the model
-module.exports = mongoose.model('UserRating', userRatingSchema);
+module.exports = mongoose.models.UserRating || mongoose.model('UserRating', userRatingSchema);

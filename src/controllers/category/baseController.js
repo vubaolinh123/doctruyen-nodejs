@@ -41,20 +41,24 @@ exports.getAll = async (req, res) => {
 exports.getById = async (req, res) => {
   try {
     const category = await categoryService.getCategoryById(req.params.id);
-    return res.json(category);
+    return res.json({
+      success: true,
+      message: 'Lấy thông tin thể loại thành công',
+      data: category
+    });
   } catch (error) {
     console.error('Lỗi khi lấy thể loại theo ID:', error);
-    
+
     if (error.message === 'Không tìm thấy thể loại') {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Không tìm thấy thể loại' 
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy thể loại'
       });
     }
-    
-    return res.status(500).json({ 
-      success: false, 
-      message: 'Lỗi máy chủ nội bộ' 
+
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ nội bộ'
     });
   }
 };

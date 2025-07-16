@@ -10,6 +10,14 @@ const setupVirtuals = (schema) => {
     foreignField: 'author_id',
     count: true
   });
+
+  // Virtual để lấy thông tin user (chỉ áp dụng cho system author)
+  schema.virtual('user', {
+    ref: 'User',
+    localField: 'userId',
+    foreignField: '_id',
+    justOne: true
+  });
 };
 
 module.exports = setupVirtuals;

@@ -63,6 +63,78 @@ const setupStatics = (schema) => {
       .sort({ name: 1 })
       .limit(limit);
   };
+
+  /**
+   * Tìm tác giả theo userId (chỉ áp dụng cho system author)
+   * @param {string} userId - ID của user
+   * @returns {Promise<Object|null>} - Thông tin tác giả hoặc null
+   */
+  schema.statics.findByUserId = function(userId) {
+    return this.findOne({
+      userId: userId,
+      authorType: 'system',
+      status: true
+    });
+  };
+
+  /**
+   * Lấy danh sách system authors
+   * @param {number} limit - Số lượng tác giả cần lấy
+   * @param {number} skip - Số lượng tác giả cần bỏ qua
+   * @returns {Promise<Array>} - Danh sách system authors
+   */
+  schema.statics.findSystemAuthors = function(limit = 0, skip = 0) {
+    const query = this.find({
+      authorType: 'system',
+      status: true
+    }).sort({ createdAt: -1 });
+
+    if (limit > 0) {
+      query.limit(limit);
+    }
+
+    if (skip > 0) {
+      query.skip(skip);
+    }
+
+    return query;
+  };
+
+  /**
+   * Lấy danh sách external authors
+   * @param {number} limit - Số lượng tác giả cần lấy
+   * @param {number} skip - Số lượng tác giả cần bỏ qua
+   * @returns {Promise<Array>} - Danh sách external authors
+   */
+  schema.statics.findExternalAuthors = function(limit = 0, skip = 0) {
+    const query = this.find({
+      authorType: 'external',
+      status: true
+    }).sort({ name: 1 });
+
+    if (limit > 0) {
+      query.limit(limit);
+    }
+
+    if (skip > 0) {
+      query.skip(skip);
+    }
+
+    return query;
+  };
+
+  /**
+   * Kiểm tra xem user đã có author record chưa
+   * @param {string} userId - ID của user
+   * @returns {Promise<boolean>} - true nếu user đã có author record
+   */
+  schema.statics.userHasAuthorRecord = async function(userId) {
+    const author = await this.findOne({
+      userId: userId,
+      authorType: 'system'
+    });
+    return !!author;
+  };
 };
 
 module.exports = setupStatics;
