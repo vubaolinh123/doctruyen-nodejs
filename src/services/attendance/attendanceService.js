@@ -265,7 +265,7 @@ class AttendanceService {
     }
 
     // Tính toán phần thưởng cơ bản
-    const baseReward = 10;
+    const baseReward = 1000;
     let bonusReward = 0;
     let notes = 'Điểm danh hàng ngày';
 

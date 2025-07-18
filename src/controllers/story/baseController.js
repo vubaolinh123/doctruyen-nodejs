@@ -17,6 +17,7 @@ exports.getAll = async (req, res) => {
       sort = '-createdAt',
       search = '',
       status,
+      approval_status,
       is_hot,
       is_new,
       is_full,
@@ -37,6 +38,7 @@ exports.getAll = async (req, res) => {
 
     console.log(`[API] Lấy danh sách truyện - page: ${page}, limit: ${limit}, search: ${search}, categories: ${categories}`);
     console.log(`[API] Sort parameters - sort: ${sort}, sort_by: ${sort_by}, sort_order: ${sort_order}`);
+    console.log(`[API] Approval status filter: ${approval_status}`);
 
     // Kiểm tra quyền admin nếu có token
     const isAdmin = req.user && req.user.role === 'admin';
@@ -83,6 +85,7 @@ exports.getAll = async (req, res) => {
       // Remove original sort parameter to avoid conflicts
       search,
       status,
+      approval_status,
       is_hot,
       is_new,
       is_full,

@@ -9,7 +9,7 @@ const setupStatics = (schema) => {
    * @returns {Number} - Phần thưởng
    */
   schema.statics.calculateReward = function(streakCount) {
-    let reward = 10; // Phần thưởng cơ bản
+    let reward = 1000; // Phần thưởng cơ bản
 
     // Thưởng thêm cho các mốc đặc biệt
     if (streakCount === 7) {

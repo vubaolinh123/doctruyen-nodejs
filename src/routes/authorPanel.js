@@ -36,6 +36,12 @@ router.get('/activity', dashboardController.getRecentActivity);
 // Get author's stories with pagination and filters
 router.get('/stories', storiesController.getAuthorStories);
 
+// Get author's draft stories with pagination and filters
+router.get('/stories/drafts', storiesController.getAuthorDraftStories);
+
+// Delete draft story (soft delete) - specific route for drafts
+router.delete('/stories/drafts/:storyId', storiesController.deleteDraftStory);
+
 // Get single story details for editing
 router.get('/stories/:storyId', storiesController.getStoryDetails);
 
@@ -48,6 +54,12 @@ router.put('/stories/:storyId', storiesController.updateStory);
 // Delete story (soft delete)
 router.delete('/stories/:storyId', storiesController.deleteStory);
 
+// Resubmit rejected story for approval
+router.post('/stories/:storyId/resubmit', storiesController.resubmitStoryForApproval);
+
+// Get stories by approval status
+router.get('/stories/approval/:approval_status', storiesController.getStoriesByApprovalStatus);
+
 // Update story status (draft/published/completed)
 router.patch('/stories/:storyId/status', storiesController.updateStoryStatus);
 
@@ -57,6 +69,9 @@ router.get('/stories/categories/list', storiesController.getCategories);
 // ============================================
 // CHAPTER MANAGEMENT ROUTES
 // ============================================
+
+// Get draft chapters across all stories (must be before parameterized routes)
+router.get('/chapters/drafts', chaptersController.getDraftChapters);
 
 // Get chapters for a specific story
 router.get('/stories/:storyId/chapters', chaptersController.getStoryChapters);
@@ -81,6 +96,9 @@ router.post('/chapters/:chapterId/schedule', chaptersController.scheduleChapter)
 
 // Auto-save chapter content (for draft saving)
 router.post('/chapters/:chapterId/autosave', chaptersController.autoSaveChapter);
+
+// Resubmit rejected chapter for approval
+router.post('/chapters/:chapterId/resubmit', chaptersController.resubmitChapterForApproval);
 
 // ============================================
 // ANALYTICS ROUTES

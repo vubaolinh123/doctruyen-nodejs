@@ -82,7 +82,8 @@ const getPopularStories = async (limit = 500, page = 1) => {
 
     // Lấy truyện sắp xếp theo views (phổ biến nhất)
     const stories = await Story.find({
-      status: true // Chỉ lấy truyện đang hoạt động
+      status: 'published', // Chỉ lấy truyện đã xuất bản
+      approval_status: 'approved' // Chỉ lấy truyện đã được phê duyệt
     })
       .sort({ views: -1 }) // Sắp xếp theo views giảm dần
       .skip(skip)
@@ -152,7 +153,10 @@ const getTopRatedStories = async (limit = 10) => {
 
     // Nếu không có dữ liệu từ StoryRankings, lấy truyện có lượt xem cao nhất
     console.log('No rankings data available, falling back to views-based sorting');
-    const stories = await Story.find({ status: true })
+    const stories = await Story.find({
+      status: 'published',
+      approval_status: 'approved'
+    })
       .sort({ views: -1 })
       .limit(parseInt(limit))
       .populate('author_id', 'name slug')
@@ -163,7 +167,10 @@ const getTopRatedStories = async (limit = 10) => {
     console.error('Error getting top rated stories:', error);
 
     // Fallback nếu có lỗi
-    const stories = await Story.find({ status: true })
+    const stories = await Story.find({
+      status: 'published',
+      approval_status: 'approved'
+    })
       .sort({ views: -1 })
       .limit(parseInt(limit))
       .populate('author_id', 'name slug')
@@ -243,10 +250,11 @@ const searchStories = async (keyword, limit = 10) => {
  * @returns {Promise<Object>} - Kết quả chứa danh sách truyện mới
  */
 const getNewStories = async (limit = 10) => {
-  // Tìm truyện có is_new = true và status = true
+  // Tìm truyện có is_new = true, status = 'published' và approval_status = 'approved'
   const stories = await Story.find({
     is_new: true,
-    status: true
+    status: 'published',
+    approval_status: 'approved'
   })
     .sort({ createdAt: -1 })
     .limit(parseInt(limit))
@@ -313,10 +321,11 @@ const getNewStories = async (limit = 10) => {
  * @returns {Promise<Object>} - Kết quả chứa danh sách truyện đã hoàn thành
  */
 const getFullStories = async (limit = 10) => {
-  // Tìm truyện có is_full = true và status = true
+  // Tìm truyện có is_full = true, status = 'published' và approval_status = 'approved'
   const stories = await Story.find({
     is_full: true,
-    status: true
+    status: 'published',
+    approval_status: 'approved'
   })
     .sort({ updatedAt: -1 })
     .limit(parseInt(limit))
@@ -393,7 +402,10 @@ const getSuggestedStories = async (options = {}) => {
   } = options;
 
   // Tạo query cơ bản
-  let query = { status: true };
+  let query = {
+    status: 'published',
+    approval_status: 'approved'
+  };
   let categoryIds = [];
 
   // Nếu có storyId, lấy thông tin truyện và thể loại của nó

@@ -263,7 +263,7 @@ exports.createChapter = async (req, res) => {
       });
     }
 
-    // Create chapter data
+    // Create chapter data with approval workflow
     const chapterData = {
       story_id: storyId,
       chapter: parseInt(chapter),
@@ -276,7 +276,13 @@ exports.createChapter = async (req, res) => {
       link_ref,
       pass_code,
       is_new,
-      status
+      status: 'draft', // Always start as draft
+      approval_status: 'pending', // Automatically submit for approval
+      approval_metadata: {
+        submission_count: 1,
+        last_submitted_at: new Date(),
+        current_note: 'Chapter được tạo mới và tự động gửi duyệt'
+      }
     };
 
     // Create new chapter
@@ -288,7 +294,7 @@ exports.createChapter = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: 'Tạo chapter mới thành công',
+      message: 'Tạo chapter mới thành công và đã gửi duyệt. Chapter sẽ được hiển thị sau khi admin phê duyệt.',
       data: newChapter
     });
 
@@ -438,6 +444,286 @@ exports.deleteChapter = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Lỗi server khi xóa chapter',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Resubmit chapter for admin approval
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+exports.resubmitChapterForApproval = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { chapterId } = req.params;
+    const { note = '' } = req.body;
+
+    console.log(`[AuthorPanel] Resubmitting chapter ${chapterId} for approval by user: ${userId}`);
+
+    // Find author record for the current user
+    const author = await Author.findOne({
+      userId: userId,
+      authorType: 'system',
+      approvalStatus: 'approved'
+    });
+
+    if (!author) {
+      return res.status(404).json({
+        success: false,
+        message: 'Tác giả không tồn tại hoặc chưa được phê duyệt. Vui lòng đăng ký làm tác giả trước.'
+      });
+    }
+
+    // Find the chapter and verify ownership
+    const chapter = await Chapter.findById(chapterId)
+      .populate({
+        path: 'story_id',
+        select: 'author_id name',
+        match: { author_id: author._id }
+      });
+
+    if (!chapter || !chapter.story_id) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy chapter hoặc bạn không có quyền truy cập chapter này.'
+      });
+    }
+
+    // Validate that chapter can be resubmitted
+    const allowedStatuses = ['rejected', 'not_submitted'];
+    if (!allowedStatuses.includes(chapter.approval_status)) {
+      return res.status(400).json({
+        success: false,
+        error: `Chỉ có thể nộp lại chapter có trạng thái 'Đã bị từ chối' hoặc 'Chưa gửi duyệt'. Trạng thái hiện tại: ${chapter.approval_status}`
+      });
+    }
+
+    // Prepare resubmission data
+    const currentTime = new Date();
+    const submissionCount = (chapter.approval_metadata?.submission_count || 0) + 1;
+
+    // Prepare resubmission history entry
+    const resubmissionEntry = {
+      submission_count: submissionCount,
+      submitted_at: currentTime,
+      note: note.trim(),
+      previous_status: chapter.approval_status
+    };
+
+    // Update chapter with resubmission data
+    const updateData = {
+      approval_status: 'pending',
+      'approval_metadata.submission_count': submissionCount,
+      'approval_metadata.last_submitted_at': currentTime,
+      'approval_metadata.current_note': note.trim(),
+      // Clear previous rejection data
+      $unset: {
+        'approval_metadata.rejection_reason': '',
+        'approval_metadata.rejected_at': '',
+        'approval_metadata.rejected_by': ''
+      },
+      // Add to resubmission history
+      $push: {
+        'approval_metadata.resubmission_history': resubmissionEntry
+      }
+    };
+
+    const updatedChapter = await Chapter.findByIdAndUpdate(
+      chapterId,
+      updateData,
+      { new: true, runValidators: true }
+    ).populate('story_id', 'name');
+
+    console.log(`[AuthorPanel] Chapter ${chapterId} resubmitted successfully. Submission count: ${submissionCount}`);
+
+    res.json({
+      success: true,
+      message: `Đã nộp lại chapter "${chapter.name}" để duyệt thành công! Đây là lần nộp thứ ${submissionCount}.`,
+      data: {
+        chapter: {
+          _id: updatedChapter._id,
+          name: updatedChapter.name,
+          approval_status: updatedChapter.approval_status,
+          submission_count: submissionCount,
+          last_submitted_at: currentTime,
+          note: note.trim(),
+          story_name: updatedChapter.story_id?.name
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('[AuthorPanel] Resubmit chapter error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi server khi nộp lại chapter để duyệt',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get draft chapters across all stories for the authenticated author
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+exports.getDraftChapters = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const {
+      page = 1,
+      limit = 20,
+      search = '',
+      sort = '-updatedAt',
+      approval_status,
+      story_id
+    } = req.query;
+
+    console.log(`[AuthorPanel] Getting draft chapters for user: ${userId}`);
+
+    // Check if user is admin (admins can view all chapters)
+    const isAdmin = req.user.role === 'admin';
+
+    let author = null;
+    let authorFilter = {};
+
+    if (isAdmin) {
+      // Admin users can view all draft chapters
+      console.log('[AuthorPanel] Admin user - can view all draft chapters');
+    } else {
+      // Find author record for regular users
+      author = await Author.findOne({
+        userId: userId,
+        authorType: 'system',
+        approvalStatus: 'approved'
+      });
+
+      if (!author) {
+        return res.status(404).json({
+          success: false,
+          message: 'Tác giả không tồn tại hoặc chưa được phê duyệt'
+        });
+      }
+
+      // Filter by author's stories only
+      authorFilter = { author_id: author._id };
+    }
+
+    // Build aggregation pipeline
+    const pipeline = [];
+
+    // Match stage - join with stories and filter by author
+    const matchStage = {
+      $lookup: {
+        from: 'stories',
+        localField: 'story_id',
+        foreignField: '_id',
+        as: 'story'
+      }
+    };
+    pipeline.push(matchStage);
+
+    // Unwind story array
+    pipeline.push({ $unwind: '$story' });
+
+    // Filter conditions
+    const filterConditions = {
+      status: 'draft' // Only draft chapters
+    };
+
+    // Add author filter for non-admin users
+    if (!isAdmin) {
+      filterConditions['story.author_id'] = author._id;
+    }
+
+    // Add approval status filter if specified
+    if (approval_status && approval_status !== 'all') {
+      filterConditions.approval_status = approval_status;
+    }
+
+    // Add story filter if specified
+    if (story_id) {
+      filterConditions.story_id = new mongoose.Types.ObjectId(story_id);
+    }
+
+    // Add search filter if specified
+    if (search) {
+      filterConditions.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { 'story.name': { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    pipeline.push({ $match: filterConditions });
+
+    // Add story information to the output
+    pipeline.push({
+      $addFields: {
+        story_info: {
+          _id: '$story._id',
+          name: '$story.name',
+          slug: '$story.slug'
+        }
+      }
+    });
+
+    // Remove the full story object and keep only story_info
+    pipeline.push({
+      $project: {
+        story: 0
+      }
+    });
+
+    // Sort stage
+    const sortStage = {};
+    if (sort.startsWith('-')) {
+      sortStage[sort.substring(1)] = -1;
+    } else {
+      sortStage[sort] = 1;
+    }
+    pipeline.push({ $sort: sortStage });
+
+    // Count total documents
+    const countPipeline = [...pipeline, { $count: 'total' }];
+    const countResult = await Chapter.aggregate(countPipeline);
+    const totalItems = countResult.length > 0 ? countResult[0].total : 0;
+
+    // Add pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: parseInt(limit) });
+
+    // Execute aggregation
+    const chapters = await Chapter.aggregate(pipeline);
+
+    // Calculate pagination info
+    const totalPages = Math.ceil(totalItems / parseInt(limit));
+
+    console.log(`[AuthorPanel] Found ${chapters.length} draft chapters (total: ${totalItems})`);
+
+    res.json({
+      success: true,
+      message: 'Lấy danh sách chapter nháp thành công',
+      data: {
+        draftChapters: chapters,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          totalItems,
+          totalPages,
+          hasNextPage: parseInt(page) < totalPages,
+          hasPrevPage: parseInt(page) > 1
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('[AuthorPanel] Get draft chapters error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi server khi lấy danh sách chapter nháp',
       error: error.message
     });
   }

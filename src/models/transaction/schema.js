@@ -58,7 +58,7 @@ const transactionSchema = new Schema({
   // Loại giao dịch
   type: {
     type: String,
-    enum: ['attendance', 'purchase', 'reward', 'admin', 'refund', 'other', 'add', 'subtract', 'update'],
+    enum: ['attendance', 'purchase', 'reward', 'admin', 'refund', 'other', 'add', 'subtract', 'update', 'sepay_deposit'],
     default: 'other',
     index: true
   },
@@ -90,7 +90,7 @@ const transactionSchema = new Schema({
   // Tham chiếu đến đối tượng liên quan (nếu có)
   reference_type: {
     type: String,
-    enum: ['story', 'chapter', 'attendance', 'mission', 'achievement', 'milestone', 'author_registration', 'author_rejection', 'author_approval', 'other', ''],
+    enum: ['story', 'chapter', 'attendance', 'mission', 'achievement', 'milestone', 'author_registration', 'author_rejection', 'author_approval', 'payment', 'other', ''],
     default: ''
   },
 

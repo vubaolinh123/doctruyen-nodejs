@@ -83,6 +83,16 @@ router.get('/missed-days',
 );
 
 /**
+ * @route GET /api/attendance/buy-missed-days/pricing
+ * @desc Get pricing for buying missed attendance days
+ * @access User
+ */
+router.get('/buy-missed-days/pricing',
+  authenticateToken,
+  attendanceController.getBuyMissedDaysPricing
+);
+
+/**
  * @route POST /api/attendance/buy-missed-days
  * @desc Buy missed attendance days
  * @access User

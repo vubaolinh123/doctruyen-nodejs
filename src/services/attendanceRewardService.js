@@ -343,7 +343,7 @@ const claimReward = async (userId, rewardId) => {
  * Get pricing for buying missed days
  */
 const getBuyMissedDaysPricing = async () => {
-  const costPerDay = await SystemSettings.getSetting('missed_day_cost', 50);
+  const costPerDay = await SystemSettings.getSetting('missed_day_cost', 5000);
   const maxBuybackDays = await SystemSettings.getSetting('max_buyback_days', 30);
 
   return {
@@ -412,7 +412,7 @@ const buyMissedDays = async (userId, missedDates) => {
   }
 
   // Get settings
-  const costPerDay = await SystemSettings.getSetting('missed_day_cost', 50);
+  const costPerDay = await SystemSettings.getSetting('missed_day_cost', 5000);
   const maxBuybackDays = await SystemSettings.getSetting('max_buyback_days', 30);
 
   console.log(`[AttendanceRewardService] Settings: costPerDay=${costPerDay}, maxBuybackDays=${maxBuybackDays}`);
@@ -501,7 +501,7 @@ const buyMissedDays = async (userId, missedDates) => {
 
   // Process purchase
   const purchasedDates = [];
-  const rewardPerDay = 10; // Reward for purchased days
+  const rewardPerDay = 1000; // Reward for purchased days
 
   for (const date of validDates) {
     try {

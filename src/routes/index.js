@@ -48,9 +48,13 @@ router.use('/admin/attendance', require('./admin/attendanceRewards'));
 // Author Panel routes - require author role authentication
 router.use('/author-panel', require('./authorPanel'));
 router.use('/admin/comments', require('./admin/commentModeration'));
+router.use('/admin', require('./admin/storyApproval'));
 router.use('/admin/missions', require('./admin/missions'));
 router.use('/admin/chapters', auth, require('./admin/bulkChapters'));
 router.use('/admin/comments/reported', require('./admin/reportedComments'));
 // router.use('/admin/business-logic', require('./admin/businessLogic')); // Temporarily disabled
+
+// Webhook routes (no authentication required for external services)
+router.use('/hooks', require('./webhooks/sepay'));
 
 module.exports = router;

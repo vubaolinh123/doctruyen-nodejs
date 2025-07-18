@@ -78,11 +78,84 @@ const chapterSchema = new Schema({
     default: false
   },
 
-  // Trạng thái hiển thị
+  // Trạng thái hiển thị (changed to string to match story model)
   status: {
-    type: Boolean,
-    default: false,
+    type: String,
+    enum: ['draft', 'published', 'archived'],
+    default: 'draft',
     index: true
+  },
+
+  // Trạng thái phê duyệt (approval system)
+  approval_status: {
+    type: String,
+    enum: ['not_submitted', 'pending', 'approved', 'rejected'],
+    default: 'not_submitted',
+    index: true
+  },
+
+  // Metadata cho hệ thống phê duyệt
+  approval_metadata: {
+    // Thông tin từ chối
+    rejection_reason: {
+      type: String,
+      default: ''
+    },
+    rejected_at: {
+      type: Date
+    },
+    rejected_by: {
+      type: Schema.Types.ObjectId,
+      ref: 'User'
+    },
+
+    // Thông tin phê duyệt
+    approved_at: {
+      type: Date
+    },
+    approved_by: {
+      type: Schema.Types.ObjectId,
+      ref: 'User'
+    },
+
+    // Theo dõi số lần nộp
+    submission_count: {
+      type: Number,
+      default: 0
+    },
+    last_submitted_at: {
+      type: Date
+    },
+    current_note: {
+      type: String,
+      default: ''
+    },
+
+    // Lịch sử nộp lại
+    resubmission_history: [{
+      submission_count: {
+        type: Number,
+        required: true
+      },
+      submitted_at: {
+        type: Date,
+        required: true
+      },
+      note: {
+        type: String,
+        default: ''
+      },
+      previous_status: {
+        type: String,
+        required: true
+      }
+    }],
+
+    // Ghi chú của admin
+    admin_comments: {
+      type: String,
+      default: ''
+    }
   },
 
   // Hệ thống nội dung trả phí

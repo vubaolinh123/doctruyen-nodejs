@@ -44,7 +44,7 @@ const checkIn = async (userId) => {
   }
 
   // Get daily coin reward from settings
-  const dailyCoins = await SystemSettings.getSetting('daily_attendance_coins', 10);
+  const dailyCoins = await SystemSettings.getSetting('daily_attendance_coins', 1000);
 
   // Create attendance record
   const attendance = await Attendance.create({
@@ -145,53 +145,87 @@ const getAttendanceStatus = async (userId) => {
 };
 
 /**
- * Get attendance history for user
+ * Get attendance history for user in calendar format
  * @param {string} userId - User ID
  * @param {Object} options - Query options
- * @returns {Promise<Object>} Attendance history
+ * @returns {Promise<Object>} Attendance history with attendanceData and stats
  */
 const getAttendanceHistory = async (userId, options = {}) => {
-  const { month, year, limit = 31, page = 1 } = options;
+  const { month, year } = options;
 
-  const query = { user_id: userId };
+  // Default to current month/year if not provided
+  const currentDate = new Date();
+  const targetMonth = month !== undefined ? month - 1 : currentDate.getMonth(); // Convert to 0-based
+  const targetYear = year !== undefined ? year : currentDate.getFullYear();
 
-  // Add date filters if provided
-  if (month !== undefined && year !== undefined) {
-    const startDate = new Date(year, month, 1);
-    const endDate = new Date(year, month + 1, 1);
-    query.date = {
+  console.log(`[AttendanceService] getAttendanceHistory for user ${userId}, month: ${month}, year: ${year}`);
+  console.log(`[AttendanceService] Target month (0-based): ${targetMonth}, year: ${targetYear}`);
+
+  // Get attendance records for the specified month
+  const startDate = new Date(targetYear, targetMonth, 1);
+  const endDate = new Date(targetYear, targetMonth + 1, 1);
+
+  const attendances = await Attendance.find({
+    user_id: userId,
+    date: {
       $gte: startDate,
       $lt: endDate
-    };
-  } else if (year !== undefined) {
-    const startDate = new Date(year, 0, 1);
-    const endDate = new Date(year + 1, 0, 1);
-    query.date = {
-      $gte: startDate,
-      $lt: endDate
-    };
+    }
+  }).lean();
+
+  console.log(`[AttendanceService] Found ${attendances.length} attendance records`);
+
+  // Get total stats for the user
+  const totalAttended = await Attendance.countDocuments({
+    user_id: userId,
+    status: { $in: ['attended', 'purchased'] }
+  });
+
+  const monthlyAttended = attendances.filter(a =>
+    a.status === 'attended' || a.status === 'purchased'
+  ).length;
+
+  // Build attendanceData object for each day of the month
+  const attendanceData = {};
+  const daysInMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+  const today = new Date();
+  const currentDay = today.getDate();
+  const isCurrentMonth = today.getMonth() === targetMonth && today.getFullYear() === targetYear;
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dayDate = new Date(targetYear, targetMonth, day);
+    const attendance = attendances.find(a => a.day === day);
+
+    if (attendance) {
+      attendanceData[day.toString()] = attendance.status;
+    } else {
+      // Determine status for days without attendance records
+      if (isCurrentMonth) {
+        if (day < currentDay) {
+          attendanceData[day.toString()] = 'missed';
+        } else if (day === currentDay) {
+          attendanceData[day.toString()] = 'pending';
+        } else {
+          attendanceData[day.toString()] = 'future';
+        }
+      } else if (dayDate < today) {
+        attendanceData[day.toString()] = 'missed';
+      } else {
+        attendanceData[day.toString()] = 'future';
+      }
+    }
   }
 
-  const skip = (page - 1) * limit;
-
-  const [attendances, total] = await Promise.all([
-    Attendance.find(query)
-      .sort({ date: -1 })
-      .limit(limit)
-      .skip(skip)
-      .lean(),
-    Attendance.countDocuments(query)
-  ]);
-
-  return {
-    attendances,
-    pagination: {
-      current: page,
-      limit,
-      total,
-      pages: Math.ceil(total / limit)
+  const result = {
+    attendanceData,
+    stats: {
+      totalDaysAttended: totalAttended,
+      monthlyDaysAttended: monthlyAttended
     }
   };
+
+  console.log(`[AttendanceService] Returning result:`, JSON.stringify(result, null, 2));
+  return result;
 };
 
 /**
@@ -397,17 +431,35 @@ const getAvailableMissedDays = async (userId) => {
 };
 
 /**
+ * Get pricing for buying missed days
+ * @returns {Promise<Object>} Pricing information
+ */
+const getBuyMissedDaysPricing = async () => {
+  const costPerDay = await SystemSettings.getSetting('missed_day_cost', 5000);
+  const maxBuybackDays = await SystemSettings.getSetting('max_buyback_days', 30);
+
+  return {
+    costPerDay,
+    maxBuybackDays,
+    currency: 'xu',
+    description: `Mua lại ngày điểm danh bù với ${costPerDay} xu/ngày. Tối đa ${maxBuybackDays} ngày gần nhất.`
+  };
+};
+
+/**
  * Buy missed attendance days
  * @param {string} userId - User ID
  * @param {Array<string>} dates - Array of date strings to purchase
  * @returns {Promise<Object>} Purchase result
  */
 const buyMissedDays = async (userId, dates) => {
+  console.log(`[buyMissedDays] Called with userId: ${userId} (type: ${typeof userId}), dates:`, dates);
+
   if (!Array.isArray(dates) || dates.length === 0) {
     throw new ApiError(400, 'Danh sách ngày không hợp lệ');
   }
 
-  const costPerDay = await SystemSettings.getSetting('missed_day_cost', 50);
+  const costPerDay = await SystemSettings.getSetting('missed_day_cost', 5000);
   const totalCost = dates.length * costPerDay;
 
   // Check user balance
@@ -426,32 +478,89 @@ const buyMissedDays = async (userId, dates) => {
 
   for (const dateStr of dates) {
     try {
+      console.log(`[buyMissedDays] Processing date: ${dateStr}`);
       const date = new Date(dateStr);
 
-      // Check if already attended
-      const existingAttendance = await Attendance.findOne({
-        user_id: userId,
-        date: {
-          $gte: new Date(date.getFullYear(), date.getMonth(), date.getDate()),
-          $lt: new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1)
-        }
-      });
-
-      if (existingAttendance) {
-        errors.push(`Ngày ${dateStr} đã có điểm danh`);
+      // Validate date parsing
+      if (isNaN(date.getTime())) {
+        errors.push(`Ngày ${dateStr} không hợp lệ`);
         continue;
       }
 
-      // Create purchased attendance
-      await Attendance.create({
+      console.log(`[buyMissedDays] Parsed date:`, date);
+      console.log(`[buyMissedDays] Date components: day=${date.getDate()}, month=${date.getMonth()}, year=${date.getFullYear()}`);
+      console.log(`[buyMissedDays] Date validation: isValid=${!isNaN(date.getTime())}, ISO=${date.toISOString()}`);
+
+      // Check if already attended - use exact date match for unique constraint
+      const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+
+      const existingAttendance = await Attendance.findOne({
         user_id: userId,
-        date: date,
-        is_purchased: true,
-        coins_earned: 0 // No coins for purchased days
+        date: {
+          $gte: startOfDay,
+          $lt: endOfDay
+        }
       });
 
-      purchasedDates.push(dateStr);
+      console.log(`[buyMissedDays] Checking existing attendance for ${dateStr}:`, existingAttendance);
+
+      if (existingAttendance) {
+        errors.push(`Ngày ${dateStr} đã có điểm danh (status: ${existingAttendance.status})`);
+        continue;
+      }
+
+      // Create purchased attendance with all required fields explicitly
+      const attendanceData = {
+        user_id: userId,
+        date: date,
+        status: 'purchased',
+        reward: 1000, // Standard reward for purchased days
+        day: date.getDate(),
+        month: date.getMonth(), // 0-based month (0-11)
+        year: date.getFullYear(),
+        notes: `Mua điểm danh bù với ${costPerDay} xu`,
+        attendance_time: new Date(),
+        timezone: 'Asia/Ho_Chi_Minh',
+        timezone_offset: 420
+      };
+
+      // Validate required fields before creating
+      const requiredFields = ['user_id', 'date', 'day', 'month', 'year'];
+      const missingFields = requiredFields.filter(field =>
+        attendanceData[field] === undefined || attendanceData[field] === null
+      );
+
+      if (missingFields.length > 0) {
+        errors.push(`Ngày ${dateStr}: Thiếu các field bắt buộc: ${missingFields.join(', ')}`);
+        continue;
+      }
+
+      console.log(`[buyMissedDays] Creating attendance with data:`, attendanceData);
+      console.log(`[buyMissedDays] Required fields check: day=${attendanceData.day}, month=${attendanceData.month}, year=${attendanceData.year}`);
+
+      try {
+        const newAttendance = await Attendance.create(attendanceData);
+        console.log(`[buyMissedDays] Successfully created attendance:`, newAttendance._id);
+        purchasedDates.push(dateStr);
+      } catch (createError) {
+        console.error(`[buyMissedDays] Error creating attendance record:`, createError);
+        console.error(`[buyMissedDays] Full error details:`, createError);
+
+        if (createError.code === 11000) {
+          errors.push(`Ngày ${dateStr} đã có điểm danh (duplicate key)`);
+        } else if (createError.name === 'ValidationError') {
+          const validationErrors = Object.keys(createError.errors).map(key =>
+            `${key}: ${createError.errors[key].message}`
+          ).join(', ');
+          errors.push(`Lỗi validation cho ngày ${dateStr}: ${validationErrors}`);
+        } else {
+          errors.push(`Lỗi khi tạo điểm danh cho ngày ${dateStr}: ${createError.message}`);
+        }
+        continue;
+      }
     } catch (error) {
+      console.error(`[buyMissedDays] Error processing date ${dateStr}:`, error);
       errors.push(`Lỗi khi mua ngày ${dateStr}: ${error.message}`);
     }
   }
@@ -460,7 +569,9 @@ const buyMissedDays = async (userId, dates) => {
   if (purchasedDates.length > 0) {
     const actualCost = purchasedDates.length * costPerDay;
 
-    await user.addCoins(-actualCost, {
+    console.log(`[buyMissedDays] Deducting ${actualCost} coins for ${purchasedDates.length} days`);
+
+    await user.deductCoins(actualCost, {
       description: `Mua điểm danh bù cho ${purchasedDates.length} ngày`,
       metadata: {
         purchased_dates: purchasedDates,
@@ -707,6 +818,7 @@ module.exports = {
   getAttendanceCalendar,
   getAttendanceSummary,
   getAvailableMissedDays,
+  getBuyMissedDaysPricing,
   buyMissedDays,
   trackAttendanceMissions
 };

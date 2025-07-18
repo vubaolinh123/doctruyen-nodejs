@@ -23,6 +23,10 @@ require('./models');
 
 const app = express();
 
+// Configure Express to trust proxy headers (for ngrok, load balancers, etc.)
+// This fixes the rate limiting error with X-Forwarded-For headers
+app.set('trust proxy', true);
+
 // Log thông tin môi trường với timestamp
 const startupTimestamp = getLogTimestamp();
 console.log('\x1b[33m%s\x1b[0m', '-------------------------------------');

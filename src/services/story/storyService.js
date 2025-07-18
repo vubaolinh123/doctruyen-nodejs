@@ -13,14 +13,31 @@ const slugify = require('slugify');
  */
 const buildStoryQuery = async (filters) => {
   let query = {};
-  // Filter by status if provided
-  if (filters.status !== undefined) {
-    // Handle both string and boolean values
+
+  // CRITICAL: For public queries, only show approved and published stories
+  // Admin queries can override this behavior
+  if (!filters.isAdminQuery) {
+    query.approval_status = 'approved';
+    query.status = 'published';
+  }
+
+  // Filter by status if provided (for admin queries)
+  if (filters.status !== undefined && filters.isAdminQuery) {
+    // Handle both string and boolean values for backward compatibility
     if (typeof filters.status === 'string') {
-      query.status = filters.status === 'true';
+      if (filters.status === 'true' || filters.status === 'false') {
+        query.status = filters.status === 'true' ? 'published' : 'draft';
+      } else {
+        query.status = filters.status; // Use string value directly
+      }
     } else {
-      query.status = Boolean(filters.status);
+      query.status = Boolean(filters.status) ? 'published' : 'draft';
     }
+  }
+
+  // Filter by approval status if provided (for admin queries)
+  if (filters.approval_status !== undefined && filters.isAdminQuery) {
+    query.approval_status = filters.approval_status;
   }
   // Filter by single category if provided
   if (filters.category) {
@@ -175,7 +192,11 @@ const processMultipleCategoriesFilter = async (query, categoriesValue) => {
  * @returns {Promise<Object>} - Kết quả trả về
  */
 const getAllStories = async (filters) => {
-  const { page = 1, limit = 10, ...otherFilters } = filters;
+  const { page = 1, limit = 10, isAdminRequest = false, ...otherFilters } = filters;
+
+  // Pass admin flag to query builder
+  otherFilters.isAdminQuery = isAdminRequest;
+
   // Xử lý trực tiếp categories nếu có
   if (filters.categories) {
     // Đảm bảo otherFilters.categories tồn tại
@@ -1201,10 +1222,11 @@ const getMostCommentedStories = async (params) => {
   try {
     // Sử dụng aggregation pipeline để đếm comments cho mỗi story
     const pipeline = [
-      // Match only active stories
+      // Match only published and approved stories
       {
         $match: {
-          status: true
+          status: 'published',
+          approval_status: 'approved'
         }
       },
       // Lookup comments for each story

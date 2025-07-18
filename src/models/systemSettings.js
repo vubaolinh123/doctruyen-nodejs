@@ -54,7 +54,7 @@ systemSettingsSchema.statics.initializeDefaults = async function() {
   const defaults = [
     {
       key: 'missed_day_cost',
-      value: 50,
+      value: 5000,
       description: 'Chi phí mua một ngày điểm danh bù (xu)'
     },
     {

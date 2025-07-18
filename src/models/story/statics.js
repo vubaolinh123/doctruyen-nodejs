@@ -11,7 +11,8 @@ const setupStatics = (schema) => {
   schema.statics.findBySlug = function(slug) {
     return this.findOne({
       slug: slug,
-      status: true
+      status: 'published',
+      approval_status: 'approved'
     });
   };
 
@@ -23,7 +24,8 @@ const setupStatics = (schema) => {
   schema.statics.findHotStories = function(limit = 10) {
     return this.find({
       is_hot: true,
-      status: true
+      status: 'published',
+      approval_status: 'approved'
     })
       .sort({ createdAt: -1 })
       .limit(limit);
@@ -37,7 +39,8 @@ const setupStatics = (schema) => {
    */
   schema.statics.findTopRatedStories = function(limit = 10) {
     return this.find({
-      status: true
+      status: 'published',
+      approval_status: 'approved'
     })
       .sort({ views: -1 })
       .limit(limit);
@@ -49,7 +52,10 @@ const setupStatics = (schema) => {
    * @returns {Promise<Array>} - Danh sách truyện mới cập nhật
    */
   schema.statics.findRecentlyUpdated = function(limit = 10) {
-    return this.find({ status: true })
+    return this.find({
+      status: 'published',
+      approval_status: 'approved'
+    })
       .sort({ updatedAt: -1 })
       .limit(limit);
   };
@@ -63,7 +69,8 @@ const setupStatics = (schema) => {
   schema.statics.findByCategory = function(categoryId, limit = 10) {
     return this.find({
       categories: categoryId,
-      status: true
+      status: 'published',
+      approval_status: 'approved'
     })
       .sort({ updatedAt: -1 })
       .limit(limit);
@@ -78,7 +85,8 @@ const setupStatics = (schema) => {
   schema.statics.findByAuthor = function(authorId, limit = 10) {
     return this.find({
       author_id: authorId,
-      status: true
+      status: 'published',
+      approval_status: 'approved'
     })
       .sort({ updatedAt: -1 })
       .limit(limit);
@@ -95,7 +103,8 @@ const setupStatics = (schema) => {
     // Điều này cho phép tìm kiếm linh hoạt hơn so với $text search
     return this.find({
       $and: [
-        { status: true },
+        { status: 'published' },
+        { approval_status: 'approved' },
         {
           $or: [
             { name: { $regex: keyword, $options: 'i' } },
@@ -120,7 +129,8 @@ const setupStatics = (schema) => {
     // Tạo query để tìm truyện có cùng thể loại, trừ truyện hiện tại
     const query = {
       categories: { $in: categoryIds },
-      status: true
+      status: 'published',
+      approval_status: 'approved'
     };
 
     // Loại trừ truyện hiện tại nếu có
@@ -144,7 +154,8 @@ const setupStatics = (schema) => {
     // Tạo query để tìm truyện có cùng thể loại, trừ truyện hiện tại
     const query = {
       categories: { $in: categoryIds },
-      status: true
+      status: 'published',
+      approval_status: 'approved'
     };
 
     // Loại trừ truyện hiện tại nếu có

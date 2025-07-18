@@ -175,6 +175,26 @@ const getAvailableMissedDays = async (req, res) => {
 };
 
 /**
+ * @desc Get pricing for buying missed attendance days
+ * @route GET /api/attendance/buy-missed-days/pricing
+ * @access User
+ */
+const getBuyMissedDaysPricing = async (req, res) => {
+  try {
+    const result = await attendanceService.getBuyMissedDaysPricing();
+
+    res.json({
+      success: true,
+      message: 'Lấy thông tin giá thành công',
+      data: result
+    });
+  } catch (error) {
+    console.error('[AttendanceController] Error in getBuyMissedDaysPricing:', error);
+    handleApiError(res, error, 'Lỗi khi lấy thông tin giá');
+  }
+};
+
+/**
  * @desc Buy missed attendance days
  * @route POST /api/attendance/buy-missed-days
  * @access User
@@ -183,13 +203,13 @@ const buyMissedDays = async (req, res) => {
   try {
     const userId = req.user.id;
     const { missed_dates } = req.body;
-    
+
     if (!Array.isArray(missed_dates) || missed_dates.length === 0) {
       throw new ApiError(400, 'Danh sách ngày không hợp lệ');
     }
-    
+
     const result = await attendanceService.buyMissedDays(userId, missed_dates);
-    
+
     res.json({
       success: true,
       message: `Mua thành công ${result.purchasedCount} ngày điểm danh`,
@@ -209,5 +229,6 @@ module.exports = {
   getAttendanceCalendar,
   getAttendanceSummary,
   getAvailableMissedDays,
+  getBuyMissedDaysPricing,
   buyMissedDays
 };

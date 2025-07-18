@@ -1,9 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const attendanceController = require('../controllers/attendance');
+const attendanceController = require('../controllers/attendanceController');
 const { authenticateToken } = require('../middleware/auth');
-const { param } = require('express-validator');
+const { param, body } = require('express-validator');
 const { validateRequest } = require('../middleware/validation');
+
+// Include rewards subroute
+router.use('/rewards', require('./attendance/rewards'));
 
 // Lấy lịch sử điểm danh theo tháng - sử dụng controller mới đã được refactor
 router.get('/', authenticateToken, attendanceController.getAttendanceHistory);
@@ -292,6 +295,27 @@ router.post('/milestones/:milestoneId/claim',
       });
     }
   }
+);
+
+// Buy missed days routes
+router.get('/missed-days',
+  authenticateToken,
+  attendanceController.getAvailableMissedDays
+);
+
+router.get('/buy-missed-days/pricing',
+  authenticateToken,
+  attendanceController.getBuyMissedDaysPricing
+);
+
+router.post('/buy-missed-days',
+  authenticateToken,
+  [
+    body('missed_dates').isArray({ min: 1 }).withMessage('missed_dates phải là array không rỗng'),
+    body('missed_dates.*').isISO8601().withMessage('Ngày phải có định dạng ISO8601')
+  ],
+  validateRequest,
+  attendanceController.buyMissedDays
 );
 
 module.exports = router;
