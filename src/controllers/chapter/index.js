@@ -15,7 +15,9 @@ module.exports = {
   getLatestChapter: specialController.getLatestChapter,
   getChapterBySlug: specialController.getChapterBySlug,
   getChapterByStoryAndChapterSlug: specialController.getChapterByStoryAndChapterSlug,
+  getChapterWithAccessControl: specialController.getChapterWithAccessControl,
   getChaptersByStorySlug: specialController.getChaptersByStorySlug,
+  incrementViews: specialController.incrementViews,
 
   // Admin controllers
   getChapters: specialController.getChapters,

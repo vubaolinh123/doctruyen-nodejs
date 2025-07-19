@@ -78,13 +78,22 @@ router.get('/story/slug/:storySlug', optionalAuth, controller.getChaptersByStory
 router.get('/story/:storySlug/chapter/:chapterSlug', controller.getChapterByStoryAndChapterSlug);
 
 // CRITICAL FIX: Add missing access control route for chapter reading page
-router.get('/access-control/:storySlug/:chapterSlug', optionalAuth, controller.getChapterByStoryAndChapterSlug);
+router.get('/access-control/:storySlug/:chapterSlug', optionalAuth, controller.getChapterWithAccessControl);
+
+// Test route
+router.get('/test-access-control', (req, res) => {
+  console.log('[TEST] Test access control route called');
+  res.json({ success: true, message: 'Test route working' });
+});
 
 // Lấy chapter mới nhất của một truyện
 router.get('/story/:storyId/latest', controller.getLatestChapter);
 
 // Lấy tất cả chapter của một truyện (theo ID)
 router.get('/story/:storyId', controller.getChaptersByStory);
+
+// Tăng lượt xem cho chapter
+router.post('/increment-views/:chapterSlug', controller.incrementViews);
 
 // ==========================================================
 // CÁC ROUTE THAM SỐ ĐỘNG (ĐẶT CUỐI CÙNG)

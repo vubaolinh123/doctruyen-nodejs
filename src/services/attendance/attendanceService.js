@@ -233,6 +233,18 @@ class AttendanceService {
     const month = userLocalTime.getMonth();
     const year = userLocalTime.getFullYear();
 
+    console.log('[AttendanceService] CheckIn request:', {
+      userId,
+      originalDate: date,
+      parsedDate: userLocalTime.toISOString(),
+      vietnamToday: vietnamToday.toISOString(),
+      day,
+      month,
+      year,
+      timezone,
+      timezoneOffset
+    });
+
       // Lấy thông tin người dùng
       const userQuery = User.findById(userId);
       if (session) userQuery.session(session);
@@ -974,10 +986,26 @@ class AttendanceService {
       attendance_time: new Date()
     };
 
-    if (options.session) {
-      return await Attendance.create([attendanceData], { session: options.session });
-    } else {
-      return await Attendance.create(attendanceData);
+    console.log('[AttendanceService] Creating attendance record with data:', {
+      userId,
+      date: date.toISOString(),
+      day,
+      month,
+      year,
+      reward,
+      notes
+    });
+
+    try {
+      if (options.session) {
+        const result = await Attendance.create([attendanceData], { session: options.session });
+        return result[0]; // Return the first element since create with session returns array
+      } else {
+        return await Attendance.create(attendanceData);
+      }
+    } catch (error) {
+      console.error('[AttendanceService] Error creating attendance record:', error);
+      throw error;
     }
   }
 

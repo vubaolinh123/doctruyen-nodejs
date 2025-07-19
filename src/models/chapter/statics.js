@@ -13,7 +13,8 @@ const setupStatics = (schema) => {
     return this.findOne({
       story_id: storyId,
       chapter: chapterNumber,
-      status: true
+      status: 'published',
+      approval_status: 'approved'
     });
   };
 
@@ -41,7 +42,8 @@ const setupStatics = (schema) => {
   schema.statics.findByStory = function(storyId, limit = 0, skip = 0) {
     const query = this.find({
       story_id: storyId,
-      status: true
+      status: 'published',
+      approval_status: 'approved'
     }).sort({ chapter: 1 });
 
     if (limit > 0) {
@@ -63,7 +65,8 @@ const setupStatics = (schema) => {
   schema.statics.findLatestByStory = function(storyId) {
     return this.findOne({
       story_id: storyId,
-      status: true
+      status: 'published',
+      approval_status: 'approved'
     }).sort({ chapter: -1 });
   };
 
@@ -75,7 +78,8 @@ const setupStatics = (schema) => {
   schema.statics.findFirstByStory = function(storyId) {
     return this.findOne({
       story_id: storyId,
-      status: true
+      status: 'published',
+      approval_status: 'approved'
     }).sort({ chapter: 1 });
   };
 
@@ -89,7 +93,8 @@ const setupStatics = (schema) => {
     return this.findOne({
       story_id: storyId,
       chapter: { $gt: currentChapter },
-      status: true
+      status: 'published',
+      approval_status: 'approved'
     }).sort({ chapter: 1 });
   };
 
@@ -103,7 +108,8 @@ const setupStatics = (schema) => {
     return this.findOne({
       story_id: storyId,
       chapter: { $lt: currentChapter },
-      status: true
+      status: 'published',
+      approval_status: 'approved'
     }).sort({ chapter: -1 });
   };
 };

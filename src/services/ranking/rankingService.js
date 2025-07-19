@@ -79,8 +79,11 @@ class RankingService {
       // Lấy thống kê của ngày hôm qua
       const stats = await StoryStats.aggregateByDate(yesterday);
 
-      // Lấy tất cả truyện có trạng thái active
-      const stories = await Story.find({ status: true });
+      // Lấy tất cả truyện đã được xuất bản và phê duyệt
+      const stories = await Story.find({
+        status: 'published',
+        approval_status: 'approved'
+      });
 
       // Tính toán điểm trung bình của tất cả truyện từ StoryStats
       let totalRating = 0;
@@ -203,8 +206,11 @@ class RankingService {
       // Lấy thống kê của tuần hiện tại
       const stats = await StoryStats.aggregateByWeek(currentYear, currentWeek);
 
-      // Lấy tất cả truyện có trạng thái active
-      const stories = await Story.find({ status: true });
+      // Lấy tất cả truyện đã được xuất bản và phê duyệt
+      const stories = await Story.find({
+        status: 'published',
+        approval_status: 'approved'
+      });
 
       // Tính toán điểm trung bình của tất cả truyện từ StoryStats
       let totalRating = 0;
@@ -320,8 +326,11 @@ class RankingService {
       // Lấy thống kê của tháng hiện tại
       const stats = await StoryStats.aggregateByMonth(currentYear, currentMonth);
 
-      // Lấy tất cả truyện có trạng thái active
-      const stories = await Story.find({ status: true });
+      // Lấy tất cả truyện đã được xuất bản và phê duyệt
+      const stories = await Story.find({
+        status: 'published',
+        approval_status: 'approved'
+      });
 
       // Tính toán điểm trung bình của tất cả truyện từ StoryStats
       let totalRating = 0;
@@ -496,8 +505,11 @@ class RankingService {
       // Lấy thống kê toàn thời gian
       const stats = await StoryStats.aggregateAllTime();
 
-      // Lấy tất cả truyện có trạng thái active
-      const stories = await Story.find({ status: true });
+      // Lấy tất cả truyện đã được xuất bản và phê duyệt
+      const stories = await Story.find({
+        status: 'published',
+        approval_status: 'approved'
+      });
 
       // Tính toán điểm trung bình của tất cả truyện từ StoryStats
       let totalRating = 0;

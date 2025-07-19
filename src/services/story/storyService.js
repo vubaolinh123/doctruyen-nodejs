@@ -1130,8 +1130,12 @@ const deleteStory = async (id) => {
  * @returns {Promise<Object>} - Kết quả sau khi tăng lượt xem
  */
 const incrementStoryViews = async (slug) => {
-  // Tìm truyện theo slug
-  const story = await Story.findOne({ slug, status: true });
+  // Tìm truyện theo slug với status published và approved
+  const story = await Story.findOne({
+    slug,
+    status: 'published',
+    approval_status: 'approved'
+  });
 
   if (!story) {
     throw new Error('Story not found');

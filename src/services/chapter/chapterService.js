@@ -443,6 +443,8 @@ class ChapterService {
     const {
       page = 1,
       limit = 1000, // Default limit for large stories
+      sort = 'chapter', // Default sort by chapter number
+      fields = null, // Optional field selection
       projection = '_id name chapter slug isPaid price'
     } = options;
 
@@ -462,13 +464,28 @@ class ChapterService {
       {
         $match: {
           story_id: story._id,
-          status: true
+          status: 'published',
+          approval_status: 'approved'
         }
       },
       {
-        $sort: { chapter: 1 }
-      },
-      {
+        $sort: sort === 'chapter' ? { chapter: 1 } : sort === '-chapter' ? { chapter: -1 } : { chapter: 1 }
+      }
+    ];
+
+    // Handle field selection if specified
+    if (fields) {
+      const fieldArray = fields.split(',');
+      const projectFields = { _id: 1 }; // Always include _id
+      fieldArray.forEach(field => {
+        if (field.trim()) {
+          projectFields[field.trim()] = 1;
+        }
+      });
+      aggregationPipeline.push({ $project: projectFields });
+    } else {
+      // Default projection
+      aggregationPipeline.push({
         $project: {
           _id: 1,
           name: 1,
@@ -477,8 +494,8 @@ class ChapterService {
           isPaid: { $ifNull: ['$isPaid', false] },
           price: { $ifNull: ['$price', 0] }
         }
-      }
-    ];
+      });
+    }
 
     // Add pagination when limit is specified (not default 1000)
     if (limit < 1000) {
@@ -707,7 +724,8 @@ class ChapterService {
     // Lấy tất cả chapter của truyện
     const chapters = await Chapter.find({
       story_id: story._id,
-      status: true
+      status: 'published',
+      approval_status: 'approved'
     }).sort({ chapter: 1 }).select('_id name chapter slug isPaid price');
 
     // SERVER-SIDE ACCESS CONTROL: Validate access for each chapter
@@ -874,7 +892,15 @@ class ChapterService {
 
     // Lọc theo trạng thái
     if (status !== undefined) {
-      query.status = status === 'true' || status === true;
+      // Handle both old boolean format and new string format for backward compatibility
+      if (status === 'true' || status === true) {
+        query.status = 'published';
+      } else if (status === 'false' || status === false) {
+        query.status = { $in: ['draft', 'archived'] };
+      } else {
+        // Direct string status value
+        query.status = status;
+      }
     }
 
     // Lọc theo cờ is_new
@@ -1246,7 +1272,8 @@ class ChapterService {
       stories.map(async (story) => {
         const chapterCount = await Chapter.countDocuments({
           story_id: story._id,
-          status: true
+          status: 'published',
+          approval_status: 'approved'
         });
 
         return {
@@ -1270,6 +1297,173 @@ class ChapterService {
       stories: storiesWithChapterCount,
       pagination
     };
+  }
+
+  /**
+   * Lấy thông tin chi tiết của một chapter theo slug với access control
+   * @param {string} storySlug - Slug của truyện
+   * @param {string} chapterSlug - Slug của chapter
+   * @param {string|null} userId - ID của user (null nếu chưa đăng nhập)
+   * @returns {Promise<Object>} - Thông tin chi tiết của chapter với access control
+   * @throws {Error} - Nếu không tìm thấy truyện hoặc chapter
+   */
+  async getChapterByStoryAndChapterSlugWithAccess(storySlug, chapterSlug, userId = null) {
+    // Tìm truyện theo slug
+    const story = await Story.findOne({ slug: storySlug });
+
+    if (!story) {
+      throw new Error('Không tìm thấy truyện');
+    }
+
+    // Tìm chapter theo slug và story_id using aggregation (same as working API)
+    const chapterResults = await Chapter.aggregate([
+      {
+        $match: {
+          story_id: story._id,
+          slug: chapterSlug,
+          status: 'published',
+          approval_status: 'approved'
+        }
+      },
+      {
+        $limit: 1
+      }
+    ]);
+
+    if (chapterResults.length === 0) {
+      throw new Error('Không tìm thấy chapter');
+    }
+
+    const chapter = chapterResults[0];
+
+    // Use the same access control logic as the working checkAccess service
+    let hasAccess = false;
+    let accessReason = 'no_access';
+    let accessMessage = '';
+
+    try {
+      const purchaseService = require('../purchase/purchaseService');
+      const accessResult = await purchaseService.checkAccess(userId, story._id, chapter._id);
+
+      hasAccess = accessResult.hasAccess;
+      accessReason = accessResult.reason;
+      accessMessage = accessResult.message;
+    } catch (error) {
+      console.error('[ChapterService] Error checking access:', error);
+      // Fallback to deny access for security
+      hasAccess = false;
+      accessReason = 'access_check_failed';
+      accessMessage = 'Không thể kiểm tra quyền truy cập';
+    }
+
+    // Lấy tổng số chapter của truyện
+    const totalChapters = await Chapter.countDocuments({
+      story_id: story._id,
+      status: 'published',
+      approval_status: 'approved'
+    });
+
+    // Lấy chapter trước và sau
+    const prevChapter = await Chapter.findOne({
+      story_id: story._id,
+      chapter: { $lt: chapter.chapter },
+      status: 'published',
+      approval_status: 'approved'
+    }).sort({ chapter: -1 });
+
+    const nextChapter = await Chapter.findOne({
+      story_id: story._id,
+      chapter: { $gt: chapter.chapter },
+      status: 'published',
+      approval_status: 'approved'
+    }).sort({ chapter: 1 });
+
+    // Prepare chapter data with access control
+    const chapterWithAccess = {
+      _id: chapter._id,
+      name: chapter.name,
+      chapter: chapter.chapter,
+      slug: chapter.slug,
+      isPaid: chapter.isPaid || false,
+      price: chapter.price || 0,
+      hasAccess,
+      accessReason,
+      // Only include content if user has access
+      content: hasAccess ? chapter.content : null,
+      createdAt: chapter.createdAt,
+      updatedAt: chapter.updatedAt
+    };
+
+    return {
+      chapter: chapterWithAccess,
+      story: {
+        _id: story._id,
+        name: story.name,
+        slug: story.slug,
+        isPaid: story.isPaid,
+        price: story.price
+      },
+      navigation: {
+        prev: prevChapter ? {
+          _id: prevChapter._id,
+          chapter: prevChapter.chapter,
+          name: prevChapter.name,
+          slug: prevChapter.slug
+        } : null,
+        next: nextChapter ? {
+          _id: nextChapter._id,
+          chapter: nextChapter.chapter,
+          name: nextChapter.name,
+          slug: nextChapter.slug
+        } : null
+      },
+      totalChapters
+    };
+  }
+
+  /**
+   * Tăng lượt xem cho chapter
+   * @param {string} chapterSlug - Slug của chapter
+   * @returns {Promise<Object>} - Kết quả sau khi tăng lượt xem
+   */
+  async incrementChapterViews(chapterSlug) {
+    // Tìm chapter theo slug với status published and approved using aggregation (same as access control API)
+    const chapterResults = await Chapter.aggregate([
+      {
+        $match: {
+          slug: chapterSlug,
+          status: 'published',
+          approval_status: 'approved'
+        }
+      },
+      {
+        $limit: 1
+      }
+    ]);
+
+    if (chapterResults.length === 0) {
+      throw new Error('Chapter not found');
+    }
+
+    const chapter = chapterResults[0];
+
+    // Tăng lượt view trong bảng Chapter using findByIdAndUpdate
+    try {
+      // Tăng views trực tiếp trong database
+      const updatedChapter = await Chapter.findByIdAndUpdate(
+        chapter._id,
+        { $inc: { views: 1 } },
+        { new: true }
+      );
+
+      const newViews = updatedChapter ? updatedChapter.views : (chapter.views || 0) + 1;
+
+      return { success: true, views: newViews };
+    } catch (error) {
+      console.error('[ChapterService] Error updating chapter views:', error);
+      // Nếu có lỗi, trả về giá trị mặc định
+      return { success: true, views: 1 };
+    }
   }
 }
 

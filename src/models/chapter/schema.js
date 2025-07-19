@@ -169,6 +169,14 @@ const chapterSchema = new Schema({
     type: Number,
     default: 0,
     min: 0
+  },
+
+  // Lượt xem chapter
+  views: {
+    type: Number,
+    default: 0,
+    min: 0,
+    index: true
   }
 }, {
   timestamps: true,

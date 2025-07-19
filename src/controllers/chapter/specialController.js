@@ -149,6 +149,75 @@ exports.getChapterByStoryAndChapterSlug = async (req, res) => {
 };
 
 /**
+ * Lấy thông tin chi tiết của một chapter với access control
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+exports.getChapterWithAccessControl = async (req, res) => {
+  try {
+    const storySlug = req.params.storySlug;
+    const chapterSlug = req.params.chapterSlug;
+
+    console.log(`[API] Access control endpoint called: ${storySlug}/${chapterSlug}`);
+
+    // SERVER-SIDE ACCESS CONTROL: Extract user ID from session/token/headers
+    const userId = req.user?.id || req.user?._id || req.headers['x-user-id'] || null;
+
+    console.log(`[API] Getting chapter with access control: ${storySlug}/${chapterSlug}, user: ${userId || 'anonymous'}`);
+
+    // Get chapter with access control
+    const result = await chapterService.getChapterByStoryAndChapterSlugWithAccess(storySlug, chapterSlug, userId);
+
+    console.log(`[API] Chapter access control result:`, result);
+
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (err) {
+    console.error('[API] Error getting chapter with access control:', err);
+    res.status(404).json({
+      success: false,
+      error: err.message
+    });
+  }
+};
+
+/**
+ * Tăng lượt xem cho chapter
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+exports.incrementViews = async (req, res) => {
+  try {
+    const { chapterSlug } = req.params;
+
+    if (!chapterSlug) {
+      return res.status(400).json({
+        success: false,
+        message: 'Chapter slug là bắt buộc'
+      });
+    }
+
+    console.log(`[API] Incrementing views for chapter: ${chapterSlug}`);
+
+    const result = await chapterService.incrementChapterViews(chapterSlug);
+    return res.status(200).json({
+      success: true,
+      message: 'Tăng lượt xem chapter thành công',
+      views: result.views
+    });
+  } catch (err) {
+    console.error('[API] Error incrementing chapter views:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi server',
+      error: err.message
+    });
+  }
+};
+
+/**
  * Lấy danh sách chapter theo slug của truyện với access control
  * @param {Object} req - Request object
  * @param {Object} res - Response object
@@ -157,19 +226,23 @@ exports.getChaptersByStorySlug = async (req, res) => {
   try {
     const storySlug = req.params.storySlug;
 
-    // Extract pagination parameters from query string
+    // Extract pagination and query parameters from query string
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 1000; // Default to all chapters for backward compatibility
+    const sort = req.query.sort || 'chapter'; // Default sort by chapter number
+    const fields = req.query.fields; // Optional field selection
 
     // SERVER-SIDE ACCESS CONTROL: Extract user ID from session/token/headers
     const userId = req.user?.id || req.user?._id || req.headers['x-user-id'] || null;
 
-    console.log(`[API] Getting chapters for story: ${storySlug}, user: ${userId || 'anonymous'}, page: ${page}, limit: ${limit}`);
+    console.log(`[API] Getting chapters for story: ${storySlug}, user: ${userId || 'anonymous'}, page: ${page}, limit: ${limit}, sort: ${sort}, fields: ${fields}`);
 
     // FREEMIUM MODEL: Get chapters with access control validation and pagination
     const result = await chapterService.getChaptersByStorySlug(storySlug, userId, {
       page,
-      limit
+      limit,
+      sort,
+      fields
     });
 
     res.json({

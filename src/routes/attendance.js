@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const attendanceController = require('../controllers/attendanceController');
+const attendanceSpecialController = require('../controllers/attendance/specialController');
 const { authenticateToken } = require('../middleware/auth');
 const { param, body } = require('express-validator');
 const { validateRequest } = require('../middleware/validation');
@@ -12,7 +13,7 @@ router.use('/rewards', require('./attendance/rewards'));
 router.get('/', authenticateToken, attendanceController.getAttendanceHistory);
 
 // Điểm danh hàng ngày - sử dụng controller mới đã được refactor
-router.post('/', authenticateToken, attendanceController.checkIn);
+router.post('/', authenticateToken, attendanceSpecialController.checkIn);
 
 // User milestone progress endpoint
 router.get('/milestones/progress',

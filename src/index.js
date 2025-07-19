@@ -114,17 +114,7 @@ if (process.env.NODE_ENV === 'production') {
   }));
 }
 
-// Debug middleware for file upload requests
-app.use('/api/images/upload', (req, res, next) => {
-  const debugTimestamp = getLogTimestamp();
-  console.log('\x1b[35m%s\x1b[0m', `[${debugTimestamp}] 🔍 File upload request debug:`);
-  console.log('\x1b[35m%s\x1b[0m', `[${debugTimestamp}] - Method: ${req.method}`);
-  console.log('\x1b[35m%s\x1b[0m', `[${debugTimestamp}] - Origin: ${req.headers.origin}`);
-  console.log('\x1b[35m%s\x1b[0m', `[${debugTimestamp}] - Content-Type: ${req.headers['content-type']}`);
-  console.log('\x1b[35m%s\x1b[0m', `[${debugTimestamp}] - Content-Length: ${req.headers['content-length']}`);
-  console.log('\x1b[35m%s\x1b[0m', `[${debugTimestamp}] - Authorization: ${req.headers.authorization ? 'Present' : 'Missing'}`);
-  next();
-});
+
 
 // Log incoming requests và responses
 app.use(requestLogger);

@@ -442,7 +442,10 @@ async function handleSuccessfulPayment(webhookData, user, requestId) {
     // Update user's coin balance (1 VND = 1 coin conversion rate)
     const coinAmount = parseFloat(amount);
     const updatedUser = await User.findByIdAndUpdate(user._id, {
-      $inc: { coins: coinAmount }
+      $inc: {
+        coin: coinAmount,
+        coin_total: coinAmount
+      }
     }, { new: true });
 
     console.log(`[SePay Webhook] [${requestId}] Successfully processed payment:`, {
@@ -450,8 +453,8 @@ async function handleSuccessfulPayment(webhookData, user, requestId) {
       userId: user._id,
       vndAmount: amount,
       coinAmount: coinAmount,
-      previousBalance: user.coins,
-      newBalance: updatedUser.coins
+      previousBalance: user.coin,
+      newBalance: updatedUser.coin
     });
 
     return { 

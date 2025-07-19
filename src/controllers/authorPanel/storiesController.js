@@ -41,7 +41,19 @@ exports.getAuthorStories = async (req, res) => {
         });
       }
     } else {
-      // For regular users, find their author record
+      // For regular users, first check if they have any author record
+      const anyAuthor = await Author.findOne({
+        userId: userId,
+        authorType: 'system'
+      });
+
+      console.log(`[AuthorPanel] Any author record for user ${userId}:`, anyAuthor ? {
+        id: anyAuthor._id,
+        approvalStatus: anyAuthor.approvalStatus,
+        status: anyAuthor.status
+      } : 'None found');
+
+      // Then find their approved author record
       author = await Author.findOne({
         userId: userId,
         authorType: 'system',
@@ -49,11 +61,29 @@ exports.getAuthorStories = async (req, res) => {
       });
 
       if (!author) {
+        console.log(`[AuthorPanel] Approved author not found for user: ${userId}`);
+
+        if (anyAuthor) {
+          const statusMessage = anyAuthor.approvalStatus === 'pending'
+            ? 'Tài khoản tác giả đang chờ phê duyệt.'
+            : anyAuthor.approvalStatus === 'rejected'
+            ? 'Tài khoản tác giả đã bị từ chối.'
+            : 'Tài khoản tác giả chưa được kích hoạt.';
+
+          return res.status(403).json({
+            success: false,
+            message: statusMessage
+          });
+        }
+
         return res.status(404).json({
           success: false,
-          message: 'Tác giả không tồn tại hoặc chưa được phê duyệt. Vui lòng đăng ký làm tác giả trước.'
+          message: 'Tác giả không tồn tại. Vui lòng đăng ký làm tác giả trước.',
+          needsRegistration: true
         });
       }
+
+      console.log(`[AuthorPanel] Found approved author: ${author._id} for user: ${userId}`);
     }
 
     // Always filter by author_id - users should only see their own stories in author panel
@@ -70,13 +100,12 @@ exports.getAuthorStories = async (req, res) => {
       ];
     }
 
-    // Add status filter - show only published stories by default in author panel
-    if (status && status !== 'all') {
+    // Add status filter - show all stories by default for chapter creation
+    if (status && status !== 'all' && status !== '') {
       query.status = status;
-    } else {
-      // Default to showing only published stories
-      query.status = 'published';
     }
+    // Remove default status filter to show all stories regardless of status
+    // This allows authors to create chapters for any of their stories
 
     // Exclude soft-deleted stories
     query.deleted = { $ne: true };
@@ -85,6 +114,8 @@ exports.getAuthorStories = async (req, res) => {
     if (category) {
       query.categories = new mongoose.Types.ObjectId(category);
     }
+
+    console.log(`[AuthorPanel] Query for stories:`, JSON.stringify(query, null, 2));
 
 
 
@@ -111,7 +142,7 @@ exports.getAuthorStories = async (req, res) => {
       Story.countDocuments(query)
     ]);
 
-
+    console.log(`[AuthorPanel] Found ${stories.length} stories, total: ${totalStories}`);
 
     // Get chapter counts for each story
     const storiesWithChapterCounts = await Promise.all(
@@ -308,38 +339,58 @@ exports.getAuthorDraftStories = async (req, res) => {
 exports.getStoryDetails = async (req, res) => {
   try {
     const userId = req.user.id;
+    const userRole = req.user.role;
     const { storyId } = req.params;
 
-    // Find author record
-    const author = await Author.findOne({ 
-      userId: userId, 
-      authorType: 'system',
-      approvalStatus: 'approved'
-    });
+    // Admin can access all stories, authors need ownership verification
+    let story;
 
-    if (!author) {
-      return res.status(404).json({
-        success: false,
-        message: 'Tác giả không tồn tại'
+    if (userRole === 'admin') {
+      // Admin can access any story
+      story = await Story.findById(storyId)
+        .populate('categories', 'name slug')
+        .populate({
+          path: 'author_id',
+          select: 'name slug authorType userId status approvalStatus',
+          populate: {
+            path: 'userId',
+            select: 'name email avatar coins',
+            model: 'User'
+          }
+        })
+        .lean();
+    } else {
+      // Find author record for non-admin users
+      const author = await Author.findOne({
+        userId: userId,
+        authorType: 'system',
+        approvalStatus: 'approved'
       });
-    }
 
-    // Get story details with populated author references
-    const story = await Story.findOne({
-      _id: storyId,
-      author_id: author._id
-    })
-    .populate('categories', 'name slug')
-    .populate({
-      path: 'author_id',
-      select: 'name slug authorType userId status approvalStatus',
-      populate: {
-        path: 'userId',
-        select: 'name email avatar coins',
-        model: 'User'
+      if (!author) {
+        return res.status(404).json({
+          success: false,
+          message: 'Tác giả không tồn tại'
+        });
       }
-    })
-    .lean();
+
+      // Get story details with author ownership verification
+      story = await Story.findOne({
+        _id: storyId,
+        author_id: author._id
+      })
+        .populate('categories', 'name slug')
+        .populate({
+          path: 'author_id',
+          select: 'name slug authorType userId status approvalStatus',
+          populate: {
+            path: 'userId',
+            select: 'name email avatar coins',
+            model: 'User'
+          }
+        })
+        .lean();
+    }
 
     if (!story) {
       return res.status(404).json({
@@ -498,28 +549,37 @@ exports.createStory = async (req, res) => {
 exports.updateStory = async (req, res) => {
   try {
     const userId = req.user.id;
+    const userRole = req.user.role;
     const { storyId } = req.params;
     const updateData = req.body;
 
-    // Find author record
-    const author = await Author.findOne({ 
-      userId: userId, 
-      authorType: 'system',
-      approvalStatus: 'approved'
-    });
+    // Admin can update all stories, authors need ownership verification
+    let story;
 
-    if (!author) {
-      return res.status(404).json({
-        success: false,
-        message: 'Tác giả không tồn tại'
+    if (userRole === 'admin') {
+      // Admin can update any story
+      story = await Story.findById(storyId);
+    } else {
+      // Find author record for non-admin users
+      const author = await Author.findOne({
+        userId: userId,
+        authorType: 'system',
+        approvalStatus: 'approved'
+      });
+
+      if (!author) {
+        return res.status(404).json({
+          success: false,
+          message: 'Tác giả không tồn tại'
+        });
+      }
+
+      // Check if story exists and belongs to author
+      story = await Story.findOne({
+        _id: storyId,
+        author_id: author._id
       });
     }
-
-    // Check if story exists and belongs to author
-    const story = await Story.findOne({ 
-      _id: storyId, 
-      author_id: author._id 
-    });
 
     if (!story) {
       return res.status(404).json({

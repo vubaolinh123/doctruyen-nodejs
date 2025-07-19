@@ -62,21 +62,37 @@ exports.getReaderAnalytics = async (req, res) => {
       storyFilter = { author_id: author._id };
     }
 
+    console.log(`[AuthorPanel] Getting reader analytics for user: ${userId}, timeRange: ${timeRange}`);
+    console.log(`[AuthorPanel] Date range: ${startDate} to ${endDate}`);
+    console.log(`[AuthorPanel] Is admin: ${isAdmin}`);
+    if (author) {
+      console.log(`[AuthorPanel] Author ID: ${author._id}`);
+      console.log(`[AuthorPanel] Author ID type: ${typeof author._id}`);
+    }
+
+    // First, let's check if there are any comments in the date range
+    const totalCommentsInRange = await Comment.countDocuments({
+      createdAt: { $gte: startDate, $lte: endDate }
+    });
+    console.log(`[AuthorPanel] Total comments in date range: ${totalCommentsInRange}`);
+
+    // Check author's stories
+    const authorStories = await Story.find(isAdmin ? {} : { author_id: author._id }).select('_id name author_id');
+    console.log(`[AuthorPanel] Author stories found: ${authorStories.length}`);
+    if (authorStories.length > 0) {
+      console.log(`[AuthorPanel] First story author_id: ${authorStories[0].author_id}, type: ${typeof authorStories[0].author_id}`);
+    }
+
+    // Get story IDs for filtering
+    const storyIds = authorStories.map(story => story._id);
+    console.log(`[AuthorPanel] Story IDs for filtering: ${storyIds.length} stories`);
+
     // Get most active readers
     const activeReaders = await Comment.aggregate([
       {
-        $lookup: {
-          from: 'stories',
-          localField: 'story_id',
-          foreignField: '_id',
-          as: 'story'
-        }
-      },
-      {
         $match: {
-          'story.0': { $exists: true },
           createdAt: { $gte: startDate, $lte: endDate },
-          ...(isAdmin ? {} : { 'story.author_id': author._id })
+          ...(isAdmin ? {} : { story_id: { $in: storyIds } })
         }
       },
       {
@@ -122,21 +138,14 @@ exports.getReaderAnalytics = async (req, res) => {
       }
     ]);
 
+    console.log(`[AuthorPanel] Active readers found: ${activeReaders.length}`);
+
     // Get comment frequency trends
     const commentTrends = await Comment.aggregate([
       {
-        $lookup: {
-          from: 'stories',
-          localField: 'story_id',
-          foreignField: '_id',
-          as: 'story'
-        }
-      },
-      {
         $match: {
-          'story.0': { $exists: true },
           createdAt: { $gte: startDate, $lte: endDate },
-          ...(isAdmin ? {} : { 'story.author_id': author._id })
+          ...(isAdmin ? {} : { story_id: { $in: storyIds } })
         }
       },
       {
@@ -163,17 +172,8 @@ exports.getReaderAnalytics = async (req, res) => {
     // Get reader retention metrics
     const readerRetention = await Comment.aggregate([
       {
-        $lookup: {
-          from: 'stories',
-          localField: 'story_id',
-          foreignField: '_id',
-          as: 'story'
-        }
-      },
-      {
         $match: {
-          'story.0': { $exists: true },
-          ...(isAdmin ? {} : { 'story.author_id': author._id })
+          ...(isAdmin ? {} : { story_id: { $in: storyIds } })
         }
       },
       {
@@ -210,18 +210,9 @@ exports.getReaderAnalytics = async (req, res) => {
     // Get comment sentiment analysis (simplified)
     const sentimentAnalysis = await Comment.aggregate([
       {
-        $lookup: {
-          from: 'stories',
-          localField: 'story_id',
-          foreignField: '_id',
-          as: 'story'
-        }
-      },
-      {
         $match: {
-          'story.0': { $exists: true },
           createdAt: { $gte: startDate, $lte: endDate },
-          ...(isAdmin ? {} : { 'story.author_id': author._id })
+          ...(isAdmin ? {} : { story_id: { $in: storyIds } })
         }
       },
       {
@@ -262,18 +253,9 @@ exports.getReaderAnalytics = async (req, res) => {
     // Get popular discussion topics (keyword analysis)
     const popularTopics = await Comment.aggregate([
       {
-        $lookup: {
-          from: 'stories',
-          localField: 'story_id',
-          foreignField: '_id',
-          as: 'story'
-        }
-      },
-      {
         $match: {
-          'story.0': { $exists: true },
           createdAt: { $gte: startDate, $lte: endDate },
-          ...(isAdmin ? {} : { 'story.author_id': author._id })
+          ...(isAdmin ? {} : { story_id: { $in: storyIds } })
         }
       },
       {
@@ -317,21 +299,31 @@ exports.getReaderAnalytics = async (req, res) => {
       }
     ]);
 
+    const responseData = {
+      activeReaders,
+      commentTrends,
+      readerRetention: readerRetention[0] || {
+        totalReaders: 0,
+        returningReaders: 0,
+        averageRetentionDays: 0,
+        averageCommentsPerReader: 0
+      },
+      sentimentAnalysis,
+      popularTopics,
+      timeRange
+    };
+
+    console.log(`[AuthorPanel] Reader analytics response:`, {
+      activeReadersCount: activeReaders.length,
+      commentTrendsCount: commentTrends.length,
+      readerRetention: responseData.readerRetention,
+      sentimentAnalysisCount: sentimentAnalysis.length,
+      popularTopicsCount: popularTopics.length
+    });
+
     res.json({
       success: true,
-      data: {
-        activeReaders,
-        commentTrends,
-        readerRetention: readerRetention[0] || {
-          totalReaders: 0,
-          returningReaders: 0,
-          averageRetentionDays: 0,
-          averageCommentsPerReader: 0
-        },
-        sentimentAnalysis,
-        popularTopics,
-        timeRange
-      }
+      data: responseData
     });
 
   } catch (error) {

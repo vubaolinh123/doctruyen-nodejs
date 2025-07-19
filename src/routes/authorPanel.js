@@ -7,7 +7,7 @@ const dashboardController = require('../controllers/authorPanel/dashboardControl
 const storiesController = require('../controllers/authorPanel/storiesController');
 const chaptersController = require('../controllers/authorPanel/chaptersController');
 const analyticsController = require('../controllers/authorPanel/analyticsController');
-const revenueController = require('../controllers/authorPanel/revenueController');
+const revenueController = require('../controllers/authorPanel/revenueAnalyticsController');
 const commentController = require('../controllers/authorPanel/commentController');
 const readerAnalyticsController = require('../controllers/authorPanel/readerAnalyticsController');
 const engagementController = require('../controllers/authorPanel/engagementController');
@@ -76,6 +76,9 @@ router.get('/chapters/drafts', chaptersController.getDraftChapters);
 // Get chapters for a specific story
 router.get('/stories/:storyId/chapters', chaptersController.getStoryChapters);
 
+// Get next chapter number for a story
+router.get('/stories/:storyId/next-chapter-number', chaptersController.getNextChapterNumber);
+
 // Get single chapter details for editing
 router.get('/chapters/:chapterId', chaptersController.getChapterDetails);
 
@@ -127,16 +130,10 @@ router.get('/analytics/views', analyticsController.getViewStatistics);
 router.get('/revenue/overview', revenueController.getRevenueOverview);
 
 // Get detailed earnings by story
-router.get('/revenue/stories', revenueController.getStoryEarnings);
+router.get('/revenue/stories/:storyId', revenueController.getStoryRevenue);
 
 // Get transaction history
 router.get('/revenue/transactions', revenueController.getTransactionHistory);
-
-// Get payout information
-router.get('/revenue/payouts', revenueController.getPayoutInfo);
-
-// Request payout
-router.post('/revenue/payout-request', revenueController.requestPayout);
 
 // ============================================
 // READER ENGAGEMENT ROUTES

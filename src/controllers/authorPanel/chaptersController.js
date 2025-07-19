@@ -316,30 +316,43 @@ exports.createChapter = async (req, res) => {
 exports.updateChapter = async (req, res) => {
   try {
     const userId = req.user.id;
+    const userRole = req.user.role;
     const { chapterId } = req.params;
     const updateData = req.body;
 
-    // Find author record
-    const author = await Author.findOne({ 
-      userId: userId, 
-      authorType: 'system',
-      approvalStatus: 'approved'
-    });
+    // Admin can update all chapters, authors need ownership verification
+    let chapter;
 
-    if (!author) {
-      return res.status(404).json({
-        success: false,
-        message: 'Tác giả không tồn tại'
+    if (userRole === 'admin') {
+      // Admin can update any chapter
+      chapter = await Chapter.findById(chapterId)
+        .populate({
+          path: 'story_id',
+          select: 'author_id name'
+        });
+    } else {
+      // Find author record for non-admin users
+      const author = await Author.findOne({
+        userId: userId,
+        authorType: 'system',
+        approvalStatus: 'approved'
       });
+
+      if (!author) {
+        return res.status(404).json({
+          success: false,
+          message: 'Tác giả không tồn tại'
+        });
+      }
+
+      // Get chapter with story info to verify ownership
+      chapter = await Chapter.findById(chapterId)
+        .populate({
+          path: 'story_id',
+          select: 'author_id',
+          match: { author_id: author._id }
+        });
     }
-
-    // Get chapter with story info to verify ownership
-    const chapter = await Chapter.findById(chapterId)
-      .populate({
-        path: 'story_id',
-        select: 'author_id',
-        match: { author_id: author._id }
-      });
 
     if (!chapter || !chapter.story_id) {
       return res.status(404).json({
@@ -413,26 +426,54 @@ exports.deleteChapter = async (req, res) => {
       });
     }
 
-    // Get chapter with story info to verify ownership
-    const chapter = await Chapter.findById(chapterId)
-      .populate({
-        path: 'story_id',
-        select: 'author_id',
-        match: { author_id: author._id }
-      });
+    console.log(`[AuthorPanel] Attempting to delete chapter: ${chapterId} for author: ${author._id}`);
 
-    if (!chapter || !chapter.story_id) {
+    // Get chapter first
+    const chapter = await Chapter.findById(chapterId);
+
+    if (!chapter) {
+      console.log(`[AuthorPanel] Chapter not found: ${chapterId}`);
       return res.status(404).json({
         success: false,
-        message: 'Chapter không tồn tại hoặc bạn không có quyền xóa'
+        message: 'Chapter không tồn tại'
       });
     }
+
+    console.log(`[AuthorPanel] Found chapter: ${chapter._id}, story_id: ${chapter.story_id}`);
+
+    // Get story to verify ownership
+    const story = await Story.findById(chapter.story_id);
+
+    if (!story) {
+      console.log(`[AuthorPanel] Story not found for chapter: ${chapterId}`);
+      return res.status(404).json({
+        success: false,
+        message: 'Truyện không tồn tại'
+      });
+    }
+
+    console.log(`[AuthorPanel] Found story: ${story._id}, author_id: ${story.author_id}`);
+
+    // Check if author owns this story
+    const isOwner = story.author_id.some(authorId => authorId.toString() === author._id.toString());
+
+    if (!isOwner) {
+      console.log(`[AuthorPanel] Author ${author._id} does not own story ${story._id}`);
+      return res.status(403).json({
+        success: false,
+        message: 'Bạn không có quyền xóa chapter này'
+      });
+    }
+
+    console.log(`[AuthorPanel] Deleting chapter: ${chapterId}`);
 
     // Delete chapter
     await Chapter.findByIdAndDelete(chapterId);
 
     // Update story's updated timestamp
-    await Story.findByIdAndUpdate(chapter.story_id._id, { updatedAt: new Date() });
+    await Story.findByIdAndUpdate(story._id, { updatedAt: new Date() });
+
+    console.log(`[AuthorPanel] Successfully deleted chapter: ${chapterId}`);
 
     res.json({
       success: true,
@@ -809,30 +850,43 @@ exports.updateChapterStatus = async (req, res) => {
 exports.autoSaveChapter = async (req, res) => {
   try {
     const userId = req.user.id;
+    const userRole = req.user.role;
     const { chapterId } = req.params;
     const { content } = req.body;
 
-    // Find author record
-    const author = await Author.findOne({
-      userId: userId,
-      authorType: 'system',
-      approvalStatus: 'approved'
-    });
+    // Admin can auto-save all chapters, authors need ownership verification
+    let chapter;
 
-    if (!author) {
-      return res.status(404).json({
-        success: false,
-        message: 'Tác giả không tồn tại'
+    if (userRole === 'admin') {
+      // Admin can auto-save any chapter
+      chapter = await Chapter.findById(chapterId)
+        .populate({
+          path: 'story_id',
+          select: 'author_id name'
+        });
+    } else {
+      // Find author record for non-admin users
+      const author = await Author.findOne({
+        userId: userId,
+        authorType: 'system',
+        approvalStatus: 'approved'
       });
+
+      if (!author) {
+        return res.status(404).json({
+          success: false,
+          message: 'Tác giả không tồn tại'
+        });
+      }
+
+      // Get chapter with story info to verify ownership
+      chapter = await Chapter.findById(chapterId)
+        .populate({
+          path: 'story_id',
+          select: 'author_id',
+          match: { author_id: author._id }
+        });
     }
-
-    // Get chapter with story info to verify ownership
-    const chapter = await Chapter.findById(chapterId)
-      .populate({
-        path: 'story_id',
-        select: 'author_id',
-        match: { author_id: author._id }
-      });
 
     if (!chapter || !chapter.story_id) {
       return res.status(404).json({
@@ -1243,6 +1297,82 @@ exports.getDraftChapters = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Lỗi server khi lấy danh sách bản nháp',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get next chapter number for a story
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+exports.getNextChapterNumber = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { storyId } = req.params;
+
+    console.log(`[AuthorPanel] Getting next chapter number for story ${storyId} by user ${userId}`);
+
+    // Check if user is admin (admins can access all stories)
+    const isAdmin = req.user.role === 'admin';
+
+    let story = null;
+
+    if (isAdmin) {
+      // Admin users can access any story
+      story = await Story.findById(storyId);
+    } else {
+      // Find author record for regular users
+      const author = await Author.findOne({
+        userId: userId,
+        authorType: 'system',
+        approvalStatus: 'approved'
+      });
+
+      if (!author) {
+        return res.status(404).json({
+          success: false,
+          message: 'Tác giả không tồn tại hoặc chưa được phê duyệt'
+        });
+      }
+
+      // Verify story belongs to author
+      story = await Story.findOne({
+        _id: storyId,
+        author_id: author._id
+      });
+    }
+
+    if (!story) {
+      return res.status(404).json({
+        success: false,
+        message: 'Truyện không tồn tại hoặc bạn không có quyền truy cập'
+      });
+    }
+
+    // Get the highest chapter number for this story
+    const latestChapter = await Chapter.findOne({
+      story_id: storyId
+    })
+    .sort({ chapter: -1 })
+    .limit(1);
+
+    // If no chapters exist, return 1
+    const nextChapterNumber = latestChapter ? latestChapter.chapter + 1 : 1;
+
+    console.log(`[AuthorPanel] Next chapter number for story ${storyId}: ${nextChapterNumber}`);
+
+    res.json({
+      success: true,
+      nextChapterNumber
+    });
+
+  } catch (error) {
+    console.error('[AuthorPanel] Get next chapter number error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi server khi lấy số chapter tiếp theo',
       error: error.message
     });
   }
